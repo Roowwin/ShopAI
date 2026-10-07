@@ -1,0 +1,144 @@
+name: rfo
+
+x-logging: &logging
+  logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+
+networks:
+  edge: {}
+  core: {}
+  db: {}
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+  miniodata: {}
+
+services:
+  postgres:
+    image: public.ecr.aws/docker/library/postgres:16-alpine
+    restart: unless-stopped
+    stop_grace_period: 30s
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:?missing in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?missing in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?missing in .env}
+      DB_MIGRATOR_PASSWORD: ${DB_MIGRATOR_PASSWORD:?missing in .env}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?missing in .env}
+      DB_READONLY_PASSWORD: ${DB_READONLY_PASSWORD:?missing in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./infra/postgres/init/01-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
+    networks: [db]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    <<: *logging
+
+  pgbouncer:
+    build: ./infra/pgbouncer
+    restart: unless-stopped
+    environment:
+      POSTGRES_SUPERUSER_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?missing in .env}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?missing in .env}
+      DB_MIGRATOR_PASSWORD: ${DB_MIGRATOR_PASSWORD:?missing in .env}
+      DB_READONLY_PASSWORD: ${DB_READONLY_PASSWORD:?missing in .env}
+      PGBOUNCER_POOL_MODE: ${PGBOUNCER_POOL_MODE:-transaction}
+      PGBOUNCER_DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-25}
+      PGBOUNCER_MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-1000}
+    networks: [core, db]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "PGPASSWORD=$$DB_APP_PASSWORD psql -h 127.0.0.1 -p 5432 -U rfo_app -d rfo -tAc 'SELECT 1'"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    <<: *logging
+
+  redis:
+    image: public.ecr.aws/docker/library/redis:7-alpine
+    restart: unless-stopped
+    command: ["sh", "-c", "exec redis-server --appendonly yes --appendfsync everysec --save '' --maxmemory 512mb --maxmemory-policy noeviction --requirepass \"$$REDIS_PASSWORD\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?missing in .env}
+    volumes: [redisdata:/data]
+    networks: [core]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD --no-auth-warning ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    <<: *logging
+
+  minio:
+    image: quay.io/minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?missing in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?missing in .env}
+    ports:
+      - "127.0.0.1:9000:9000"   # S3 API - loopback only (dev convenience)
+      - "127.0.0.1:9001:9001"   # console - loopback only (dev convenience)
+    volumes: [miniodata:/data]
+    networks: [core]
+    # image ships `mc`; if an image build ever lacks it, swap test to: ["CMD","curl","-f","http://localhost:9000/minio/health/live"]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    <<: *logging
+
+  minio-init:
+    image: quay.io/minio/mc:latest
+    restart: "no"
+    networks: [core]
+    depends_on:
+      minio: { condition: service_healthy }
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?missing in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?missing in .env}
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+        mc mb --ignore-existing local/rfo-media &&
+        mc anonymous set download local/rfo-media &&
+        echo MINIO_INIT_DONE
+      "
+    <<: *logging
+
+  nginx:
+    image: public.ecr.aws/docker/library/nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      minio: { condition: service_healthy }
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN_STORE: ${DOMAIN_STORE:?missing in .env}
+      DOMAIN_ADMIN: ${DOMAIN_ADMIN:?missing in .env}
+      DOMAIN_API: ${DOMAIN_API:?missing in .env}
+      RATE_LIMIT_STORE_RPS: ${RATE_LIMIT_STORE_RPS:-20}
+      RATE_LIMIT_STAFF_RPS: ${RATE_LIMIT_STAFF_RPS:-10}
+      RATE_LIMIT_LOGIN_RPM: ${RATE_LIMIT_LOGIN_RPM:-10}
+    volumes:
+      - ./infra/nginx/templates:/etc/nginx/templates:ro
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d
+      - ./infra/nginx/snippets:/etc/nginx/snippets:ro
+      - ./infra/nginx/certs:/etc/nginx/certs:ro
+    networks: [edge, core]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    <<: *logging

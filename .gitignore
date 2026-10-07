@@ -1,0 +1,38 @@
+# secrets & local env
+.env
+.env.*
+!.env.example
+secrets/*
+!secrets/.gitkeep
+infra/nginx/certs/*
+!infra/nginx/certs/.gitkeep
+backups/*
+!backups/.gitkeep
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# node
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# test / load artifacts
+coverage.xml
+loadtests/*.json
+loadtests/*.html
