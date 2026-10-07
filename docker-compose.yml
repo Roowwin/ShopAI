@@ -135,3 +135,16 @@ services:
       timeout: 5s
       retries: 6
     <<: *logging
+
+  migrate:
+    build: ./infra/migrations
+    profiles: ["tools"]
+    environment:
+      DATABASE_URL: postgresql://rfo_migrator:${DB_MIGRATOR_PASSWORD:?missing in .env}@pgbouncer:5432/rfo
+    volumes:
+      - ./apps/backend:/app:ro
+    working_dir: /app
+    networks: [core]
+    depends_on:
+      pgbouncer: { condition: service_healthy }
+    <<: *logging
