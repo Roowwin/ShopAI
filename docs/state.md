@@ -9,3 +9,4 @@ Windows/PS facts: repo C:\Users\Administrator\Projects\GBX\rfo-platform; hosts *
 Ops: scripts\up.ps1 (self-managed health wait + idempotent init + Test-Phase1), down.ps1, Test-Phase1.ps1 v3 = 20/20 PASS. Services on edge/core/db networks; pgbouncer :5432 internal-only; moto :5000 loopback; nginx 80/443.
 Status: Phase 0-1 COMPLETE+committed. NEXT Phase 2 = Alembic baseline: identity(dual-auth), catalog, serialized assets+state machine, partitioned stock_movements, orders(AUD/GST), audit; FK indexes; guarded transitions; migrate only as rfo_migrator; verify: apply clean + role-probe + EXPLAIN.
 ADRs 0001-0005 in docs/adr/. Chat protocol: "go phase N" advances; evidence-first; console pastes preferred.
+AI dev: text=qwen2.5:7b vision=gemma3:4b embed=nomic-embed-text (vision upgrade later: qwen2.5vl after VRAM check via ollama ps)
