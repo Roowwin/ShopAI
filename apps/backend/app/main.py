@@ -7,16 +7,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.api.v1 import staff, store
 from app.core.config import get_settings
 from app.core.db import get_engine
 
-logging.basicConfig(level=get_settings().LOG_LEVEL)
+s = get_settings()
+logging.basicConfig(level=s.LOG_LEVEL)
 
-app = FastAPI(title="RFO API", version="0.1.0-phase3a")
+docs = None if s.is_prod else "/docs"
+app = FastAPI(title="RFO API", version="0.1.0-phase3b", docs_url=docs, redoc_url=None)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_settings().cors_origins,
+    allow_origins=s.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
@@ -32,6 +35,9 @@ async def request_context(request: Request, call_next):
     logging.info("%s %s %s %.1fms rid=%s", request.method, request.url.path,
                  response.status_code, (time.perf_counter() - t0) * 1000, rid)
     return response
+
+app.include_router(staff.router)
+app.include_router(store.router)
 
 @app.get("/healthz")
 async def healthz() -> dict:
