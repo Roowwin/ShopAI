@@ -17,7 +17,7 @@ class LoginIn(BaseModel):
 class CodeIn(BaseModel):
     code: str
 
-def _fetch(db, public_id: str):
+async def _fetch(db, public_id: str):
     return (await db.execute(text("SELECT id, public_id::text, role, totp_secret, totp_enabled FROM staff_users WHERE public_id = :p"),
                              {"p": public_id})).mappings().first()
 
