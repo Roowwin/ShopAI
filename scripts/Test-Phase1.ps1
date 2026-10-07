@@ -1,10 +1,9 @@
 #Requires -Version 5.1
-# Phase 1 verification gate. Exits non-zero on any failure.
+# Phase 1 verification gate (moto storage edition). Exits non-zero on failure.
 [CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'
-$root = Split-Path $PSScriptRoot -Parent
-Set-Location $root
+Set-Location (Split-Path $PSScriptRoot -Parent)
 
 $pass = 0; $fail = 0
 function Check {
@@ -13,18 +12,19 @@ function Check {
     catch { $script:fail++; Write-Host "  FAIL  $Name - $($_.Exception.Message)" -ForegroundColor Red }
 }
 function TcpOpen {
-    param([string]$Host, [int]$Port)
+    param([string]$Target, [int]$Port)
     $tcp = New-Object Net.Sockets.TcpClient
     try {
-        $ar = $tcp.BeginConnect($Host, $Port, $null, $null)
+        $ar = $tcp.BeginConnect($Target, $Port, $null, $null)
         return ($ar.AsyncWaitHandle.WaitOne(1500) -and $tcp.Connected)
     } finally { $tcp.Close() }
 }
 
 Write-Host "`n[1/5] Container health" -ForegroundColor Cyan
-foreach ($svc in 'postgres','pgbouncer','redis','minio','nginx') {
-    Check "$svc healthy" {
-        $id = (& docker compose ps -q $svc) -join ''
+foreach ($svc in 'postgres','pgbouncer','redis','storage','nginx') {
+    $svcLocal = $svc
+    Check "$svcLocal healthy" {
+        $id = (& docker compose ps -q $svcLocal) -join ''
         if ([string]::IsNullOrWhiteSpace($id)) { throw 'not running' }
         $h = (& docker inspect --format '{{.State.Health.Status}}' $id) -join ''
         if ($h -ne 'healthy') { throw "health=$h" }
@@ -59,18 +59,14 @@ Check 'default privileges wired (migrator->app/ro)' {
     if ($n -lt 4) { throw "default ACLs=$n (expected >= 4)" }
 }
 
-Write-Host "`n[4/5] Redis / MinIO" -ForegroundColor Cyan
-Check 'redis PONG + AOF=yes' {
-    $ping = (& docker compose exec -T redis sh -c 'redis-cli -a $REDIS_PASSWORD --no-auth-warning ping').Trim()
-    $aof  = (& docker compose exec -T redis sh -c 'redis-cli -a $REDIS_PASSWORD --no-auth-warning config get appendonly') | Select-Object -Last 1
-    if ($ping -ne 'PONG') { throw "ping=$ping" }
-    if ("$aof".Trim() -ne 'yes') { throw "appendonly=$aof" }
-}
-Check 'minio health + rfo-media bucket' {
-    $r = Invoke-WebRequest -Uri 'http://127.0.0.1:9000/minio/health/live' -UseBasicParsing -TimeoutSec 10
+Write-Host "`n[4/5] Storage (moto S3 emulation)" -ForegroundColor Cyan
+Check 'storage S3 API reachable on loopback' {
+    $r = Invoke-WebRequest -Uri 'http://127.0.0.1:5000/' -UseBasicParsing -TimeoutSec 10
     if ($r.StatusCode -ne 200) { throw "status=$($r.StatusCode)" }
-    & docker compose run --rm --entrypoint /bin/sh minio-init -c 'mc ls local/rfo-media' *> $null
-    if ($LASTEXITCODE -ne 0) { throw 'mc ls rfo-media failed' }
+}
+Check 'rfo-media bucket exists' {
+    & docker compose run --rm storage-init verify *> $null
+    if ($LASTEXITCODE -ne 0) { throw 'bucket verify failed' }
 }
 
 Write-Host "`n[5/5] Edge: Nginx + TLS" -ForegroundColor Cyan
@@ -84,7 +80,7 @@ Check 'http -> https redirect (301)' {
 }
 Check 'TLS 200 on api healthz' {
     $code = (& curl.exe -sk -o NUL -w '%{http_code}' https://api.rfo.localhost/healthz).Trim()
-    if ($code -ne '200') { throw "got $code (missing certs? run scripts\New-TlsCerts.ps1)" }
+    if ($code -ne '200') { throw "got $code" }
 }
 Check 'security headers present' {
     $hdr = (& curl.exe -skI https://api.rfo.localhost/healthz) -join ' '

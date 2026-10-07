@@ -15,7 +15,7 @@ log_format json_main escape=json '{"ts":"$time_iso8601","req_id":"$request_id","
 access_log /var/log/nginx/access.log json_main;
 error_log  /var/log/nginx/error.log warn;
 
-upstream rfo-minio { server minio:9000; keepalive 16; }
+upstream rfo-minio { server storage:5000; keepalive 16; }
 
 # ---- catch-all ---------------------------------------------------------------
 server {

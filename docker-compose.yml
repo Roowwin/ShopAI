@@ -11,7 +11,6 @@ networks:
 volumes:
   pgdata: {}
   redisdata: {}
-  miniodata: {}
 
 services:
   postgres:
@@ -76,50 +75,42 @@ services:
       retries: 12
     <<: *logging
 
-  minio:
-    image: quay.io/minio/minio:latest
+  # Dev-only S3 emulation (ADR 0005). In-memory: storage-init re-creates buckets on each up.
+  # Prod = real MinIO/S3 on Linux hosts; credentials in .env (MINIO_*) are the prod contract.
+  storage:
+    image: motoserver/moto:latest
     restart: unless-stopped
-    command: ["server", "/data", "--console-address", ":9001"]
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?missing in .env}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?missing in .env}
+    command: ["moto_server", "-H", "0.0.0.0", "-p", "5000"]
     ports:
-      - "127.0.0.1:9000:9000"   # S3 API - loopback only (dev convenience)
-      - "127.0.0.1:9001:9001"   # console - loopback only (dev convenience)
-    volumes: [miniodata:/data]
+      - "127.0.0.1:5000:5000"   # S3 API - loopback only (dev)
     networks: [core]
-    # image ships `mc`; if an image build ever lacks it, swap test to: ["CMD","curl","-f","http://localhost:9000/minio/health/live"]
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD-SHELL", "python -c 'import urllib.request as u; u.urlopen(\"http://127.0.0.1:5000/\", timeout=5)'"]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 20s
     <<: *logging
 
-  minio-init:
-    image: quay.io/minio/mc:latest
+  storage-init:
+    image: motoserver/moto:latest
     restart: "no"
     networks: [core]
     depends_on:
-      minio: { condition: service_healthy }
+      storage: { condition: service_healthy }
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?missing in .env}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?missing in .env}
-    entrypoint: >
-      /bin/sh -c "
-        mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
-        mc mb --ignore-existing local/rfo-media &&
-        mc anonymous set download local/rfo-media &&
-        echo MINIO_INIT_DONE
-      "
+      STORAGE_ENDPOINT: http://storage:5000
+      BUCKET: ${MINIO_BUCKET_MEDIA:?missing in .env}
+    volumes:
+      - ./infra/storage/init.py:/init.py:ro
+    entrypoint: ["python", "/init.py"]
     <<: *logging
 
   nginx:
     image: public.ecr.aws/docker/library/nginx:1.27-alpine
     restart: unless-stopped
     depends_on:
-      minio: { condition: service_healthy }
+      storage: { condition: service_healthy }
     ports:
       - "80:80"
       - "443:443"
