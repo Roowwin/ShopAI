@@ -1,0 +1,11 @@
+# RFO Canonical State (paste at top of any NEW chat session + "continue at Phase N")
+Project: RFO refurbish&commerce, AU/NZ, AUD. 50 staff (write-heavy) + 1M customers (read-heavy).
+SLOs: p95<200ms, 300r/s peak, 99.9%, RPO<=5min, RTO<=1h.
+Stack: PG16 (pgcrypto,pg_trgm,citext,unaccent,btree_gin,pg_stat_statements) + PgBouncer1.22 (transaction, max_prepared_statements=200) | FastAPI Py3.11, asyncSQLA2, Alembic | 2x Next.js14 (storefront+backoffice) | Redis(AOF,noeviction) | Nginx edge(mkcert TLS, rate zones, security headers, JSON logs+request IDs) | ARQ worker | moto dev S3 (ADR0005; prod=real MinIO/S3) | PowerShell-only tooling.
+DB: superuser rfo_admin; roles rfo_migrator(DDL)/rfo_app(DML,timeout30s)/rfo_ro(RO); default privileges wired; data persists across up/down; reset=down -PurgeData.
+Decisions: two trust zones; Argon2id in app; customer auth = password+OAUTH BOTH (oauth_identities provider+subject UNIQUE; staff=password+TOTP only); payments hosted-later (schema now: BIGINT cents AUD, shipping_country IN(AU,NZ), GST 10/15); two frontends; ARQ; serialized assets + state machine + month-partitioned stock_movements.
+Images: postgres/redis/nginx/alpine via public.ecr.aws/docker/library/*; motoserver/moto:latest (ADR 0005 exception); MinIO registries login-gated (proven probes).
+Windows/PS facts: repo C:\Users\Administrator\Projects\GBX\rfo-platform; hosts *.rfo.localhost set; mkcert trusted; PS5.1 traps: embedded double-quotes stripped in native args (use single-quoted SQL in PS double-quoted strings, backtick-escape $ENV); raw .NET IO uses process CWD not PS location (Join-Path (Get-Location)); *> $null on native stderr under EAP=Stop throws (Invoke-NativeQuiet); Notepad appends .txt; files must be LF/no-BOM.
+Ops: scripts\up.ps1 (self-managed health wait + idempotent init + Test-Phase1), down.ps1, Test-Phase1.ps1 v3 = 20/20 PASS. Services on edge/core/db networks; pgbouncer :5432 internal-only; moto :5000 loopback; nginx 80/443.
+Status: Phase 0-1 COMPLETE+committed. NEXT Phase 2 = Alembic baseline: identity(dual-auth), catalog, serialized assets+state machine, partitioned stock_movements, orders(AUD/GST), audit; FK indexes; guarded transitions; migrate only as rfo_migrator; verify: apply clean + role-probe + EXPLAIN.
+ADRs 0001-0005 in docs/adr/. Chat protocol: "go phase N" advances; evidence-first; console pastes preferred.
