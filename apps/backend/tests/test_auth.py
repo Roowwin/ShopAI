@@ -1,12 +1,12 @@
 import uuid
-from urllib.parse import quote
 
+import httpx
 import pyotp
-import pytest
 from sqlalchemy import text
 
-from app.core.db import get_engine
 from app.bootstrap_staff import bootstrap
+from app.core.db import get_engine
+from app.main import app
 
 async def _cleanup():
     eng = get_engine()
@@ -17,8 +17,7 @@ async def _cleanup():
 
 async def test_health(client):
     r = await client.get("/healthz")
-    assert r.status_code == 200
-    assert r.json()["status"] == "ok"
+    assert r.status_code == 200 and r.json()["status"] == "ok"
     r = await client.get("/readyz")
     assert r.status_code == 200 and r.json()["db"] is True
 
@@ -40,16 +39,19 @@ async def test_refresh_rotation_theft(client):
     assert r.status_code == 200
     old = client.cookies.get("rfo_rt_store")
     assert old
-    r2 = await client.post("/store/auth/refresh")             # rotate -> new cookie in jar
+    r2 = await client.post("/store/auth/refresh")
     assert r2.status_code == 200
-    client.cookies.set("rfo_rt_store", old)                    # replay the OLD token
-    r3 = await client.post("/store/auth/refresh")
+    # replay the STOLEN token in an isolated client - the main jar keeps ONE clean entry
+    t = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://t")
+    t.cookies.set("rfo_rt_store", old, domain="t", path="/store/auth")
+    r3 = await t.post("/store/auth/refresh")
     assert r3.status_code == 401
-    r4 = await client.post("/store/auth/refresh")              # new token also dead (theft revoke-all)
+    r4 = await t.post("/store/auth/refresh")
     assert r4.status_code == 401
+    await t.aclose()
     r5 = await client.post("/store/auth/login", json={"email": email, "password": "Str0ngPass!23"})
     assert r5.status_code == 200
-    r6 = await client.post("/store/auth/refresh")              # fresh chain works again
+    r6 = await client.post("/store/auth/refresh")
     assert r6.status_code == 200
 
 async def test_staff_mfa_flow(client):
@@ -67,9 +69,7 @@ async def test_staff_mfa_flow(client):
     assert r.status_code == 200 and r.json()["enabled"] is True
     r2 = await client.post("/staff/auth/login", json={"email": email, "password": pw})
     assert r2.status_code == 200 and r2.json().get("requires_mfa") is True
-    r3 = await client.post("/staff/auth/mfa/verify",
-                           json={"code": pyotp.TOTP(secret).now()},
-                           headers={"Authorization": "Bearer " + r2.json()["challenge"]})
+    r3 = await client.post("/staff/auth/mfa/verify", json={"code": pyotp.TOTP(secret).now()}, headers={"Authorization": "Bearer " + r2.json()["challenge"]})
     assert r3.status_code == 200, r3.text
     r4 = await client.get("/staff/me", headers={"Authorization": "Bearer " + r3.json()["access_token"]})
     assert r4.status_code == 200 and r4.json()["role"] == "admin"
