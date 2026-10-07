@@ -155,7 +155,7 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-development}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      DATABASE_URL: postgresql://rfo_app:${DB_APP_PASSWORD:?missing in .env}@pgbouncer:5432/rfo
+      DATABASE_URL: postgresql+asyncpg://rfo_app:${DB_APP_PASSWORD:?missing in .env}@pgbouncer:5432/rfo
       JWT_SECRET: ${JWT_SECRET:?missing in .env}
       JWT_ACCESS_TTL_MINUTES: ${JWT_ACCESS_TTL_MINUTES:-15}
       JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-14}
