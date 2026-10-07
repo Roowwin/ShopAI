@@ -44,4 +44,5 @@ async def readyz():
             await conn.execute(text("SELECT 1"))
         return {"db": True}
     except Exception:
+        logging.exception("readyz db check failed")
         return JSONResponse(status_code=503, content={"db": False})

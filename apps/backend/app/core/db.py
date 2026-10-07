@@ -14,7 +14,7 @@ def get_engine() -> AsyncEngine:
             max_overflow=20,
             pool_recycle=1800,
             # PgBouncer transaction mode: prepared-statement caches stay OFF at app side
-            connect_args={"statement_cache_size": 0, "command_cache_size": 0,
+            connect_args={"statement_cache_size": 0,
                           "server_settings": {"application_name": "rfo-api"}},
         )
     return _engine
