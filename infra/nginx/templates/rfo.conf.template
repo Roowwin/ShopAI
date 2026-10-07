@@ -1,6 +1,3 @@
-# Rendered at container start by the official nginx envsubst mechanism:
-# ONLY vars defined in the container env are substituted ($request_id etc. survive).
-
 gzip on;
 gzip_comp_level 5;
 gzip_types text/plain text/css application/javascript application/json image/svg+xml;
@@ -15,9 +12,9 @@ log_format json_main escape=json '{"ts":"$time_iso8601","req_id":"$request_id","
 access_log /var/log/nginx/access.log json_main;
 error_log  /var/log/nginx/error.log warn;
 
+upstream rfo-api { server api:8000; keepalive 32; }
 upstream rfo-minio { server storage:5000; keepalive 16; }
 
-# ---- catch-all ---------------------------------------------------------------
 server {
   listen 80 default_server;
   server_name _;
@@ -25,7 +22,6 @@ server {
   location / { return 503 "RFO edge up - route not wired\n"; }
 }
 
-# ---- http -> https ------------------------------------------------------------
 server {
   listen 80;
   server_name ${DOMAIN_STORE} ${DOMAIN_ADMIN} ${DOMAIN_API};
@@ -34,18 +30,27 @@ server {
   location / { return 301 https://$host$request_uri; }
 }
 
-# ---- API (upstream wired in Phase 3) -------------------------------------------
 server {
   listen 443 ssl;
   http2 on;
   server_name ${DOMAIN_API};
   include /etc/nginx/snippets/tls.conf;
   include /etc/nginx/snippets/headers.conf;
-  location = /healthz { access_log off; return 200 "ok\n"; }
-  location / { limit_req zone=staff burst=20 nodelay; return 503 "API not wired yet (Phase 3)\n"; }
+  client_max_body_size 25m;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto https;
+  proxy_set_header X-Request-ID $request_id;
+  proxy_set_header Connection "";
+
+  location ~ ^/staff/auth/login$ { limit_req zone=login burst=5 nodelay; proxy_pass http://rfo-api; }
+  location ~ ^/store/auth/login$ { limit_req zone=login burst=5 nodelay; proxy_pass http://rfo-api; }
+  location ~ ^/staff/ { limit_req zone=staff burst=20 nodelay; proxy_pass http://rfo-api; }
+  location ~ ^/store/ { limit_req zone=store burst=40 nodelay; proxy_pass http://rfo-api; }
+  location / { proxy_pass http://rfo-api; }
 }
 
-# ---- Storefront (Phase 7) -------------------------------------------------------
 server {
   listen 443 ssl;
   http2 on;
@@ -61,12 +66,11 @@ server {
   location / { return 503 "Storefront not wired yet (Phase 7)\n"; }
 }
 
-# ---- Backoffice (Phase 6) -------------------------------------------------------
 server {
   listen 443 ssl;
   http2 on;
   server_name ${DOMAIN_ADMIN};
   include /etc/nginx/snippets/tls.conf;
   include /etc/nginx/snippets/headers.conf;
-  location / { limit_req zone=staff burst=20 nodelay; return 503 "Backoffice not wired yet (Phase 6)\n"; }
+  location / { return 503 "Backoffice not wired yet (Phase 6)\n"; }
 }

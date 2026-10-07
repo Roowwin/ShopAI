@@ -148,3 +148,32 @@ services:
     depends_on:
       pgbouncer: { condition: service_healthy }
     <<: *logging
+
+  api:
+    build: ./apps/backend
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql://rfo_app:${DB_APP_PASSWORD:?missing in .env}@pgbouncer:5432/rfo
+      JWT_SECRET: ${JWT_SECRET:?missing in .env}
+      JWT_ACCESS_TTL_MINUTES: ${JWT_ACCESS_TTL_MINUTES:-15}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-14}
+      CORS_ORIGINS_STORE: ${CORS_ORIGINS_STORE:?missing in .env}
+      CORS_ORIGINS_STAFF: ${CORS_ORIGINS_STAFF:?missing in .env}
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      AI_ENDPOINT: ${AI_ENDPOINT:-}
+      AI_TEXT_MODEL: ${AI_TEXT_MODEL:-}
+      AI_VISION_MODEL: ${AI_VISION_MODEL:-}
+      AI_EMBED_MODEL: ${AI_EMBED_MODEL:-}
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [edge, core]
+    depends_on:
+      pgbouncer: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request as u; u.urlopen(\"http://127.0.0.1:8000/healthz\", timeout=5)'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    <<: *logging

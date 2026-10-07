@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# Phase 2b verification - lots domain rules (7 checks)
+# Phase 2b verification v2 - pattern-based parsing, corrected expectations (7 checks)
 [CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'
@@ -43,16 +43,22 @@ Check 'intake lot invisible on storefront' {
 }
 Check 'sellout hides lot (view=0, lot=completed)' {
     $r = Db -RoleEnv DB_APP_PASSWORD -Role rfo_app 'BEGIN; UPDATE assets SET status=''sold'' WHERE status=''listed'' AND lot_id=(SELECT id FROM lots WHERE lot_number=''LOT-2026-0002''); SELECT count(*) FROM v_storefront_assets; SELECT status FROM lots WHERE lot_number=''LOT-2026-0002''; ROLLBACK;'
-    $lines = ($r -split "`n") | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
-    if (($lines.Count -lt 2) -or ($lines[0] -ne '0') -or ($lines[1] -ne 'completed')) { throw "got: $($lines -join ' | ')" }
+    $lines  = ($r -split "`n") | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
+    $view   = $lines -match '^[0-9]+$'
+    $status = $lines -match '^(intake|active|completed|cancelled)$'
+    if (($view   | Select-Object -First 1) -ne '0')         { throw "view=$($view -join ',')" }
+    if (($status | Select-Object -First 1) -ne 'completed') { throw "lot=$($status -join ',')" }
 }
-Check 'relist reopens lot (completed->active)' {
-    $r = Db -RoleEnv DB_APP_PASSWORD -Role rfo_app 'BEGIN; UPDATE assets SET status=''listed'' WHERE serial_number=''RX-BULK-0050''; SELECT status FROM lots WHERE lot_number=''LOT-2026-0002''; SELECT count(*) FROM v_storefront_assets; ROLLBACK;'
-    $lines = ($r -split "`n") | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
-    if (($lines.Count -lt 2) -or ($lines[0] -ne 'active') -or ($lines[1] -ne '1')) { throw "got: $($lines -join ' | ')" }
+Check 'relist reopens lot (view 10->11, completed->active)' {
+    $r = Db -RoleEnv DB_APP_PASSWORD -Role rfo_app 'BEGIN; SELECT count(*) FROM v_storefront_assets; UPDATE assets SET status=''listed'' WHERE serial_number=''RX-BULK-0050''; SELECT status FROM lots WHERE lot_number=''LOT-2026-0002''; SELECT count(*) FROM v_storefront_assets; ROLLBACK;'
+    $lines  = ($r -split "`n") | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
+    $nums   = $lines -match '^[0-9]+$'
+    $status = $lines -match '^(intake|active|completed|cancelled)$'
+    if (($nums[0] -ne '10') -or ($nums[1] -ne '11')) { throw "counts=$($nums -join ',')" }
+    if (($status | Select-Object -First 1) -ne 'active') { throw "lot=$($status -join ',')" }
 }
-Check 'illegal lot transition rejected' {
-    if ((Invoke-NativeQuiet { Db -RoleEnv DB_APP_PASSWORD -Role rfo_app 'BEGIN; UPDATE lots SET status=''cancelled'' WHERE lot_number=''LOT-2026-0002''; ROLLBACK;' -Quiet }) -eq 0) { throw 'lot guard missing' }
+Check 'illegal lot transition rejected (intake->completed)' {
+    if ((Invoke-NativeQuiet { Db -RoleEnv DB_APP_PASSWORD -Role rfo_app 'BEGIN; UPDATE lots SET status=''completed'' WHERE lot_number=''LOT-2026-0001''; ROLLBACK;' -Quiet }) -eq 0) { throw 'lot guard missing' }
 }
 
 Write-Host "`nResult: $pass passed, $fail failed" -ForegroundColor $(if ($fail -eq 0) { 'Green' } else { 'Red' })
