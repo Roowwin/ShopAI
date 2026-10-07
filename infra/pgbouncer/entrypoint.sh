@@ -1,12 +1,13 @@
 #!/bin/sh
 set -e
+: "${POSTGRES_SUPERUSER:?POSTGRES_SUPERUSER required}"
 : "${POSTGRES_SUPERUSER_PASSWORD:?POSTGRES_SUPERUSER_PASSWORD required}"
 : "${DB_MIGRATOR_PASSWORD:?DB_MIGRATOR_PASSWORD required}"
 : "${DB_APP_PASSWORD:?DB_APP_PASSWORD required}"
 : "${DB_READONLY_PASSWORD:?DB_READONLY_PASSWORD required}"
 
 cat > /etc/pgbouncer/userlist.txt <<EOF
-"pg_admin"      "${POSTGRES_SUPERUSER_PASSWORD}"
+"${POSTGRES_SUPERUSER}"      "${POSTGRES_SUPERUSER_PASSWORD}"
 "rfo_migrator"  "${DB_MIGRATOR_PASSWORD}"
 "rfo_app"       "${DB_APP_PASSWORD}"
 "rfo_ro"        "${DB_READONLY_PASSWORD}"
@@ -22,7 +23,7 @@ listen_addr = 0.0.0.0
 listen_port = 5432
 auth_type = scram-sha-256
 auth_file = /etc/pgbouncer/userlist.txt
-admin_users = pg_admin
+admin_users = ${POSTGRES_SUPERUSER}
 pool_mode = ${PGBOUNCER_POOL_MODE}
 max_client_conn = ${PGBOUNCER_MAX_CLIENT_CONN}
 default_pool_size = ${PGBOUNCER_DEFAULT_POOL_SIZE}

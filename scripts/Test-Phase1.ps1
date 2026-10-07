@@ -41,7 +41,7 @@ Check 'rfo_app connects via pgbouncer' {
     if ($out -ne 'rfo_app') { throw "got '$out'" }
 }
 Check 'pool_mode=transaction' {
-    $cfg = (& docker compose exec -T pgbouncer sh -c 'PGPASSWORD=$POSTGRES_SUPERUSER_PASSWORD psql -h 127.0.0.1 -p 5432 -U pg_admin -d pgbouncer -tAc "SHOW CONFIG"') -join ' '
+    $cfg = (& docker compose exec -T pgbouncer sh -c 'PGPASSWORD=$POSTGRES_SUPERUSER_PASSWORD psql -h 127.0.0.1 -p 5432 -U rfo_admin -d pgbouncer -tAc "SHOW CONFIG"') -join ' '
     if ($cfg -notmatch 'pool_mode\s*\|\s*transaction') { throw 'pool_mode mismatch' }
 }
 Check 'rfo_app statement_timeout=30s' {
@@ -49,13 +49,13 @@ Check 'rfo_app statement_timeout=30s' {
     if ($out -notmatch '30s') { throw "got '$out'" }
 }
 Check 'extensions installed' {
-    $exts = (& docker compose exec -T postgres psql -U pg_admin -d rfo -tAc "SELECT string_agg(extname, '|' ORDER BY extname)") -join ''
+    $exts = (& docker compose exec -T postgres psql -U rfo_admin -d rfo -tAc "SELECT string_agg(extname, '|' ORDER BY extname)") -join ''
     foreach ($x in 'pgcrypto','pg_trgm','citext','unaccent','btree_gin','pg_stat_statements') {
         if ($exts -notlike "*$x*") { throw "missing: $x" }
     }
 }
 Check 'default privileges wired (migrator->app/ro)' {
-    $n = [int]((& docker compose exec -T postgres psql -U pg_admin -d rfo -tAc "SELECT count(*) FROM pg_default_acl WHERE defaclrole = (SELECT oid FROM pg_roles WHERE rolname = 'rfo_migrator')").Trim())
+    $n = [int]((& docker compose exec -T postgres psql -U rfo_admin -d rfo -tAc "SELECT count(*) FROM pg_default_acl WHERE defaclrole = (SELECT oid FROM pg_roles WHERE rolname = 'rfo_migrator')").Trim())
     if ($n -lt 4) { throw "default ACLs=$n (expected >= 4)" }
 }
 
