@@ -1,5 +1,15 @@
 #Requires -Version 5.1
-# Phase 2 verification gate v3 (Db helper: shell-correct '\'' escaping; full rewrite)
+<# RFO Phase 2 test fix: add missing 'compose' arg, double-quote SQL properly,
+   plain SQL in checks - 16 checks rerun genuinely. #>
+[CmdletBinding()]
+param([string]$ProjectRoot = (Get-Location).Path)
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+[IO.File]::WriteAllText((Join-Path $ProjectRoot 'scripts\Test-Phase2.ps1'), (@'
+#Requires -Version 5.1
+# Phase 2 verification gate v2 (fixed: compose arg + SQL quote handling)
 [CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'
@@ -20,9 +30,8 @@ function Invoke-NativeQuiet {
 }
 function Db {
     param([string]$RoleEnv, [string]$Role, [string]$Sql, [switch]$Quiet)
-    $qq = [string][char]39
-    $esc = $Sql.Replace($qq, $qq + '\' + $qq + $qq)
-    $cmd = 'PGPASSWORD=$' + $RoleEnv + ' psql -h 127.0.0.1 -p 5432 -U ' + $Role + ' -d rfo -tAc ' + $qq + $esc + $qq
+    $sq = $Sql.Replace([char]39, [char]39 + [char]39)
+    $cmd = 'PGPASSWORD=$' + $RoleEnv + ' psql -h 127.0.0.1 -p 5432 -U ' + $Role + ' -d rfo -tAc ' + [char]39 + $sq + [char]39
     $a = @('compose','exec','-T','pgbouncer','sh','-c', $cmd)
     $out = & docker @a
     if ($LASTEXITCODE -ne 0 -and -not $Quiet) { throw ('sql failed: ' + ($out -join ' ')) }
@@ -52,7 +61,7 @@ Check 'ledger partitioned with >=6 months' {
     if ($p -lt 6) { throw "partitions=$p" }
 }
 
-Write-Host "`n[3/4] Role security probes" -ForegroundColor Cyan
+Write-Host "`n[3/4] Role security probes (genuine)" -ForegroundColor Cyan
 Check 'rfo_app reads seeded assets' {
     $c = (Db -RoleEnv DB_APP_PASSWORD -Role rfo_app 'SELECT count(*) FROM assets').Trim()
     if ($c -ne '5000') { throw "assets=$c" }
@@ -100,3 +109,8 @@ Check 'far-future ledger insert rejected' {
 Write-Host "`nResult: $pass passed, $fail failed" -ForegroundColor $(if ($fail -eq 0) { 'Green' } else { 'Red' })
 if ($fail -gt 0) { exit 1 }
 Write-Host 'PHASE 2 VERIFIED - say "go phase 3".' -ForegroundColor Yellow
+'@ -replace "`r`n", "`n"), $Utf8NoBom)
+
+Get-Content (Join-Path $ProjectRoot 'scripts\Test-Phase2.ps1') -TotalCount 2   # gate
+Select-String -Path (Join-Path $ProjectRoot 'scripts\Test-Phase2.ps1') -Pattern "compose','exec" | Select-Object -ExpandProperty Line   # gate: fixed args
+Write-Host "`nNext: .\scripts\Test-Phase2.ps1" -ForegroundColor Yellow
