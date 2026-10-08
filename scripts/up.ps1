@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Set-Location (Split-Path $PSScriptRoot -Parent)
 
-$services = 'postgres','pgbouncer','redis','storage','nginx','api','worker'
+$services = 'postgres','pgbouncer','redis','storage','nginx','api','worker','backoffice'
 
 if (-not (Test-Path '.\infra\nginx\certs\fullchain.pem')) {
     Write-Host 'TLS certs missing - generating...' -ForegroundColor Yellow
@@ -39,6 +39,11 @@ while ($pending.Count -gt 0) {
     if ($pending.Count -gt 0) { Start-Sleep -Seconds 3 }
 }
 Write-Host '  ok      all services healthy' -ForegroundColor Green
+
+& docker compose up -d --force-recreate nginx
+$ndeadline = (Get-Date).AddSeconds(90)
+do { Start-Sleep -Seconds 3; $nh = (& docker inspect rfo-nginx-1 --format '{{.State.Health.Status}}' 2>$null) -join '''' } while ($nh -ne 'healthy' -and (Get-Date) -lt $ndeadline)
+if ($nh -ne 'healthy') { throw 'nginx unhealthy - paste docker compose logs nginx' }
 
 & docker compose run --rm storage-init
 if ($LASTEXITCODE -ne 0) { throw 'storage-init failed' }
