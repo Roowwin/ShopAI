@@ -60,7 +60,7 @@ export default function CartPage() {
           <div key={l.asset_id} className="flex items-center justify-between border-b py-3 last:border-0">
             <div>
               <p className="font-medium">Grade {l.grade} unit</p>
-              <p className="text-xs text-slate-400 font-mono">serial ••{l.serial_tail}</p>
+              <p className="text-xs text-slate-400 font-mono">serial â€¢â€¢{l.serial_tail}</p>
             </div>
             <div className="flex items-center gap-4">
               <span className="font-semibold">{aud(l.price_cents)}</span>
@@ -84,7 +84,7 @@ export default function CartPage() {
             <input className="border rounded px-3 py-2 w-32" placeholder="postcode" value={postcode} onChange={(e) => setPostcode(e.target.value)} />
           </div>
           <button className="bg-green-700 text-white rounded px-6 py-2 disabled:opacity-50" onClick={checkout} disabled={busy}>
-            Buy now — unit reserved instantly
+            Buy now â€” unit reserved instantly
           </button>
         </div>
       )}

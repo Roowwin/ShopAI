@@ -15,7 +15,7 @@ export default function UnitsPanel({ units }: { units: Unit[] }) {
         {units.map((u) => (
           <tr key={u.id} className="border-t">
             <td className="py-2">{u.grade}</td>
-            <td className="font-mono">••{u.serial_tail}</td>
+            <td className="font-mono">â€¢â€¢{u.serial_tail}</td>
             <td className="font-semibold">{aud(u.sale_price_cents)}</td>
             <td>
               <button className="border rounded px-3 py-1 disabled:opacity-40"
