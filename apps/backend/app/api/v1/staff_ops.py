@@ -88,11 +88,11 @@ async def scan_in(body: ScanIn, staff: dict = Depends(require_roles("admin", "ma
     asset = Asset(serial_number=body.serial_number, imei=body.imei, product_id=body.product_id,
                   notes=body.notes, status="received", lot_id=lot.id)
     db.add(asset)
-    await db.flush()
-    db.add(StockMovement(asset_id=asset.id, qty=1, reason="intake_scan", actor_staff_id=staff["id"]))
-    await audit(db, "staff", entity="asset", entity_id=asset.id, action="scan_in",
-                actor_id=staff["id"], after={"serial": body.serial_number, "lot": lot.lot_number})
     try:
+        await db.flush()
+        db.add(StockMovement(asset_id=asset.id, qty=1, reason="intake_scan", actor_staff_id=staff["id"]))
+        await audit(db, "staff", entity="asset", entity_id=asset.id, action="scan_in",
+                    actor_id=staff["id"], after={"serial": body.serial_number, "lot": lot.lot_number})
         await db.commit()
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
