@@ -70,6 +70,7 @@ server {
   proxy_set_header X-Forwarded-Proto https;
   proxy_set_header Upgrade $http_upgrade;
   proxy_set_header Connection $connection_upgrade;
+  add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://${DOMAIN_API} ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
   location /media/ {
     proxy_pass http://rfo-minio/rfo-media/;
     proxy_set_header Connection "";
@@ -91,5 +92,6 @@ server {
   proxy_set_header X-Forwarded-Proto https;
   proxy_set_header Upgrade $http_upgrade;
   proxy_set_header Connection $connection_upgrade;
+  add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://${DOMAIN_API} ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
   location / { proxy_pass http://rfo-backoffice; }
 }
