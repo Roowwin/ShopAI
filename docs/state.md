@@ -15,3 +15,4 @@ Phase 4b COMPLETE: pricing (sale_price_cents, AU/NZ GST), reservations SKIP LOCK
 Phase 4b VERIFIED: pricing+GST math, reserve/double-reserve/release, webhook succeeded(fired sold+paid+ledger -1+replay-safe)/failed(returns unit) — all via API. Commerce arc closed.
 Phase 6a delivered: backoffice Next.js (login+TOTP step, /admin dashboard, /admin/security enrollment, lib/api client w/ refresh), compose backoffice service (node_modules volume), nginx admin proxy w/ HMR headers, scripts/rotate-admin.py.
 Phase 6b VERIFIED: /admin/intake (lots+scan-in, AI stub), /admin/assets workbench (filters+grade/price/move/transitions w/ DB trigger 409 surfacing), admin nav layout.
+Phase 7a delivered: /store/catalog + /catalog/{slug} (masked serials) + /search (tsvector); reserve/checkout enforce lot-active; dev-only simulate-payment.

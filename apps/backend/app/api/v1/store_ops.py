@@ -55,10 +55,10 @@ class ReserveIn(BaseModel):
 
 @router.post("/reservations", status_code=201)
 async def reserve(body: ReserveIn, db=Depends(get_db)):
-    row = (await db.execute(text("SELECT id, status FROM assets WHERE id = :i FOR UPDATE SKIP LOCKED"),
+    row = (await db.execute(text("SELECT a.id, a.status FROM assets a JOIN lots l ON l.id = a.lot_id WHERE a.id = :i AND l.status = 'active' FOR UPDATE OF a SKIP LOCKED"),
                             {"i": body.asset_id})).first()
     if row is None:
-        raise HTTPException(status_code=409, detail="unit locked by another transaction - retry")
+        raise HTTPException(status_code=409, detail="unit not available (locked, sold, or lot not active)")
     if row.status != "listed":
         raise HTTPException(status_code=409, detail=f"unit not available (status {row.status})")
     a = await db.get(Asset, row.id)
@@ -110,10 +110,10 @@ async def checkout(body: CheckoutIn, customer: dict | None = Depends(_opt_custom
     sub = 0
     locked = []
     for aid in ids:
-        row = (await db.execute(text("SELECT id, status, sale_price_cents FROM assets WHERE id = :i FOR UPDATE SKIP LOCKED"),
+        row = (await db.execute(text("SELECT a.id, a.status, a.sale_price_cents FROM assets a JOIN lots l ON l.id = a.lot_id WHERE a.id = :i AND l.status = 'active' FOR UPDATE OF a SKIP LOCKED"),
                                 {"i": aid})).first()
         if row is None:
-            raise HTTPException(status_code=409, detail=f"unit {aid} locked by another checkout - retry")
+            raise HTTPException(status_code=409, detail=f"unit {aid} unavailable (locked, sold, or lot not active)")
         if row.status != "listed":
             raise HTTPException(status_code=409, detail=f"unit {aid} not purchasable (status {row.status})")
         if row.sale_price_cents is None:
@@ -236,3 +236,36 @@ async def payment_webhook(provider: str, body: WebhookIn, request: Request, db=D
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
     return {"status": "processed", "order": order.status}
+@router.post("/orders/{public_id}/simulate-payment")
+async def simulate_payment(public_id: str, db=Depends(get_db)):
+    # DEV ONLY: pretends the provider fired the webhook. Returns 404 in production env.
+    if get_settings().is_prod:
+        raise HTTPException(status_code=404, detail="not found")
+    o = (await db.execute(text("SELECT id, status FROM orders WHERE public_id = :p"), {"p": public_id})).mappings().first()
+    if o is None:
+        raise HTTPException(status_code=404, detail="order not found")
+    if o["status"] != "pending":
+        raise HTTPException(status_code=409, detail=f"order status {o['status']}")
+    p = (await db.execute(text("SELECT id FROM payments WHERE order_id = :i ORDER BY id DESC LIMIT 1"),
+                          {"i": o["id"]})).mappings().first()
+    if p is None:
+        raise HTTPException(status_code=409, detail="no payment initiated")
+    pay = await db.get(Payment, p["id"])
+    order = await db.get(Order, o["id"])
+    pay.status = "succeeded"
+    order.status = "paid"
+    lines = (await db.execute(select(OrderLine).where(OrderLine.order_id == o["id"]))).scalars().all()
+    for l in lines:
+        if l.asset_id is None:
+            continue
+        a = await db.get(Asset, l.asset_id)
+        if a is not None and a.status == "reserved":
+            a.status = "sold"
+        db.add(StockMovement(asset_id=l.asset_id, qty=-1, reason="sale"))
+        await db.execute(text("UPDATE reservations SET status='converted' WHERE asset_id = :i AND status='active'"), {"i": l.asset_id})
+    await audit(db, "system", entity="order", entity_id=o["id"], action="payment_succeeded", meta={"simulated": True})
+    try:
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    return {"status": "paid", "order": order.status}
