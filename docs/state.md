@@ -19,3 +19,4 @@ Phase 7a delivered: /store/catalog + /catalog/{slug} (masked serials) + /search 
 Phase 7 VERIFIED: storefront live (home ISR, product pages w/ zero-stock guard, tsvector search, browser cart -> guest checkout -> simulate -> sold). Media pipeline still pending (Phase 11).
 Phase 8 VERIFIED: CSP (storefront+admin), login burst proof, hex-literal secret sweep, threat model + scans.
 Phase 9a VERIFIED: nightly dumps + 7-copy retention; restore drill proves counts round-trip; CI staged. Rule: PS5.1 never pipes binary; use docker cp.
+Phase 10 delivered: WAL archiving (RPO<=5min segments), k6 load script (edge-routed, 2x), pgbench write-test, prod next builds in gate, golive-checklist.md.

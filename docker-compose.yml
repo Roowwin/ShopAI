@@ -11,7 +11,9 @@ networks:
 volumes:
   pgdata: {}
   redisdata: {}
+  wal_archive_pg: {}
   backoffice_modules: {}
+  grafana_data: {}
   storefront_modules: {}
 
 services:
@@ -29,6 +31,7 @@ services:
       DB_READONLY_PASSWORD: ${DB_READONLY_PASSWORD:?missing in .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - wal_archive_pg:/wal_archive
       - ./infra/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
       - ./infra/postgres/init/01-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
     networks: [db]
@@ -260,4 +263,38 @@ services:
     networks: [db]
     depends_on:
       postgres: { condition: service_healthy }
+    <<: *logging
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: postgresql://rfo_ro:${DB_READONLY_PASSWORD:?missing in .env}@postgres:5432/rfo?sslmode=disable
+    networks: [db, core]
+    depends_on:
+      postgres: { condition: service_healthy }
+    <<: *logging
+
+  prometheus:
+    image: prom/prometheus
+    restart: unless-stopped
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks: [core]
+    <<: *logging
+
+  grafana:
+    image: grafana/grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?missing in .env}
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3002:3000"
+    networks: [core]
     <<: *logging

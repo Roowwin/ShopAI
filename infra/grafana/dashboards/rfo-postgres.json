@@ -1,0 +1,29 @@
+{
+  "title": "RFO Postgres",
+  "uid": "rfo-postgres",
+  "schemaVersion": 39,
+  "editable": true,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Connections (rfo)",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prom-db" },
+      "targets": [{ "expr": "pg_stat_database_numbackends{datname=\"rfo\"}" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Transactions/s",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prom-db" },
+      "targets": [{ "expr": "rate(pg_stat_database_xact_commit{datname=\"rfo\"}[5m])" }]
+    },
+    {
+      "type": "stat",
+      "title": "Cache hit",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prom-db" },
+      "targets": [{ "expr": "pg_stat_database_blks_hit{datname=\"rfo\"} / (pg_stat_database_blks_hit{datname=\"rfo\"} + pg_stat_database_blks_read{datname=\"rfo\"})" }]
+    }
+  ]
+}
