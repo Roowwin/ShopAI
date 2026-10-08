@@ -7,13 +7,14 @@ from app.core.db import get_engine
 
 
 async def _cleanup():
+    # The stock ledger is append-only by design (Phase 2 probes): movement rows and
+    # their assets can never be deleted. pytest-% rows accumulate harmlessly in dev
+    # and are invisible to storefront logic; only auth-side rows are cleaned.
     eng = get_engine()
     async with eng.begin() as c:
-        await c.execute(text("DELETE FROM stock_movements WHERE asset_id IN (SELECT id FROM assets WHERE serial_number LIKE 'pytest-%')"))
-        await c.execute(text("DELETE FROM assets WHERE serial_number LIKE 'pytest-%'"))
-        await c.execute(text("DELETE FROM lots WHERE notes = 'pytest'"))
         await c.execute(text("DELETE FROM refresh_tokens WHERE identity_id IN (SELECT id FROM staff_users WHERE email LIKE 'pytest-%')"))
         await c.execute(text("DELETE FROM staff_users WHERE email LIKE 'pytest-%'"))
+        await c.execute(text("DELETE FROM users WHERE email LIKE 'pytest-%'"))
 
 
 def _h(tok: str) -> dict:
