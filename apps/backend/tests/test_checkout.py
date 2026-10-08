@@ -71,7 +71,7 @@ async def test_pricing_reserve_checkout_webhook_sellout(client):
     code = await _wh(client, ref, "payment.succeeded")
     assert code == 200, f"webhook failed: {code}"
     code = await _wh(client, ref, "payment.succeeded")   # replay
-    assert code == 200 and "already" in "processed", "replay must be idempotent"
+    assert code == 200, "replay must be idempotent (no double effects - proven by mv==1 below)"
 
     eng = get_engine()
     async with eng.begin() as c:
