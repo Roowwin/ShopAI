@@ -36,6 +36,7 @@ class Asset(Base):
     status: Mapped[str] = mapped_column(String)
     grade: Mapped[str | None] = mapped_column(String, nullable=True)
     cost_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    sale_price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     intake_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     location: Mapped[str | None] = mapped_column(Text, nullable=True)
     condition_report: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -49,8 +50,7 @@ class Asset(Base):
 
 class StockMovement(Base):
     __tablename__ = "stock_movements"
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     moved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True, server_default=func.now())
     asset_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("assets.id"), nullable=False)
     qty: Mapped[int] = mapped_column(Integer, nullable=False)

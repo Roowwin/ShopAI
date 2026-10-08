@@ -11,3 +11,4 @@ Status: Phase 0-1 COMPLETE+committed. NEXT Phase 2 = Alembic baseline: identity(
 ADRs 0001-0005 in docs/adr/. Chat protocol: "go phase N" advances; evidence-first; console pastes preferred.
 AI dev: text=qwen2.5:7b vision=gemma3:4b embed=nomic-embed-text (vision upgrade later: qwen2.5vl after VRAM check via ollama ps)
 Phase 3 COMPLETE: auth core - 0004 refresh_tokens, two-zone routers (/staff /store), TOTP challenge flow, refresh rotation + theft detection (replay => revoke-all), logout, httpOnly Secure cookies (zone-scoped paths), bootstrap_staff (admin@rfo.local exists - ROTATE PASSWORD at phase 6 start, it transited chat). pytest suite 5 tests via pythonpath=. + engine.dispose per test. Test-Phase3 = 3 PASS.
+Phase 4b COMPLETE: pricing (sale_price_cents, AU/NZ GST), reservations SKIP LOCKED, checkout (idempotent webhook: paid->sold->ledger -1, failed->cancelled->listed), stub provider + HMAC webhooks.

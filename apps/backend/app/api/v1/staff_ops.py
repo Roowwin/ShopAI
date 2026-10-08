@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
@@ -187,3 +187,21 @@ async def list_movements(asset_id: int | None = None, limit: int = Query(50, le=
     rows = (await db.execute(q)).scalars().all()
     return [{"id": m.id, "moved_at": m.moved_at.isoformat(), "asset_id": m.asset_id,
              "qty": m.qty, "reason": m.reason, "actor_staff_id": m.actor_staff_id} for m in rows]
+class PriceIn(BaseModel):
+    sale_price_cents: int = Field(ge=0)
+
+
+@router.post("/assets/{asset_id}/price")
+async def set_price(asset_id: int, body: PriceIn, staff: dict = Depends(require_roles("admin", "manager", "sales")), db=Depends(get_db)):
+    asset = await db.get(Asset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    before = {"sale_price_cents": asset.sale_price_cents}
+    asset.sale_price_cents = body.sale_price_cents
+    await audit(db, "staff", entity="asset", entity_id=asset.id, action="price",
+                actor_id=staff["id"], before=before, after={"sale_price_cents": body.sale_price_cents})
+    try:
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    return {"id": asset.id, "sale_price_cents": asset.sale_price_cents}

@@ -166,6 +166,8 @@ services:
       AI_TEXT_MODEL: ${AI_TEXT_MODEL:-}
       AI_VISION_MODEL: ${AI_VISION_MODEL:-}
       AI_EMBED_MODEL: ${AI_EMBED_MODEL:-}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-stub}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
     extra_hosts: ["host.docker.internal:host-gateway"]
     networks: [edge, core]
     depends_on:
