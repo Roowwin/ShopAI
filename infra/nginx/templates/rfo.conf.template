@@ -20,6 +20,7 @@ error_log  /var/log/nginx/error.log warn;
 upstream rfo-api { server api:8000; keepalive 32; }
 upstream rfo-minio { server storage:5000; keepalive 16; }
 upstream rfo-backoffice { server backoffice:3000; keepalive 16; }
+upstream rfo-storefront { server storefront:3001; keepalive 16; }
 
 server {
   listen 80 default_server;
@@ -63,13 +64,19 @@ server {
   server_name ${DOMAIN_STORE};
   include /etc/nginx/snippets/tls.conf;
   include /etc/nginx/snippets/headers.conf;
+  client_max_body_size 25m;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-Proto https;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection $connection_upgrade;
   location /media/ {
     proxy_pass http://rfo-minio/rfo-media/;
     proxy_set_header Connection "";
     expires 365d;
     add_header Cache-Control "public, immutable" always;
   }
-  location / { return 503 "Storefront not wired yet (Phase 7)\n"; }
+  location / { proxy_pass http://rfo-storefront; }
 }
 
 server {
@@ -84,8 +91,5 @@ server {
   proxy_set_header X-Forwarded-Proto https;
   proxy_set_header Upgrade $http_upgrade;
   proxy_set_header Connection $connection_upgrade;
-
-  location / {
-    proxy_pass http://rfo-backoffice;
-  }
+  location / { proxy_pass http://rfo-backoffice; }
 }

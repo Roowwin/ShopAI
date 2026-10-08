@@ -16,3 +16,4 @@ Phase 4b VERIFIED: pricing+GST math, reserve/double-reserve/release, webhook suc
 Phase 6a delivered: backoffice Next.js (login+TOTP step, /admin dashboard, /admin/security enrollment, lib/api client w/ refresh), compose backoffice service (node_modules volume), nginx admin proxy w/ HMR headers, scripts/rotate-admin.py.
 Phase 6b VERIFIED: /admin/intake (lots+scan-in, AI stub), /admin/assets workbench (filters+grade/price/move/transitions w/ DB trigger 409 surfacing), admin nav layout.
 Phase 7a delivered: /store/catalog + /catalog/{slug} (masked serials) + /search (tsvector); reserve/checkout enforce lot-active; dev-only simulate-payment.
+Phase 7 VERIFIED: storefront live (home ISR, product pages w/ zero-stock guard, tsvector search, browser cart -> guest checkout -> simulate -> sold). Media pipeline still pending (Phase 11).
