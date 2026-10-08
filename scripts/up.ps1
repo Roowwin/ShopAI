@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Set-Location (Split-Path $PSScriptRoot -Parent)
 
-$services = 'postgres','pgbouncer','redis','storage','nginx','api'
+$services = 'postgres','pgbouncer','redis','storage','nginx','api','worker'
 
 if (-not (Test-Path '.\infra\nginx\certs\fullchain.pem')) {
     Write-Host 'TLS certs missing - generating...' -ForegroundColor Yellow

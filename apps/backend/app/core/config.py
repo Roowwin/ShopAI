@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     AI_EMBED_MODEL: str = ""
     PAYMENT_PROVIDER: str = "stub"
     PAYMENT_WEBHOOK_SECRET: str = ""
+    REDIS_URL: str = ""
 
     @property
     def cors_origins(self) -> list[str]:
