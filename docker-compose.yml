@@ -245,3 +245,19 @@ services:
       retries: 20
       start_period: 300s
     <<: *logging
+
+  backups:
+    image: public.ecr.aws/docker/library/postgres:16-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/loop.sh"]
+    volumes:
+      - ./infra/backups/backup-loop.sh:/loop.sh:ro
+      - ./backups:/backups
+    environment:
+      PGUSER: ${POSTGRES_SUPERUSER:?missing in .env}
+      PGPASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?missing in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?missing in .env}
+    networks: [db]
+    depends_on:
+      postgres: { condition: service_healthy }
+    <<: *logging

@@ -1,0 +1,25 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Core services
+        run: docker compose up -d --build postgres pgbouncer redis
+      - name: Wait postgres
+        run: docker compose exec -T postgres sh -c "until pg_isready -U $$POSTGRES_USER; do sleep 2; done"
+      - name: Apply migrations
+        run: docker compose run --rm migrate alembic upgrade head
+      - name: Backend tests (gates)
+        run: docker compose build api worker && docker compose run --rm api pytest -q
+      - name: Dependency scan (warning; strict gate at go-live)
+        run: docker compose run --rm api sh -c "pip install -q pip-audit; pip-audit" || echo "::warning::pip-audit findings - resolve before go-live"
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: tsc gates
+        run: |
+          cd apps/backoffice  && npm ci && npx tsc --noEmit
+          cd ../storefront    && npm ci && npx tsc --noEmit

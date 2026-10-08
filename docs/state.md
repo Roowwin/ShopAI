@@ -18,3 +18,4 @@ Phase 6b VERIFIED: /admin/intake (lots+scan-in, AI stub), /admin/assets workbenc
 Phase 7a delivered: /store/catalog + /catalog/{slug} (masked serials) + /search (tsvector); reserve/checkout enforce lot-active; dev-only simulate-payment.
 Phase 7 VERIFIED: storefront live (home ISR, product pages w/ zero-stock guard, tsvector search, browser cart -> guest checkout -> simulate -> sold). Media pipeline still pending (Phase 11).
 Phase 8 VERIFIED: CSP (storefront+admin), login burst proof, hex-literal secret sweep, threat model + scans.
+Phase 9a VERIFIED: nightly dumps + 7-copy retention; restore drill proves counts round-trip; CI staged. Rule: PS5.1 never pipes binary; use docker cp.
