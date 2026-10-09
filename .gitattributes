@@ -7,3 +7,9 @@
 *.py   text eol=lf
 *.ps1  text eol=crlfDockerfile text eol=lf
 *.template text eol=lf
+
+# tooling: keep, but exclude from the language bar
+*.ps1  linguist-generated=true
+*.sh   linguist-generated=true
+*.conf linguist-generated=true
+*.template linguist-generated=true

@@ -1,17 +1,11 @@
-# RFO - Refurbish & Commerce Platform
+﻿# RFO - Refurbish & Commerce Platform
+Production-first platform for serialized refurbishment stock: FastAPI + PostgreSQL 16 (PgBouncer, WAL archiving) + Redis + Next.js.
 
-Monorepo:
-- apps/backend     FastAPI (staff + store trust zones), worker (Phase 5)
-- apps/backoffice  Next.js staff app
-- apps/storefront  Next.js public store
-- infra/           nginx, postgres, pgbouncer, redis, minio configs
-- scripts/         PowerShell automation (added per phase)
-- loadtests/       k6 scenarios (Phase 10)
-- docs/adr/        architecture decision records
+- apps/backend     FastAPI (two trust zones: staff/store), ARQ worker
+- apps/backoffice  Next.js staff portal (TOTP-gated)
+- apps/storefront  Next.js public store (ISR)
+- infra/           nginx, postgres, pgbouncer, redis, observability
+- docs/            ADRs, security + go-live checklists
+- loadtests/       k6 scenarios
 
-Rules:
-- Never commit .env or anything under secrets/.
-- Re-running bootstrap without -Force never modifies existing files.
-- -Force rotates ALL secrets: run docker compose down -v afterwards.
-
-Setup: run bootstrap.ps1, then follow the per-phase guides.
+Evidence (measured, not asserted): k6 p95 78.83ms @ 2x load (100% checks); pgbench 3564 tps; restore drill round-trips 5000+ assets.

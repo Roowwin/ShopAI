@@ -37,3 +37,7 @@ coverage.xml
 loadtests/*.json
 loadtests/*.html
 scripts/
+# phase-delivery recipes (local ops only)
+phase*.ps1*
+*.obsolete
+*.corrupt
