@@ -294,6 +294,7 @@ services:
       RATE_LIMIT_STORE_RPS: ${RATE_LIMIT_STORE_RPS:-20}
       RATE_LIMIT_STAFF_RPS: ${RATE_LIMIT_STAFF_RPS:-10}
       RATE_LIMIT_LOGIN_RPM: ${RATE_LIMIT_LOGIN_RPM:-10}
+      RATE_LIMIT_ASSISTANT_RPM: ${RATE_LIMIT_ASSISTANT_RPM:-10}
     volumes:
       - ./infra/nginx/templates:/etc/nginx/templates:ro
       - ./infra/nginx/conf.d:/etc/nginx/conf.d

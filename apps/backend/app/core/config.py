@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     PAYMENT_WEBHOOK_SECRET: str = ""
     REDIS_URL: str = ""
     DATABASE_AI_STAFF_URL: str = ""
+    DATABASE_AI_PUBLIC_URL: str = ""
+    PUBLIC_CHAT_ENABLED: bool = False
+    PUBLIC_CHAT_DAILY_MAX: int = 500
 
     @property
     def cors_origins(self) -> list[str]:

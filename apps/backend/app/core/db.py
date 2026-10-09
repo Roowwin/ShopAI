@@ -45,3 +45,24 @@ async def get_ai_db():
         _AIMaker = async_sessionmaker(get_ai_engine(), expire_on_commit=False)
     async with _AIMaker() as session:
         yield session
+_ai_pub_engine: AsyncEngine | None = None
+_SAPMaker = None
+
+
+def get_ai_public_engine() -> AsyncEngine:
+    global _ai_pub_engine
+    if _ai_pub_engine is None:
+        url = get_settings().DATABASE_AI_PUBLIC_URL
+        if not url:
+            raise RuntimeError("AI public wall not configured (DATABASE_AI_PUBLIC_URL missing)")
+        _ai_pub_engine = create_async_engine(url, pool_size=4, max_overflow=6, pool_pre_ping=True,
+            connect_args={"statement_cache_size": 0, "server_settings": {"application_name": "rfo-ai-pub"}})
+    return _ai_pub_engine
+
+
+async def get_ai_public_db():
+    global _SAPMaker
+    if _SAPMaker is None:
+        _SAPMaker = async_sessionmaker(get_ai_public_engine(), expire_on_commit=False)
+    async with _SAPMaker() as session:
+        yield session

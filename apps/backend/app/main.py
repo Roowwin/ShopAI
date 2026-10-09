@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api.v1 import staff, staff_ops, store, store_catalog, store_ops, staff_ai, staff_assistant
+from app.api.v1 import staff, staff_ops, store, store_catalog, store_ops, staff_ai, staff_assistant, store_assistant
 from app.core.config import get_settings
 from app.core.db import get_engine
 
@@ -43,6 +43,7 @@ app.include_router(store_ops.router)
 app.include_router(store_catalog.router)
 app.include_router(staff_ai.router)
 app.include_router(staff_assistant.router)
+app.include_router(store_assistant.router)
 
 @app.get("/healthz")
 async def healthz() -> dict:
