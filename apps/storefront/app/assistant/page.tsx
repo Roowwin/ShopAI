@@ -47,7 +47,7 @@ export default function AssistantPage() {
               <div className="mt-2 space-y-2">
                 {m.cards.map((c) => (
                   <a key={c.title + c.grade} href={c.url} className="block border rounded p-2 hover:bg-white">
-                    {c.title} · Grade {c.grade} · from {aud(c.price_cents)} · {c.units_available} in stock
+                    {c.title} Â· Grade {c.grade} Â· from {aud(c.price_cents)} Â· {c.units_available} in stock
                   </a>
                 ))}
               </div>
