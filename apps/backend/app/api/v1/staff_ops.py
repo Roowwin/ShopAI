@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.api.v1.deps import require_roles
 from app.core.db import get_db
 from app.models import Asset, Lot, StockMovement
+from app.models.catalog import Product
 from app.services.audit import audit
 
 router = APIRouter(prefix="/staff", tags=["staff-ops"])
@@ -205,3 +206,25 @@ async def set_price(asset_id: int, body: PriceIn, staff: dict = Depends(require_
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
     return {"id": asset.id, "sale_price_cents": asset.sale_price_cents}
+class ProductListingIn(BaseModel):
+    title: str = Field(max_length=140)
+    description: str = Field(max_length=4000)
+
+
+@router.post("/products/{product_id}/listing")
+async def approve_listing(product_id: int, body: ProductListingIn,
+                          staff: dict = Depends(require_roles("admin", "manager", "sales")),
+                          db=Depends(get_db)):
+    prod = await db.get(Product, product_id)
+    if prod is None:
+        raise HTTPException(status_code=404, detail="product not found")
+    before = {"title": prod.title, "description": prod.description}
+    prod.title = body.title
+    prod.description = body.description
+    await audit(db, "staff", entity="product", entity_id=prod.id, action="listing_approved",
+                actor_id=staff["id"], before=before, after={"title": body.title})
+    try:
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    return {"id": prod.id, "title": prod.title, "description": prod.description}
