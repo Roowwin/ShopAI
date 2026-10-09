@@ -11,10 +11,14 @@ async def client():
         async with httpx.AsyncClient(transport=transport, base_url="https://t") as c:
             yield c
     finally:
+        import app.core.db as rfo_db
         import app.core.redis as rfo_redis
         import app.services.ai as rfo_ai
-        from app.core.db import get_engine
-        await get_engine().dispose()
+        await rfo_db.get_engine().dispose()
+        if getattr(rfo_db, "_ai_engine", None) is not None:
+            await rfo_db._ai_engine.dispose()
+            rfo_db._ai_engine = None
+            rfo_db._AIMaker = None
         if rfo_redis._client is not None:
             try:
                 await rfo_redis._client.aclose()

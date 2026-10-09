@@ -29,6 +29,8 @@ services:
       DB_MIGRATOR_PASSWORD: ${DB_MIGRATOR_PASSWORD:?missing in .env}
       DB_APP_PASSWORD: ${DB_APP_PASSWORD:?missing in .env}
       DB_READONLY_PASSWORD: ${DB_READONLY_PASSWORD:?missing in .env}
+      DB_AI_STAFF_PASSWORD: ${DB_AI_STAFF_PASSWORD:?missing in .env}
+      DB_AI_PUBLIC_PASSWORD: ${DB_AI_PUBLIC_PASSWORD:?missing in .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - wal_archive_pg:/wal_archive
@@ -52,6 +54,8 @@ services:
       DB_APP_PASSWORD: ${DB_APP_PASSWORD:?missing in .env}
       DB_MIGRATOR_PASSWORD: ${DB_MIGRATOR_PASSWORD:?missing in .env}
       DB_READONLY_PASSWORD: ${DB_READONLY_PASSWORD:?missing in .env}
+      DB_AI_STAFF_PASSWORD: ${DB_AI_STAFF_PASSWORD:?missing in .env}
+      DB_AI_PUBLIC_PASSWORD: ${DB_AI_PUBLIC_PASSWORD:?missing in .env}
       PGBOUNCER_POOL_MODE: ${PGBOUNCER_POOL_MODE:-transaction}
       PGBOUNCER_DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-25}
       PGBOUNCER_MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-1000}
@@ -144,6 +148,7 @@ services:
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-stub}
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
       REDIS_URL: redis://:${REDIS_PASSWORD:?missing in .env}@redis:6379/0
+      DATABASE_AI_STAFF_URL: postgresql+asyncpg://rfo_ai_staff:${DB_AI_STAFF_PASSWORD:?missing in .env}@pgbouncer:5432/rfo
     extra_hosts: ["host.docker.internal:host-gateway"]
     networks: [edge, core]
     depends_on:

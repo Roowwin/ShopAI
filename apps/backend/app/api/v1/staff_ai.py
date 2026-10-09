@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.api.v1.deps import require_roles
-from app.core.db import get_db
+from app.core.db import get_db, get_ai_db
 from app.services.ai import AIError, ai_json, ai_text
 from app.services.audit import audit
 
@@ -62,7 +62,7 @@ CHAT_DAILY_CAP = 100
 @router.post("/chat")
 async def chat(body: ChatIn,
                staff: dict = Depends(require_roles("admin", "manager", "technician", "warehouse", "sales")),
-               db=Depends(get_db)):
+               db=Depends(get_db), ai_db=Depends(get_ai_db)):
     from app.core.redis import get_redis
 
     r = get_redis()
@@ -73,27 +73,7 @@ async def chat(body: ChatIn,
     if n > CHAT_DAILY_CAP:
         raise HTTPException(status_code=429, detail="daily assistant quota reached")
 
-    cat = (await db.execute(text("""
-        SELECT p.title,
-               COALESCE(sum(CASE WHEN a.status='listed' AND l.status='active' THEN 1 END),0) AS avail,
-               min(a.sale_price_cents) AS from_cents
-        FROM products p
-        LEFT JOIN assets a ON a.product_id = p.id
-        LEFT JOIN lots l ON l.id = a.lot_id
-        GROUP BY p.title ORDER BY avail DESC LIMIT 12"""))).mappings().all()
-    lots = (await db.execute(text("""
-        SELECT l.lot_number, l.status, count(a.id) AS units
-        FROM lots l LEFT JOIN assets a ON a.lot_id = l.id
-        GROUP BY l.id, l.lot_number, l.status ORDER BY l.id DESC LIMIT 5"""))).mappings().all()
-    promos = (await db.execute(text("""
-        SELECT name, kind, value, active FROM promotions WHERE active LIMIT 5"""))).mappings().all()
-
-    ctx = json.dumps({
-        "catalog": [{"title": c["title"], "available_units": int(c["avail"]),
-                     "price_from_cents": (int(c["from_cents"]) if c["from_cents"] is not None else None)} for c in cat],
-        "recent_lots": [{"lot": l["lot_number"], "status": l["status"], "units": int(l["units"])} for l in lots],
-        "promotions": [{"name": p["name"], "kind": p["kind"], "value": int(p["value"]), "active": bool(p["active"])} for p in promos],
-    })
+    ctx = await ai_snapshot(ai_db)
 
     try:
         answer = await ai_text(
@@ -149,3 +129,13 @@ async def description_draft(body: DescribeIn,
     except AIError as e:
         raise HTTPException(status_code=502, detail=str(e))
     return draft
+async def ai_snapshot(ai_db) -> str:
+    cat = (await ai_db.execute(text("SELECT title, available_units, price_from_cents FROM ai.catalog ORDER BY available_units DESC LIMIT 12"))).mappings().all()
+    lots = (await ai_db.execute(text("SELECT lot_number, status, units FROM ai.lots ORDER BY lot_number DESC LIMIT 8"))).mappings().all()
+    promos = (await ai_db.execute(text("SELECT name, kind, value, active FROM ai.promotions"))).mappings().all()
+    return json.dumps({
+        "catalog": [{"title": c["title"], "available_units": int(c["available_units"]),
+                     "price_from_cents": c["price_from_cents"]} for c in cat],
+        "recent_lots": [{"lot": l["lot_number"], "status": l["status"], "units": int(l["units"])} for l in lots],
+        "promotions": [{"name": p["name"], "kind": p["kind"], "value": int(p["value"]), "active": bool(p["active"])} for p in promos],
+    })

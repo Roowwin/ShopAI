@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     PAYMENT_PROVIDER: str = "stub"
     PAYMENT_WEBHOOK_SECRET: str = ""
     REDIS_URL: str = ""
+    DATABASE_AI_STAFF_URL: str = ""
 
     @property
     def cors_origins(self) -> list[str]:

@@ -24,3 +24,24 @@ _SessionMaker = async_sessionmaker(get_engine(), expire_on_commit=False)
 async def get_db() -> AsyncIterator[AsyncSession]:
     async with _SessionMaker() as session:
         yield session
+_ai_engine: AsyncEngine | None = None
+_AIMaker = None
+
+
+def get_ai_engine() -> AsyncEngine:
+    global _ai_engine
+    if _ai_engine is None:
+        url = get_settings().DATABASE_AI_STAFF_URL
+        if not url:
+            raise RuntimeError("AI data wall not configured (DATABASE_AI_STAFF_URL missing)")
+        _ai_engine = create_async_engine(url, pool_size=3, max_overflow=5, pool_pre_ping=True,
+            connect_args={"statement_cache_size": 0, "server_settings": {"application_name": "rfo-ai"}})
+    return _ai_engine
+
+
+async def get_ai_db():
+    global _AIMaker
+    if _AIMaker is None:
+        _AIMaker = async_sessionmaker(get_ai_engine(), expire_on_commit=False)
+    async with _AIMaker() as session:
+        yield session

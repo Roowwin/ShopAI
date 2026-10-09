@@ -5,12 +5,16 @@ set -e
 : "${DB_MIGRATOR_PASSWORD:?DB_MIGRATOR_PASSWORD required}"
 : "${DB_APP_PASSWORD:?DB_APP_PASSWORD required}"
 : "${DB_READONLY_PASSWORD:?DB_READONLY_PASSWORD required}"
+: "${DB_AI_STAFF_PASSWORD:?DB_AI_STAFF_PASSWORD required}"
+: "${DB_AI_PUBLIC_PASSWORD:?DB_AI_PUBLIC_PASSWORD required}"
 
 cat > /etc/pgbouncer/userlist.txt <<EOF
 "${POSTGRES_SUPERUSER}"      "${POSTGRES_SUPERUSER_PASSWORD}"
 "rfo_migrator"  "${DB_MIGRATOR_PASSWORD}"
 "rfo_app"       "${DB_APP_PASSWORD}"
 "rfo_ro"        "${DB_READONLY_PASSWORD}"
+"rfo_ai_staff"  "${DB_AI_STAFF_PASSWORD}"
+"rfo_ai_public" "${DB_AI_PUBLIC_PASSWORD}"
 EOF
 chmod 600 /etc/pgbouncer/userlist.txt
 

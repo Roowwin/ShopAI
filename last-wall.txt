@@ -1,0 +1,18 @@
+docker.exe :  Container rfo-postgres-1 Running 
+At C:\Users\Administrator\Projects\GBX\rfo-platform\scripts\Test-AI-Wall.ps1:19 char:13
++     $out = (& docker compose run --rm api pytest -q tests/test_ai_wal ...
++             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ( Container rfo-postgres-1 Running :String) [], RemoteExceptio 
+   n
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+ Container rfo-pgbouncer-1 Running 
+ Container rfo-postgres-1 Waiting 
+ Container rfo-postgres-1 Healthy 
+ Container rfo-pgbouncer-1 Waiting 
+ Container rfo-pgbouncer-1 Healthy 
+ Container rfo-api-run-2ebd90039984 Creating 
+ Container rfo-api-run-2ebd90039984 Created 
+...                                                                      [100%]
+3 passed in 0.05s
+
