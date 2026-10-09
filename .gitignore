@@ -41,3 +41,7 @@ scripts/
 phase*.ps1*
 *.obsolete
 *.corrupt
+last-*.txt
+nginx-log.txt
+storefront-state.txt
+infra/nginx/templates/*.bak*

@@ -13,3 +13,7 @@
 *.sh   linguist-generated=true
 *.conf linguist-generated=true
 *.template linguist-generated=true
+*.ts text eol=lf
+*.tsx text eol=lf
+*.py text eol=lf
+*.md text eol=lf
