@@ -36,3 +36,4 @@ Thumbs.db
 coverage.xml
 loadtests/*.json
 loadtests/*.html
+scripts/
