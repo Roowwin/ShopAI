@@ -59,6 +59,8 @@ async def test_full_asset_lifecycle(client):
                              {"e": "asset", "i": a1["id"]})).scalar_one()
     assert n >= 1, "audit rows missing"
 
+    r = await client.post(f"/staff/assets/{a1['id']}/price", json={"sale_price_cents": 15000}, headers=_h(tok))
+    assert r.status_code == 200, r.text
     r = await client.post(f"/staff/assets/{a1['id']}/status", json={"status": "listed"}, headers=_h(tok))
     assert r.status_code == 200
     r = await client.post(f"/staff/lots/{lot['id']}/activate", headers=_h(tok))

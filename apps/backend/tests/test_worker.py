@@ -27,6 +27,8 @@ async def test_ttl_release_and_idempotence(client):
 
     r = await client.post("/staff/lots", json={"notes": "pytest"}, headers=_h(tok))
     ln = r.json()["lot_number"]
+    lot_id = r.json()["id"]
+    await client.post(f"/staff/lots/{lot_id}/activate", headers=_h(tok))
     sn = "pytest-" + uuid.uuid4().hex
     r = await client.post("/staff/assets/scan-in", json={"lot_number": ln, "serial_number": sn}, headers=_h(tok))
     aid = r.json()["id"]
