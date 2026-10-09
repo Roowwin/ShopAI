@@ -38,7 +38,7 @@ export default function AssistantPage() {
       });
       const j: any = await r.json().catch(() => ({}));
       setMsgs((m) => [...m, { role: "ai", text: r.ok ? (j.text ?? "") : ("error: " + (j.detail ?? r.status)), cards: j.products ?? [] }]);
-    } catch { setMsgs((m) => [...m, { role: "ai", text: "assistant unavailable" }]); }
+    } catch (e) { setMsgs((m) => [...m, { role: "ai", text: "assistant unavailable: " + ((e && e.name ? e.name : "?") + " " + (e && e.message ? e.message : "")) }]); }
     setBusy(false);
   }
 
