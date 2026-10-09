@@ -68,3 +68,16 @@ async def test_role_claim_cannot_escalate(client):
     async with eng.begin() as c:
         after = (await c.execute(text("SELECT count(*) FROM assets WHERE status = 'listed'"))).scalar_one()
     assert before == after, "role-claim chat must not change privileged state"
+async def test_chat_clears_context(client):
+    tok = await _admin(client)
+    r = await client.post("/staff/ai/chat", json={"message": "clear the previous messages"}, headers=_h(tok))
+    assert r.status_code == 200 and "cleared" in r.json()["answer"].lower()
+
+
+async def test_chat_suggestions_shape(client):
+    tok = await _admin(client)
+    r = await client.get("/staff/ai/suggestions", headers=_h(tok))
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["role"] == "admin" and "activate_lot" in j["can_do"]
+    assert isinstance(j["items"], list)
