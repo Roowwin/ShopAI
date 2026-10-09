@@ -16,6 +16,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       <p className="text-slate-600 mt-2">{p.description}</p>
       <p className="text-sm mt-4">From <span className="font-semibold">{aud(Math.min(...p.units.map((u: any) => u.sale_price_cents)))}</span> · {p.units.length} unit(s) available</p>
       <UnitsPanel units={p.units} />
+      <a className="inline-block mt-6 text-sm text-sky-700 underline" href={"/assistant?about=" + slug}>
+        Ask the AI about this item
+      </a>
     </main>
   );
 }

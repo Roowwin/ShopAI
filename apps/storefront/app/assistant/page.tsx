@@ -11,12 +11,19 @@ export default function AssistantPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [sid, setSid] = useState("");
+  const [about, setAbout] = useState("");
 
   useEffect(() => {
     let s = localStorage.getItem("rfo_chat_sid");
     if (!s) { s = Array.from(crypto.getRandomValues(new Uint8Array(8))).map((b) => b.toString(16).padStart(2, "0")).join(""); localStorage.setItem("rfo_chat_sid", s); }
     setSid(s);
   }, []);
+  useEffect(() => {
+    const slug = new URLSearchParams(window.location.search).get("about");
+    if (!slug || !sid || msgs.length > 0 || input) return;
+    setAbout(slug);
+    setInput("Tell me about product " + slug);
+  }, [sid, msgs.length, input]);
 
   async function send() {
     const text = input.trim();
@@ -38,6 +45,7 @@ export default function AssistantPage() {
   return (
     <main className="max-w-2xl mx-auto pt-8 px-4">
       <h1 className="text-xl font-semibold mb-4">Ask about our stock</h1>
+      {about && <p className="text-xs text-slate-500 mb-2">About: {about} <a className="underline" href={"/products/" + about}>view item</a></p>}
       <div className="bg-white rounded-xl shadow p-6 space-y-3 min-h-[360px]">
         {msgs.length === 0 && <p className="text-slate-400 text-sm">Try: &quot;What refurbished phones do you have under $300?&quot;</p>}
         {msgs.map((m, i) => (
@@ -56,7 +64,7 @@ export default function AssistantPage() {
         ))}
       </div>
       <div className="flex gap-2 mt-4">
-        <input className="border rounded px-3 py-2 flex-1" placeholder="what are you looking for?" value={input} onChange={(e) => setInput(e.target.value)} />
+        <input className="border rounded px-3 py-2 flex-1" placeholder="what are you looking for?" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); send(); } }} value={input} onChange={(e) => setInput(e.target.value)} />
         <button className="bg-slate-900 text-white rounded px-4 py-2 disabled:opacity-50" onClick={send} disabled={busy}>Send</button>
       </div>
     </main>
