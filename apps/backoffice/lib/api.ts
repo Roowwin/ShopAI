@@ -14,6 +14,7 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
       r = await fetch(API + path, { ...init, headers, credentials: "include", cache: "no-store" });
     }
   }
+  if (r.status === 401) { sessionStorage.removeItem("rfo_access"); location.href = "/admin"; throw new Error("session expired - redirecting to login"); }
   return r;
 }
 

@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/api";
 
 type Msg = { role: "you" | "ai"; text: string };
 
+
 export default function AssistantPage() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -19,7 +20,7 @@ export default function AssistantPage() {
       const r = await apiFetch("/staff/ai/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text }) });
       const j: any = await r.json().catch(() => ({}));
       setMsgs((m) => [...m, { role: "ai", text: r.ok ? (j.answer ?? "") : ("error: " + (j.detail ?? r.status)) }]);
-    } catch { setMsgs((m) => [...m, { role: "ai", text: "assistant unavailable" }]); }
+    } catch (e) { setMsgs((m) => [...m, { role: "ai", text: "assistant unavailable: " + ((e && e.name ? e.name : "?") + " " + (e && e.message ? e.message : "")) }]); }
     finally { setBusy(false); }
   }
 
