@@ -73,3 +73,24 @@ async def search(q: str = Query(min_length=2), limit: int = Query(24, le=100), o
              "brand": r["brand"], "units_available": int(r["units_available"]),
              "price_from_cents": (int(r["price_from_cents"]) if r["price_from_cents"] is not None else None)}
             for r in rows]
+
+
+@router.get("/promotions")
+async def promotions(db=Depends(get_db)):
+    try:
+        rows = (await db.execute(text("SELECT name, kind, value FROM promotions WHERE active = true"))).mappings().all()
+    except Exception:
+        return []
+    return [{"name": r["name"], "kind": r["kind"], "value": int(r["value"])} for r in rows]
+
+
+@router.get("/categories")
+async def categories(db=Depends(get_db)):
+    rows = (await db.execute(text("""
+        SELECT c.name, count(p.id) AS n
+        FROM categories c JOIN products p ON p.category_id = c.id
+        WHERE p.status = 'active'
+        GROUP BY c.name HAVING count(p.id) > 0
+        ORDER BY c.name
+    """))).mappings().all()
+    return [{"name": r["name"], "n": int(r["n"])} for r in rows]

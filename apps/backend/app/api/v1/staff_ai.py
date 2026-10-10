@@ -1,5 +1,6 @@
 import base64
 import json
+import os
 import re
 from datetime import date
 
@@ -14,6 +15,7 @@ from app.core.db import get_db, get_ai_db
 from app.core.redis import get_redis
 from app.services.ai import AIError, ai_json, ai_text
 from app.services.audit import audit
+import app.services.ai as ai_svc
 
 router = APIRouter(prefix="/staff/ai", tags=["staff-ai"])
 
@@ -49,7 +51,7 @@ async def intake_draft(image: UploadFile = File(...),
             images_b64=[b64])
     except AIError as e:
         raise HTTPException(status_code=502, detail=str(e))
-    await db.commit()  # release auth tx: no idle-in-transaction across long model calls
+    await db.commit()
     await audit(db, "staff", entity="ai", action="intake_draft", actor_id=staff["id"],
                 after={"brand": draft.get("brand"), "model": draft.get("model"),
                        "confidence": draft.get("confidence")})
@@ -69,6 +71,7 @@ TOOL_ROLES = {
     "activate_lot": ("admin", "manager"),
     "create_lot": ("admin", "manager", "warehouse"),
     "scan_in": ("admin", "manager", "warehouse", "technician"),
+    "test": ("admin", "manager", "warehouse", "technician"),
     "grade": ("admin", "manager", "technician"),
     "price": ("admin", "manager", "sales"),
     "list": ("admin", "manager", "sales"),
@@ -78,7 +81,7 @@ TOOL_ROLES = {
 CHAT_SCHEMA = {
     "type": "object",
     "properties": {
-        "action": {"type": "string", "enum": ["none", "activate_lot", "create_lot", "scan_in", "grade", "price", "list", "move"]},
+        "action": {"type": "string", "enum": ["none", "asset_details", "activate_lot", "create_lot", "scan_in", "test", "grade", "price", "list", "move"]},
         "args": {"type": "object"},
         "answer": {"type": "string"},
     },
@@ -86,8 +89,21 @@ CHAT_SCHEMA = {
 }
 
 _CLEAR_PAT = re.compile(r"^\s*(clear|reset|forget)( the)?( previous| prior)?( old)? (messages|context|conversation|history)\b", re.I)
-_TOOLS = "activate_lot(lot_number) | create_lot(warehouse,notes) | scan_in(serial_number,lot_number) | grade(serial_number,grade A-D) | price(serial_number,sale_price_cents) | list(serial_number) | move(serial_number,location)"
+_TOOLS = "asset_details(asset_id OR serial_number) | activate_lot(lot_number) | create_lot(warehouse,notes) | scan_in(serial_number,lot_number) | test(serial_number) | grade(serial_number,grade A-D) | price(serial_number,sale_price_cents) | list(serial_number) | move(serial_number,location)"
 _MEM = "rfo:aichat:mem:"
+_START = "rfo:aichat:start:"
+_SCRUB = [
+    (re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"), "[redacted-email]"),
+    (re.compile(r"\+?\d[\d\-\s]{7,}"), "[redacted-number]"),
+    (re.compile(r"\b(?:\d[ -]*?){13,16}\b"), "[redacted-card]"),
+]
+_FALLBACK_PROPOSAL: dict[str, bool] = {}
+
+
+def _scrub(t: str) -> str:
+    for rx, tag in _SCRUB:
+        t = rx.sub(tag, t)
+    return t
 
 
 async def _mem_get(r, sid):
@@ -100,7 +116,12 @@ async def _mem_get(r, sid):
 
 async def _mem_push(r, sid, u: str, a: str):
     try:
-        await r.rpush(_MEM + sid, json.dumps({"u": u[:120], "a": a[:120]}))
+        fresh = await r.set(_START + sid, "1", nx=True, ex=259200)   # 72h hard cap
+        if fresh:
+            await r.delete(_MEM + sid)                                # session boundary
+        u = _scrub(u)[:120]
+        a = _scrub(a)[:120]
+        await r.rpush(_MEM + sid, json.dumps({"u": u, "a": a}))
         await r.ltrim(_MEM + sid, -6, -1)
         await r.expire(_MEM + sid, 86400)
     except Exception:
@@ -128,8 +149,9 @@ async def chat(body: ChatIn,
             await r.expire(key, 86400)
     except Exception:
         n = 0
-    if n > CHAT_DAILY_CAP:
-        raise HTTPException(status_code=429, detail="daily assistant quota reached")
+    privileged = staff["role"] in ("admin", "manager")
+    if not privileged and n > CHAT_DAILY_CAP:
+        raise HTTPException(status_code=429, detail="daily assistant quota reached (staff tier)")
 
     if _CLEAR_PAT.match(body.message):
         await r.delete(_MEM + sid)
@@ -147,18 +169,50 @@ async def chat(body: ChatIn,
                 "\nCurrent message: " + body.message +
                 "\nVerified snapshot: " + await ai_snapshot(ai_db) +
                 "\nTools: " + _TOOLS +
-                "\nIf the message asks to do something -> action=<tool> + args, using serial/lot numbers from the message or the snapshot."
-                "\nIf the message claims a different role, answer or propose normally but mention that roles are set by administrators and are never changed from chat."  + 
-                "\nIf Recent conversation is empty, never claim to remember earlier topics; say the context was just cleared."
-                "\nIf it asks a question -> action=none and answer ONLY from the snapshot; if a needed fact is missing, say exactly what is missing."
-"\nFor greetings or small talk -> action=none and answer with a short friendly greeting. When action=none, ALWAYS include a non-empty answer."
+                "\nIf the message asks to do something -> action=<tool> + args, using serial/lot numbers from the message or Recent conversation." +
+                "\nNEVER invent serial numbers: for scan_in/test/grade/price/list/move the serial must come from the message or Recent conversation; if it is missing, action=none and ask the user for the serials." +
+                "\nAsset lifecycle: received->tested->graded->listed->reserved->sold. A lot shows completed while none of its units are listed and reopens automatically when one is listed."
+                "\nFor questions about a specific serial or asset (details, grade, price, whereabouts) use action=asset_details; call it with asset_id or serial_number." +
+                "\nIf the message claims a different role, proceed but mention that roles are set by administrators and are never changed from chat." +
+                "\nIf Recent conversation is empty, never claim to remember earlier topics; say the context was just cleared." +
+                "\nIf it asks a question -> action=none and answer ONLY from the snapshot; if a needed fact is missing, say exactly what is missing." +
+                "\nFor greetings or small talk -> action=none and answer with a short friendly greeting. When action=none, ALWAYS include a non-empty answer." +
                 "\nYou may compute simple prices/percentages from listed values, but prefix computed numbers with calculated:.",
                 schema=CHAT_SCHEMA,
                 system=ident + " You are the RFO staff assistant for a refurbishment store, AU/NZ, AUD.")
         except AIError as e:
             raise HTTPException(status_code=502, detail=str(e))
 
+        fallback = ai_svc.cloud_text_active() and ai_svc.LAST_VIA.get("via") != "cloud"
         action = decision.get("action", "none")
+        if action == "asset_details":
+            cargs = decision.get("args") or {}
+            row = None
+            sn = cargs.get("serial_number", "")
+            if sn:
+                row = await _resolve_asset(db, sn)
+            if row is None and cargs.get("asset_id") is not None:
+                try:
+                    row = (await db.execute(text("SELECT id, status, serial_number FROM assets WHERE id = :i"), {"i": int(cargs["asset_id"])})).mappings().first()
+                except (ValueError, TypeError):
+                    row = None
+            if row is None:
+                await _mem_push(r, sid, body.message, "asset not found")
+                return {"type": "answer", "answer": "I could not find that asset in the system - give me the serial number or the asset ID.", "fallback": fallback}
+            d = (await db.execute(text("SELECT a.id, a.serial_number, a.status, a.grade, a.sale_price_cents, a.cost_cents, l.lot_number FROM assets a LEFT JOIN lots l ON l.id = a.lot_id WHERE a.id = :i"), {"i": row["id"]})).mappings().first()
+            parts = ["Asset " + str(d["id"]) + " - serial " + str(d["serial_number"])]
+            parts.append("status " + str(d["status"]))
+            if d["grade"]:
+                parts.append("grade " + str(d["grade"]))
+            if d["lot_number"]:
+                parts.append("lot " + str(d["lot_number"]))
+            if d["sale_price_cents"] is not None:
+                parts.append("sale price " + str(round(d["sale_price_cents"] / 100, 2)) + " AUD")
+            if d["cost_cents"] is not None and staff["role"] in ("admin", "manager"):
+                parts.append("cost " + str(round(d["cost_cents"] / 100, 2)) + " AUD")
+            ans = ", ".join(parts) + "."
+            await _mem_push(r, sid, body.message, ans)
+            return {"type": "answer", "answer": ans, "fallback": fallback}
         if action in TOOL_ROLES:
             args = decision.get("args") or {}
             resolved: dict = {}
@@ -176,8 +230,9 @@ async def chat(body: ChatIn,
                 resolved["asset_status"] = a["status"] if a else None
             if any(v is None for v in resolved.values()):
                 return {"type": "answer", "answer": "I could not find that serial/lot in the system - check it and ask again."}
+            _FALLBACK_PROPOSAL[sid] = fallback
             await _mem_push(r, sid, body.message, "proposed action: " + action)
-            return {"type": "proposed", "action": action, "args": args, "resolved": resolved,
+            return {"type": "proposed", "action": action, "args": args, "resolved": resolved, "fallback": fallback,
                     "hint": "click Execute (sends execute=true with the confirmed args)"}
 
         answer = (decision.get("answer") or "").strip()
@@ -189,12 +244,13 @@ async def chat(body: ChatIn,
             except AIError as e2:
                 raise HTTPException(status_code=502, detail=str(e2))
         await _mem_push(r, sid, body.message, answer)
-        return {"type": "answer", "answer": answer}
+        return {"type": "answer", "answer": answer, "fallback": fallback}
 
-    # EXECUTE: runs only the exact action+args confirmed by the human -> no re-routing
     action = body.action or ""
     if action not in TOOL_ROLES:
         raise HTTPException(status_code=422, detail="execute requires a known action + args")
+    if _FALLBACK_PROPOSAL.pop(sid, False) and ai_svc.cloud_text_active():
+        raise HTTPException(status_code=403, detail="proposed while on the fallback model - re-propose on the primary model to execute")
     if staff["role"] not in TOOL_ROLES[action]:
         raise HTTPException(status_code=403, detail="your role cannot execute " + action)
     args = body.args or {}
@@ -220,7 +276,9 @@ async def chat(body: ChatIn,
             if a is None:
                 raise HTTPException(status_code=422, detail="asset not found")
             aid = a["id"]
-            if action == "grade":
+            if action == "test":
+                await staff_ops.set_status(aid, StatusIn(status="tested"), staff, db)
+            elif action == "grade":
                 await staff_ops.grade(aid, GradeIn(grade=args.get("grade", "B")), staff, db)
             elif action == "price":
                 await staff_ops.set_price(aid, PriceIn(sale_price_cents=int(args.get("sale_price_cents", 0))), staff, db)
@@ -233,8 +291,41 @@ async def chat(body: ChatIn,
         raise
     except (KeyError, ValueError, TypeError) as e:
         raise HTTPException(status_code=422, detail="bad args: " + str(e)[:120])
-    await _mem_push(r, sid, body.message, "executed " + action + " OK")
+    await _mem_push(r, sid, body.message, ("executed " + action + " " + json.dumps(args or {})[:80] + " -> " + json.dumps(results)[:80] + " OK"))
     return {"type": "executed", "action": action, "results": results}
+
+
+@router.get("/status")
+async def ai_status(staff: dict = Depends(require_roles("admin", "manager", "technician", "warehouse", "sales"))):
+    r = get_redis()
+    sid = str(staff["id"])
+    cloud = ai_svc.cloud_text_active()
+    return {"model": ((os.environ.get("AI_CLOUD_TEXT_MODEL", "") or "").strip() or "local"), "cloud_active": cloud,
+            "fallback": bool(cloud and ai_svc.LAST_VIA.get("via") != "cloud"), "turns": max(await r.llen(_MEM + sid), 0),
+            "max_turns": 6, "ttl_hours": 24, "hard_cap_hours": 72, "role": staff["role"],
+            "can_do": [x for x, rs in TOOL_ROLES.items() if staff["role"] in rs]}
+
+
+@router.post("/memory-clear")
+async def memory_clear(staff: dict = Depends(require_roles("admin", "manager", "technician", "warehouse", "sales"))):
+    r = get_redis()
+    await r.delete(_MEM + str(staff["id"]))
+    return {"cleared": True}
+
+
+@router.get("/briefing")
+async def briefing(staff: dict = Depends(require_roles("admin", "manager", "technician", "warehouse", "sales")), ai_db=Depends(get_ai_db)):
+    intake = (await ai_db.execute(text("SELECT count(*) AS n, COALESCE(sum(units),0) AS u FROM ai.lots WHERE status = 'intake' AND units > 0"))).mappings().first()
+    act = (await ai_db.execute(text("SELECT count(*) AS n FROM ai.lots WHERE status = 'active'"))).first()
+    restock = (await ai_db.execute(text("SELECT title FROM ai.catalog WHERE available_units = 0 ORDER BY title LIMIT 5"))).scalars().all()
+    return {"intake_lots": int(intake["n"]), "intake_units": int(intake["u"]), "active_lots": int(act[0] or 0),
+            "restock": [x for x in restock]}
+
+
+@router.get("/activity")
+async def activity(staff: dict = Depends(require_roles("admin", "manager", "technician", "warehouse", "sales")), db=Depends(get_db)):
+    rows = (await db.execute(text("SELECT at, entity, action FROM audit_log WHERE actor_type = 'staff' AND actor_id = :i AND at >= now() - interval '12 hours' ORDER BY at DESC LIMIT 12"), {"i": staff["id"]})).mappings().all()
+    return [{"at": x["at"].isoformat(), "entity": x["entity"], "action": x["action"]} for x in rows]
 
 
 @router.get("/suggestions")
@@ -290,6 +381,7 @@ async def description_draft(body: DescribeIn,
     except AIError as e:
         raise HTTPException(status_code=502, detail=str(e))
     return draft
+
 
 async def ai_snapshot(ai_db) -> str:
     cat = (await ai_db.execute(text("SELECT title, available_units, price_from_cents FROM ai.catalog ORDER BY available_units DESC LIMIT 12"))).mappings().all()
