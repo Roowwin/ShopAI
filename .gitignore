@@ -45,3 +45,4 @@ last-*.txt
 nginx-log.txt
 storefront-state.txt
 infra/nginx/templates/*.bak*
+factory/worktrees/
