@@ -23,7 +23,7 @@ LIMIT :lim OFFSET :off
 """)
 
 @router.get("/catalog")
-async def catalog(limit: int = Query(24, le=100), offset: int = 0, db=Depends(get_db)):
+async def catalog(limit: int = Query(24, le=100), offset: int = 0, category: str | None = None, db=Depends(get_db)):
     rows = (await db.execute(CATALOG_SQL, {"lim": limit, "off": offset, "cat": category if category else None})).mappings().all()
     return [{"id": r["id"], "public_id": r["public_id"], "slug": r["slug"], "title": r["title"],
              "model": r["model"], "brand": r["brand"], "category": r["category"], "specs": r["specs"],
