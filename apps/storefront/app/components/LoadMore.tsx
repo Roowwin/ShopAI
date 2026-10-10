@@ -44,11 +44,14 @@ export default function LoadMore({ initial, categories }: { initial: any[]; cate
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-5">
         {items.map((i) => (
           <a key={i.slug} href={"/products/" + i.slug} className="group rounded-xl ring-1 ring-slate-200 bg-white overflow-hidden hover:ring-emerald-300 hover:-translate-y-0.5 transition">
-            {/* IMAGE SLOT: replace block with <img src={"/media/" + i.slug + ".jpg"} className="w-full aspect-[4/3] object-cover" /> when photos exist */}
+            {i.image_url ? (
+              <img src={i.image_url} alt={i.title} className="w-full aspect-[4/3] object-cover" />
+            ) : (
             <div className="aspect-[4/3] bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center relative">
               <span className="text-xl font-bold text-slate-400">{(i.brand || "?").slice(0, 2).toUpperCase()}</span>
               <span className="absolute top-2 right-2 text-[10px] rounded-full bg-emerald-600 text-white px-2 py-0.5">Eco choice</span>
             </div>
+            )
             <div className="p-3">
               <p className="text-[11px] uppercase tracking-wider text-slate-400">{i.brand} - {i.category}</p>
               <p className="font-medium mt-1 truncate">{i.title}</p>

@@ -7,6 +7,9 @@ export default async function Home() {
   const items: any[] = await apiInternal("/store/catalog?limit=8");
   let cats: any[] = [];
   try { cats = await apiInternal("/store/categories", 60); } catch { void 0; }
+  let hero: any = { hero_title: "Renewed tech. Zero waste.",
+    hero_sub: "Certified refurbished devices - serialised, graded, warehouse-tracked.", cta_label: "Shop devices" };
+  try { hero = await apiInternal("/store/home-content", 60); } catch { void 0; }
   let promo: string | null = null;
   try {
     const p: any[] = await apiInternal("/store/promotions", 60);
@@ -16,9 +19,9 @@ export default async function Home() {
     <main>
       <section className="bg-gradient-to-r from-emerald-700 via-emerald-800 to-emerald-950 text-white px-8 py-12">
         <p className="text-[11px] uppercase tracking-widest text-emerald-200">RFO Store</p>
-        <h1 className="text-3xl font-semibold mt-2">{promo ?? "Renewed tech. Zero waste."}</h1>
-        <p className="text-emerald-100 mt-2 max-w-xl">Certified refurbished devices - serialised, graded, warehouse-tracked. Every purchase keeps e-waste out of landfill.</p>
-        <a href="#shop" className="inline-block mt-5 bg-amber-400 text-slate-900 rounded-xl px-5 py-2.5 font-semibold hover:bg-amber-300">Shop devices</a>
+        <h1 className="text-3xl font-semibold mt-2">{promo ?? hero.hero_title}</h1>
+        <p className="text-emerald-100 mt-2 max-w-xl">{promo ? "Sale prices below - " + hero.hero_sub : hero.hero_sub}</p>
+        <a href="#shop" className="inline-block mt-5 bg-amber-400 text-slate-900 rounded-xl px-5 py-2.5 font-semibold hover:bg-amber-300">{hero.cta_label}</a>
       </section>
       <section id="shop" className="max-w-6xl mx-auto px-4 pt-10 pb-8">
         <h2 className="text-xl font-semibold">Our products</h2>
