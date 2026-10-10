@@ -51,7 +51,7 @@ export default function LoadMore({ initial, categories }: { initial: any[]; cate
               <span className="text-xl font-bold text-slate-400">{(i.brand || "?").slice(0, 2).toUpperCase()}</span>
               <span className="absolute top-2 right-2 text-[10px] rounded-full bg-emerald-600 text-white px-2 py-0.5">Eco choice</span>
             </div>
-            )
+            )}
             <div className="p-3">
               <p className="text-[11px] uppercase tracking-wider text-slate-400">{i.brand} - {i.category}</p>
               <p className="font-medium mt-1 truncate">{i.title}</p>

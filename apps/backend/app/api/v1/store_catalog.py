@@ -23,20 +23,21 @@ LIMIT :lim OFFSET :off"""
 
 @router.get("/catalog")
 async def catalog(limit: int = Query(24, le=100), offset: int = 0,
-                  category: str | None = None, db=Depends(get_db)):
+                  category: str | None = None, sort: str | None = None, db=Depends(get_db)):
+    cat_clause = "AND c.name = :cat" if category else ""
+    sql_txt = CATALOG_SELECT.replace("%CAT%", cat_clause)
+    params = {"lim": limit, "off": offset}
     if category:
-        sql = text(CATALOG_SELECT.replace("%CAT%", "AND c.name = :cat"))
-        params = {"lim": limit, "off": offset, "cat": category}
-    else:
-        sql = text(CATALOG_SELECT.replace("%CAT%", ""))
-        params = {"lim": limit, "off": offset}
+        params["cat"] = category
+    if sort == "new":
+        sql_txt = sql_txt.replace("ORDER BY p.featured DESC, p.title", "ORDER BY p.created_at DESC")
+    sql = text(sql_txt)
     rows = (await db.execute(sql, params)).mappings().all()
     return [{"id": r["id"], "public_id": r["public_id"], "slug": r["slug"], "title": r["title"],
              "model": r["model"], "brand": r["brand"], "category": r["category"], "specs": r["specs"],
              "image_url": r["image_url"], "featured": bool(r["featured"]),
              "units_available": int(r["units_available"]), "price_from_cents": int(r["price_from_cents"])}
             for r in rows]
-
 
 @router.get("/catalog/{slug}")
 async def catalog_item(slug: str, db=Depends(get_db)):
@@ -115,3 +116,25 @@ async def home_content(db=Depends(get_db)):
     except Exception:
         pass
     return out
+
+@router.get("/best-sellers")
+async def best_sellers(limit: int = Query(4, le=12), db=Depends(get_db)):
+    rows = (await db.execute(text("""
+        SELECT p.id, p.slug, p.title, p.model, b.name AS brand,
+               sum(ol.qty) AS sold, min(a.sale_price_cents) AS price_from_cents
+        FROM order_lines ol
+        JOIN orders o ON o.id = ol.order_id AND o.status = 'paid'
+        JOIN products p ON p.id = ol.product_id
+        JOIN brands b ON b.id = p.brand_id
+        LEFT JOIN assets a ON a.product_id = p.id AND a.status = 'listed' AND
+               EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
+        WHERE ol.product_id IS NOT NULL
+        GROUP BY p.id, p.slug, p.title, p.model, b.name
+        ORDER BY sold DESC
+        LIMIT :lim"""), {}).mappings().all())
+
+
+    return [{"id": r["id"], "slug": r["slug"], "title": r["title"], "model": r["model"],
+             "brand": r["brand"], "sold": int(r["sold"]),
+             "price_from_cents": (int(r["price_from_cents"]) if r["price_from_cents"] is not None else None)}
+            for r in rows]

@@ -12,11 +12,17 @@ export default function Header() {
   const [items, setItems] = useState<SItem[]>([]);
   const [open, setOpen] = useState(false);
   const [cartN, setCartN] = useState(0);
+  const [cats, setCats] = useState<{ name: string; n: number }[]>([]);
   const router = useRouter();
   const pathname = usePathname();
   const timer = useRef<any>(null);
 
   useEffect(() => { setCartN(cartGet().length); }, [pathname]);
+  useEffect(() => {
+    (async () => {
+      try { const r = await fetch(API + "/store/categories", { cache: "no-store" }); if (r.ok) { setCats(await r.json()); } } catch { void 0; }
+    })();
+  }, []);
   useEffect(() => {
     const h = () => setCartN(cartGet().length);
     window.addEventListener("rfocart", h);
@@ -45,7 +51,13 @@ export default function Header() {
         </a>
         <nav className="hidden md:flex gap-4 text-sm text-slate-600">
           <a href="/" className="hover:text-emerald-700">Shop</a>
-          <a href="/assistant" className="hover:text-emerald-700">Ask AI</a>
+{cats.slice(0, 6).map((c) => (
+            <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className="hover:text-emerald-700">{c.name}</a>
+          ))}
+{cats.slice(0, 6).map((c) => (
+            <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className="hover:text-emerald-700">{c.name}</a>
+          ))}
+                    <a href="/assistant" className="hover:text-emerald-700">Ask AI</a>
         </nav>
         <div className="relative flex-1 max-w-xl mx-auto">
           <input className="w-full rounded-xl bg-slate-50 text-slate-900 placeholder-slate-400 px-4 py-2 text-sm outline-none ring-1 ring-slate-300 focus:ring-emerald-500"
