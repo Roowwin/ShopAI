@@ -228,3 +228,117 @@ async def approve_listing(product_id: int, body: ProductListingIn,
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
     return {"id": prod.id, "title": prod.title, "description": prod.description}
+
+
+# ------------- CMS: website content / offers / featured products -------------
+import json
+from datetime import datetime, timedelta, timezone
+
+HOME_DEFAULTS = {"hero_title": "Renewed tech. Zero waste.",
+                 "hero_sub": "Certified refurbished devices - serialised, graded, warehouse-tracked.",
+                 "cta_label": "Shop devices"}
+
+
+@router.get("/cms/home")
+async def cms_get_home(staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+    row = (await db.execute(text("SELECT value FROM site_settings WHERE key = 'home'"))).first()
+    out = dict(HOME_DEFAULTS)
+    if row is not None:
+        out.update(row[0])
+    return out
+
+
+@router.put("/cms/home")
+async def cms_put_home(body: dict, staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+    val = {"hero_title": str(body.get("hero_title") or HOME_DEFAULTS["hero_title"])[:120],
+           "hero_sub": str(body.get("hero_sub") or HOME_DEFAULTS["hero_sub"])[:240],
+           "cta_label": str(body.get("cta_label") or HOME_DEFAULTS["cta_label"])[:40]}
+    await db.execute(text("INSERT INTO site_settings (key, value) VALUES ('home', CAST(:v AS jsonb)) ON CONFLICT (key) DO UPDATE SET value = CAST(:v AS jsonb), updated_at = now()"), {"v": json.dumps(val)})
+    await db.commit()
+    await audit(db, "staff", entity="cms", action="home_updated", actor_id=staff["id"], after=val)
+    await db.commit()
+    return val
+
+
+@router.get("/cms/promotions")
+async def cms_list_promotions(staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+    rows = (await db.execute(text("SELECT id, name, kind, value, active, starts_at, ends_at FROM promotions ORDER BY id DESC"))).mappings().all()
+    return [{"id": r["id"], "name": r["name"], "kind": r["kind"], "value": int(r["value"] or 0),
+             "active": bool(r["active"]), "starts_at": r["starts_at"].isoformat(), "ends_at": r["ends_at"].isoformat()} for r in rows]
+
+
+@router.post("/cms/promotions")
+async def cms_add_promotion(body: dict, staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+    name = str(body.get("name") or "New offer")[:80]
+    kind = body.get("kind") or "percent"
+    if kind not in ("percent", "fixed"):
+        raise HTTPException(status_code=422, detail="kind must be percent or fixed")
+    value = int(body.get("value") or 0)
+    if value <= 0 or (kind == "percent" and value > 90):
+        raise HTTPException(status_code=422, detail="value out of range")
+    row = (await db.execute(text("INSERT INTO promotions (name, kind, value, active, starts_at, ends_at) VALUES (:n, :k, :v, true, now(), now() + INTERVAL '30 days') RETURNING id"), {"n": name, "k": kind, "v": value})).first()
+    await db.commit()
+    await audit(db, "staff", entity="promotion", action="created", entity_id=row[0], actor_id=staff["id"], after={"name": name})
+    await db.commit()
+    return {"id": row[0], "name": name, "kind": kind, "value": value, "active": True}
+
+
+@router.patch("/cms/promotions/{pid}")
+async def cms_edit_promotion(pid: int, body: dict, staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+    changed = {}
+    for k in ("name", "kind", "value", "active"):
+        if k in body:
+            changed[k] = body[k]
+            if k == "name":
+                await db.execute(text("UPDATE promotions SET name = :v WHERE id = :i"), {"v": str(body[k])[:80], "i": pid})
+            elif k == "kind":
+                if str(body[k]) not in ("percent", "fixed"):
+                    raise HTTPException(status_code=422, detail="bad kind")
+                await db.execute(text("UPDATE promotions SET kind = :v WHERE id = :i"), {"v": str(body[k]), "i": pid})
+            elif k == "value":
+                await db.execute(text("UPDATE promotions SET value = :v WHERE id = :i"), {"v": int(body[k]), "i": pid})
+            else:
+                await db.execute(text("UPDATE promotions SET active = :v WHERE id = :i"), {"v": bool(body[k]), "i": pid})
+    await db.commit()
+    await audit(db, "staff", entity="promotion", action="edited", entity_id=pid, actor_id=staff["id"], after=changed)
+    await db.commit()
+    return {"ok": True, "changed": changed}
+
+
+@router.get("/cms/products")
+async def cms_list_products(staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+    rows = (await db.execute(text("""
+        SELECT p.id, p.title, p.slug, p.image_url, p.featured, c.name AS category,
+               count(a.id) FILTER (WHERE a.status = 'listed') AS units
+        FROM products p JOIN categories c ON c.id = p.category_id
+        LEFT JOIN assets a ON a.product_id = p.id
+        GROUP BY p.id, p.title, p.slug, p.image_url, p.featured, c.name
+        ORDER BY p.featured DESC, p.title"""))).mappings().all()
+    return [{"id": r["id"], "title": r["title"], "slug": r["slug"], "category": r["category"],
+             "image_url": r["image_url"], "featured": bool(r["featured"]), "listed_units": int(r["units"])} for r in rows]
+
+
+@router.patch("/cms/products/{pid}")
+async def cms_edit_product(pid: int, body: dict, staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+    upd = []
+    params: dict = {"i": pid}
+    if "image_url" in body:
+        img = str(body["image_url"]).strip()
+        upd.append("image_url = :img")
+        params["img"] = (img or None)
+    if "featured" in body:
+        upd.append("featured = :feat")
+        params["feat"] = bool(body["featured"])
+    if "title" in body:
+        upd.append("title = :t")
+        params["t"] = str(body["title"])[:140]
+    if "description" in body:
+        upd.append("description = :d")
+        params["d"] = str(body["description"])[:4000]
+    if not upd:
+        raise HTTPException(status_code=422, detail="nothing to update")
+    await db.execute(text("UPDATE products SET " + ", ".join(upd) + ", updated_at = now() WHERE id = :i"), params)
+    await db.commit()
+    await audit(db, "staff", entity="cms", action="product_updated", entity_id=pid, actor_id=staff["id"], after={k: str(body[k])[:60] for k in body})
+    await db.commit()
+    return {"ok": True}
