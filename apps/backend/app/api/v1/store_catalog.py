@@ -5,8 +5,7 @@ from app.core.db import get_db
 
 router = APIRouter(prefix="/store", tags=["store-catalog"])
 
-CATALOG_SQL = text("""
-SELECT p.id, p.public_id::text AS public_id, p.slug, p.title, p.model,
+CATALOG_SELECT = """SELECT p.id, p.public_id::text AS public_id, p.slug, p.title, p.model,
        b.name AS brand, c.name AS category, p.specs, p.image_url, p.featured,
        count(a.id) AS units_available,
        min(a.sale_price_cents) AS price_from_cents
@@ -15,16 +14,23 @@ JOIN brands b ON b.id = p.brand_id
 JOIN categories c ON c.id = p.category_id
 LEFT JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
                   AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
-WHERE p.status = 'active' AND (:cat::text IS NULL OR c.name = :cat)
+WHERE p.status = 'active' %CAT%
 GROUP BY p.id, p.public_id, p.slug, p.title, p.model, b.name, c.name, p.specs, p.image_url, p.featured
 HAVING count(a.id) > 0
 ORDER BY p.featured DESC, p.title
-LIMIT :lim OFFSET :off
-""")
+LIMIT :lim OFFSET :off"""
+
 
 @router.get("/catalog")
-async def catalog(limit: int = Query(24, le=100), offset: int = 0, category: str | None = None, db=Depends(get_db)):
-    rows = (await db.execute(CATALOG_SQL, {"lim": limit, "off": offset, "cat": category if category else None})).mappings().all()
+async def catalog(limit: int = Query(24, le=100), offset: int = 0,
+                  category: str | None = None, db=Depends(get_db)):
+    if category:
+        sql = text(CATALOG_SELECT.replace("%CAT%", "AND c.name = :cat"))
+        params = {"lim": limit, "off": offset, "cat": category}
+    else:
+        sql = text(CATALOG_SELECT.replace("%CAT%", ""))
+        params = {"lim": limit, "off": offset}
+    rows = (await db.execute(sql, params)).mappings().all()
     return [{"id": r["id"], "public_id": r["public_id"], "slug": r["slug"], "title": r["title"],
              "model": r["model"], "brand": r["brand"], "category": r["category"], "specs": r["specs"],
              "image_url": r["image_url"], "featured": bool(r["featured"]),
@@ -35,8 +41,8 @@ async def catalog(limit: int = Query(24, le=100), offset: int = 0, category: str
 @router.get("/catalog/{slug}")
 async def catalog_item(slug: str, db=Depends(get_db)):
     row = (await db.execute(text("""
-        SELECT p.id, p.public_id::text AS public_id, p.slug, p.title, p.model, p.description, p.image_url,
-               p.specs, b.name AS brand, c.name AS category
+        SELECT p.id, p.public_id::text AS public_id, p.slug, p.title, p.model, p.description,
+               p.specs, p.image_url, b.name AS brand, c.name AS category
         FROM products p JOIN brands b ON b.id = p.brand_id JOIN categories c ON c.id = p.category_id
         WHERE p.slug = :s AND p.status = 'active'
     """), {"s": slug})).mappings().first()
@@ -50,9 +56,8 @@ async def catalog_item(slug: str, db=Depends(get_db)):
         ORDER BY a.sale_price_cents
     """), {"p": row["id"]})).mappings().all()
     return {"id": row["id"], "public_id": row["public_id"], "slug": row["slug"], "title": row["title"],
-            "image_url": row["image_url"],
             "model": row["model"], "description": row["description"], "specs": row["specs"],
-            "brand": row["brand"], "category": row["category"],
+            "image_url": row["image_url"], "brand": row["brand"], "category": row["category"],
             "units": [{"id": u["id"], "grade": u["grade"],
                        "sale_price_cents": int(u["sale_price_cents"]),
                        "serial_tail": u["serial_tail"]} for u in units]}
@@ -96,3 +101,17 @@ async def categories(db=Depends(get_db)):
         ORDER BY c.name
     """))).mappings().all()
     return [{"name": r["name"], "n": int(r["n"])} for r in rows]
+
+
+@router.get("/home-content")
+async def home_content(db=Depends(get_db)):
+    out = {"hero_title": "Renewed tech. Zero waste.",
+           "hero_sub": "Certified refurbished devices - serialised, graded, warehouse-tracked.",
+           "cta_label": "Shop devices"}
+    try:
+        row = (await db.execute(text("SELECT value FROM site_settings WHERE key = 'home'"))).first()
+        if row is not None and row[0]:
+            out.update(row[0])
+    except Exception:
+        pass
+    return out
