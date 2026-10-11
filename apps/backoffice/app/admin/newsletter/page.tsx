@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { requireRole, useMe } from "@/lib/session";
 
 type Sub = { email: string; created_at: string };
 
@@ -12,7 +12,8 @@ function when(iso: string): string {
 }
 
 export default function NewsletterPage() {
-  const router = useRouter();
+  const { me, checked } = useMe();
+  const allowed = requireRole(me, ["admin", "manager"]);
   const [subs, setSubs] = useState<Sub[]>([]);
   const [total, setTotal] = useState(0);
   const [msg, setMsg] = useState("");
@@ -32,17 +33,10 @@ export default function NewsletterPage() {
   }, []);
 
   useEffect(() => {
-    apiFetch("/staff/me").then(async (r) => {
-      if (!r.ok) { router.replace("/"); return; }
-      const me: any = await r.json().catch(() => null);
-      if (!me || (me.role !== "admin" && me.role !== "manager")) {
-        setMsg("admin or manager role required");
-        setLoaded(true);
-        return;
-      }
-      await load();
-    });
-  }, [router, load]);
+    if (!checked) { return; }
+    if (!allowed) { setMsg("admin or manager role required"); setLoaded(true); return; }
+    void load();
+  }, [checked, allowed, load]);
 
   return (
     <main className="max-w-6xl mx-auto p-4 min-h-screen">
