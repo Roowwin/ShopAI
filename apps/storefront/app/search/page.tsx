@@ -1,5 +1,5 @@
-import { apiInternal, aud } from "@/lib/api";
-import { Badge, Button, Card, EmptyState, Eyebrow, Heading, Input } from "../components/ui";
+import { apiInternal } from "@/lib/api";
+import { Button, EmptyState, Heading, Input, ProductCard } from "../components/ui";
 
 export const revalidate = 0;
 
@@ -19,14 +19,8 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       {q && <p className="text-xs text-ink-400 mt-3">Results for "{q}" - {items.length} found (source: live catalog, today)</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-5">
         {items.map((i) => (
-          <Card key={i.slug} radius="control" interactive href={"/products/" + i.slug} className="p-4">
-            <Eyebrow>{i.brand}</Eyebrow>
-            <p className="font-medium mt-1 truncate">{i.title}</p>
-            <div className="mt-2 flex items-center justify-between">
-              <span className="font-semibold text-sm">{i.price_from_cents !== null ? aud(i.price_from_cents) : "-"}</span>
-              <Badge colorClass={i.units_available > 0 ? "bg-brand-50 text-brand-700" : "bg-surface-sunken text-ink-500"}>{i.units_available} left</Badge>
-            </div>
-          </Card>
+          <ProductCard key={i.slug} variant="text" href={"/products/" + i.slug} title={i.title}
+            brand={i.brand} priceCents={i.price_from_cents} stock={{ n: i.units_available, label: "left" }} />
         ))}
       </div>
       {q && items.length === 0 && <EmptyState className="mt-6">No results - try a broader term.</EmptyState>}

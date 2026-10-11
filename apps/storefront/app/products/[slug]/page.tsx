@@ -1,7 +1,7 @@
 import { apiInternal, aud } from "@/lib/api";
 import GradePanel from "./GradePanel";
 import ProductArt from "../../components/ProductArt";
-import { Badge, Button, Card, Eyebrow, Heading } from "../../components/ui";
+import { Badge, Button, Eyebrow, Heading, ProductCard } from "../../components/ui";
 import { notFound } from "next/navigation";
 
 export const revalidate = 0;
@@ -89,11 +89,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <Heading level="h2">You may also like</Heading>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
             {others.map((o) => (
-              <Card key={o.slug} radius="control" interactive href={"/products/" + o.slug} className="p-4">
-                <Eyebrow>{o.brand}</Eyebrow>
-                <p className="font-medium mt-1 truncate text-sm">{o.title}</p>
-                <p className="text-sm font-semibold mt-2">{aud(o.price_from_cents)}</p>
-              </Card>
+              <ProductCard key={o.slug} variant="text" href={"/products/" + o.slug} title={o.title}
+                brand={o.brand} priceCents={o.price_from_cents} />
             ))}
           </div>
         </section>

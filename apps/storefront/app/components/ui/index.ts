@@ -6,4 +6,5 @@ export { default as Heading } from "./Heading";
 export { default as Input } from "./Input";
 export { default as Eyebrow } from "./Eyebrow";
 export { default as EmptyState } from "./EmptyState";
+export { default as ProductCard } from "./ProductCard";
 export { cn } from "./cn";

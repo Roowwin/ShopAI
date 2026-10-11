@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { API, aud } from "@/lib/api";
-import ProductArt from "./ProductArt";
-import { Badge, Button, Card, EmptyState, Eyebrow } from "./ui";
+import { API } from "@/lib/api";
+import { Button, EmptyState, ProductCard } from "./ui";
 
 type Cat = { name: string; n: number };
 
@@ -45,27 +44,9 @@ export default function LoadMore({ initial, categories }: { initial: any[]; cate
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-5">
         {items.map((i) => (
-          <Card key={i.slug} radius="control" interactive href={"/products/" + i.slug} className="group overflow-hidden">
-            <div className="relative">
-              <ProductArt slug={i.slug} imageUrl={i.image_url} alt={i.title} className="w-full aspect-[4/3] object-cover"
-                fallback={
-                <div className="aspect-[4/3] bg-gradient-to-br from-surface-sunken to-line flex items-center justify-center">
-                  <span className="text-xl font-bold text-ink-400">{(i.brand || "?").slice(0, 2).toUpperCase()}</span>
-                </div>} />
-              {!i.image_url && (
-                <Badge colorClass="bg-brand-600 text-white" className="absolute top-2 right-2">Eco choice</Badge>
-              )}
-            </div>
-            <div className="p-3">
-              <Eyebrow>{i.brand} - {i.category}</Eyebrow>
-              <p className="font-medium mt-1 truncate">{i.title}</p>
-              <div className="mt-2 flex items-center justify-between">
-                <span className="font-semibold text-sm">{i.price_from_cents !== null ? aud(i.price_from_cents) : "-"}</span>
-                <Badge colorClass={i.units_available > 0 ? "bg-brand-50 text-brand-700" : "bg-surface-sunken text-ink-500"}>{i.units_available} in stock</Badge>
-              </div>
-              <p className="text-xs text-brand-700 mt-2.5 opacity-0 group-hover:opacity-100 transition">View product</p>
-            </div>
-          </Card>
+          <ProductCard key={i.slug} variant="full" href={"/products/" + i.slug} title={i.title}
+            brand={i.brand} category={i.category} slug={i.slug} imageUrl={i.image_url}
+            priceCents={i.price_from_cents} stock={{ n: i.units_available }} />
         ))}
         {items.length === 0 && <EmptyState className="col-span-full">Nothing listed in this category yet.</EmptyState>}
       </div>

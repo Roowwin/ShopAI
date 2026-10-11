@@ -1,9 +1,8 @@
-import { apiInternal, aud } from "@/lib/api";
+import { apiInternal } from "@/lib/api";
 import { iconFor } from "@/lib/productIcons";
 import LoadMore from "./components/LoadMore";
 import DealOfMonth from "./components/DealOfMonth";
-import ProductArt from "./components/ProductArt";
-import { Button, Card, Eyebrow, Heading } from "./components/ui";
+import { Button, Heading, ProductCard } from "./components/ui";
 
 export const revalidate = 30;
 
@@ -50,15 +49,8 @@ export default async function Home() {
         <div className="flex items-end justify-between"><Heading level="h2">New arrivals</Heading><a href="/" className="text-xs text-brand-700">View all</a></div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
           {arrivals.map((i) => (
-            <Card key={i.slug} radius="control" interactive href={"/products/" + i.slug} className="overflow-hidden">
-              <ProductArt slug={i.slug} imageUrl={i.image_url} alt={i.title} className="w-full aspect-[4/3] object-cover"
-                fallback={
-                <div className="aspect-[4/3] bg-gradient-to-br from-surface-sunken to-line flex items-center justify-center">
-                  <span className="text-lg font-bold text-ink-400">{(i.brand || "?").slice(0, 2).toUpperCase()}</span></div>
-                } />
-              <div className="p-3"><p className="font-medium truncate text-sm">{i.title}</p>
-                <p className="text-sm font-semibold mt-1">{i.price_from_cents !== null ? aud(i.price_from_cents) : "-"}</p></div>
-            </Card>
+            <ProductCard key={i.slug} variant="compact" href={"/products/" + i.slug} title={i.title}
+              brand={i.brand} slug={i.slug} imageUrl={i.image_url} priceCents={i.price_from_cents} />
           ))}
         </div>
       </section>
@@ -68,11 +60,8 @@ export default async function Home() {
         <p className="text-xs text-ink-400">Most purchased by real customers (paid orders).</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
           {best.map((i) => (
-            <Card key={i.slug} radius="control" interactive href={"/products/" + i.slug} className="p-3">
-              <Eyebrow>{i.brand}</Eyebrow>
-              <p className="font-medium truncate text-sm">{i.title}</p>
-              <p className="text-xs text-ink-500 mt-1">{i.sold} sold</p>
-            </Card>
+            <ProductCard key={i.slug} variant="compact" href={"/products/" + i.slug} title={i.title}
+              brand={i.brand} slug={i.slug} priceCents={i.price_from_cents} meta={i.sold + " sold"} />
           ))}
         </div>
       </section>)}
