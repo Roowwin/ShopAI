@@ -67,15 +67,20 @@ class ChatIn(BaseModel):
 
 CHAT_DAILY_CAP = 100
 
+# Which role may drive which chat action. Derived from the role tuples in `staff_ops` - the door
+# each action dispatches into - so the allow-list cannot drift from the endpoint's own guard.
+# `test` and `list` both dispatch into `staff_ops.set_status`, so they take that door's tuple:
+# technicians lose chat-initiated `test` and sales lose chat-initiated `list` (they never had
+# either on the direct endpoint).
 TOOL_ROLES = {
-    "activate_lot": ("admin", "manager"),
-    "create_lot": ("admin", "manager", "warehouse"),
-    "scan_in": ("admin", "manager", "warehouse", "technician"),
-    "test": ("admin", "manager", "warehouse", "technician"),
-    "grade": ("admin", "manager", "technician"),
-    "price": ("admin", "manager", "sales"),
-    "list": ("admin", "manager", "sales"),
-    "move": ("admin", "manager", "warehouse"),
+    "activate_lot": staff_ops.ROLES_ACTIVATE_LOT,
+    "create_lot": staff_ops.ROLES_CREATE_LOT,
+    "scan_in": staff_ops.ROLES_SCAN_IN,
+    "test": staff_ops.ROLES_SET_STATUS,
+    "grade": staff_ops.ROLES_GRADE,
+    "price": staff_ops.ROLES_PRICE,
+    "list": staff_ops.ROLES_SET_STATUS,
+    "move": staff_ops.ROLES_MOVE,
 }
 
 CHAT_SCHEMA = {

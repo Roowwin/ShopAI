@@ -14,6 +14,41 @@ from app.services.audit import audit
 
 router = APIRouter(prefix="/staff", tags=["staff-ops"])
 
+# ---------------------------------------------------------------------------
+# Role tuples: ONE source of truth for "which role may do X".
+#
+# The chat door (`staff_ai.py`) dispatches into the functions below as PLAIN FUNCTION CALLS, so
+# the routes' `Depends(require_roles(...))` never evaluates on that path. Two consequences, both
+# closed here and in the sibling file:
+#   * `staff_ai.TOOL_ROLES` derives from these same constants instead of carrying its own
+#     literals, so the chat allow-list cannot drift from the door it dispatches into.
+#   * each handler re-checks its tuple in-body via `_require_role`, so the guard holds however
+#     the function is invoked (the route's `Depends` stays as well - belt and braces, and it
+#     preserves the 403 for the HTTP door).
+# Keep every set otherwise unchanged: these values ARE live authorization.
+# ---------------------------------------------------------------------------
+ROLES_CREATE_LOT = ("admin", "manager", "warehouse")
+ROLES_ACTIVATE_LOT = ("admin", "manager")
+ROLES_SCAN_IN = ("admin", "manager", "warehouse", "technician")
+ROLES_GRADE = ("admin", "manager", "technician")
+ROLES_MOVE = ("admin", "manager", "warehouse")
+ROLES_PRICE = ("admin", "manager", "sales")
+# The door behind the chat `test` (received->tested) and `list` (graded->listed) transitions.
+# One tuple for both transitions, aligned DOWN to this endpoint's stricter set - the chat
+# allow-list no longer grants `test` to technicians or `list` to sales.
+ROLES_SET_STATUS = ("admin", "manager", "warehouse")
+
+
+def _require_role(staff: dict, roles: tuple[str, ...]) -> None:
+    """In-body twin of the route's ``Depends(require_roles(*roles))``.
+
+    `staff_ai.chat` calls these handlers as plain functions, which skips every FastAPI
+    dependency. Same status and detail as `deps.require_roles`, so both doors refuse alike.
+    """
+    if staff["role"] not in roles:
+        raise HTTPException(status_code=403, detail="insufficient role")
+
+
 class LotIn(BaseModel):
     lot_number: str | None = None
     warehouse: str | None = None
@@ -52,7 +87,8 @@ async def _gen_lot_number(db) -> str:
 
 
 @router.post("/lots", status_code=201)
-async def create_lot(body: LotIn, staff: dict = Depends(require_roles("admin", "manager", "warehouse")), db=Depends(get_db)):
+async def create_lot(body: LotIn, staff: dict = Depends(require_roles(*ROLES_CREATE_LOT)), db=Depends(get_db)):
+    _require_role(staff, ROLES_CREATE_LOT)
     ln = body.lot_number or await _gen_lot_number(db)
     lot = Lot(lot_number=ln, status="intake", warehouse=body.warehouse, notes=body.notes)
     db.add(lot)
@@ -65,7 +101,8 @@ async def create_lot(body: LotIn, staff: dict = Depends(require_roles("admin", "
 
 
 @router.post("/lots/{lot_id}/activate")
-async def activate_lot(lot_id: int, staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+async def activate_lot(lot_id: int, staff: dict = Depends(require_roles(*ROLES_ACTIVATE_LOT)), db=Depends(get_db)):
+    _require_role(staff, ROLES_ACTIVATE_LOT)
     lot = await db.get(Lot, lot_id)
     if lot is None:
         raise HTTPException(status_code=404, detail="lot not found")
@@ -81,7 +118,8 @@ async def activate_lot(lot_id: int, staff: dict = Depends(require_roles("admin",
 
 
 @router.post("/assets/scan-in", status_code=201)
-async def scan_in(body: ScanIn, staff: dict = Depends(require_roles("admin", "manager", "warehouse", "technician")), db=Depends(get_db)):
+async def scan_in(body: ScanIn, staff: dict = Depends(require_roles(*ROLES_SCAN_IN)), db=Depends(get_db)):
+    _require_role(staff, ROLES_SCAN_IN)
     if (body.lot_id is None) == (body.lot_number is None):
         raise HTTPException(status_code=422, detail="provide exactly one of lot_id / lot_number")
     lot = (await db.execute(select(Lot).where(Lot.id == body.lot_id) if body.lot_id
@@ -104,7 +142,8 @@ async def scan_in(body: ScanIn, staff: dict = Depends(require_roles("admin", "ma
 
 
 @router.post("/assets/{asset_id}/grade")
-async def grade(asset_id: int, body: GradeIn, staff: dict = Depends(require_roles("admin", "manager", "technician")), db=Depends(get_db)):
+async def grade(asset_id: int, body: GradeIn, staff: dict = Depends(require_roles(*ROLES_GRADE)), db=Depends(get_db)):
+    _require_role(staff, ROLES_GRADE)
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
@@ -125,7 +164,8 @@ async def grade(asset_id: int, body: GradeIn, staff: dict = Depends(require_role
 
 
 @router.post("/assets/{asset_id}/status")
-async def set_status(asset_id: int, body: StatusIn, staff: dict = Depends(require_roles("admin", "manager", "warehouse")), db=Depends(get_db)):
+async def set_status(asset_id: int, body: StatusIn, staff: dict = Depends(require_roles(*ROLES_SET_STATUS)), db=Depends(get_db)):
+    _require_role(staff, ROLES_SET_STATUS)
     if body.status == "graded":
         raise HTTPException(status_code=422, detail="use /grade to enter graded state")
     asset = await db.get(Asset, asset_id)
@@ -143,7 +183,8 @@ async def set_status(asset_id: int, body: StatusIn, staff: dict = Depends(requir
 
 
 @router.post("/assets/{asset_id}/move")
-async def move(asset_id: int, body: MoveIn, staff: dict = Depends(require_roles("admin", "manager", "warehouse")), db=Depends(get_db)):
+async def move(asset_id: int, body: MoveIn, staff: dict = Depends(require_roles(*ROLES_MOVE)), db=Depends(get_db)):
+    _require_role(staff, ROLES_MOVE)
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
@@ -201,7 +242,8 @@ class PriceIn(BaseModel):
 
 
 @router.post("/assets/{asset_id}/price")
-async def set_price(asset_id: int, body: PriceIn, staff: dict = Depends(require_roles("admin", "manager", "sales")), db=Depends(get_db)):
+async def set_price(asset_id: int, body: PriceIn, staff: dict = Depends(require_roles(*ROLES_PRICE)), db=Depends(get_db)):
+    _require_role(staff, ROLES_PRICE)
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
