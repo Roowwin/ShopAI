@@ -32,8 +32,8 @@ type Props = {
 /* The scroll region takes the SAME focus highlight as Button/Input/Select - the darker emerald
    step, which clears 3:1 against white, rather than the lighter one that measured 2.54:1. It
    has no label text of its own, so that highlight is the region's only focus cue and must not be
-   left below the non-text bar. Table is admin-only (the storefront has no grid), so this one is
-   not part of the hand-mirrored set - see the note in index.ts. */
+   left below the non-text bar. Table is admin-only (the storefront has no data grids), so this
+   one is not part of the hand-mirrored set - see the note in index.ts. */
 export default function Table({ children, className, label }: Props) {
   return (
     <div
