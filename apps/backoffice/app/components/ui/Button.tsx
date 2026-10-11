@@ -14,11 +14,18 @@ type Size = "sm" | "md" | "lg" | "inline";
    CSS and make the one-control-height claim look false.) */
 const BASE =
   "inline-flex items-center justify-center gap-2 min-h-[36px] rounded-control font-semibold transition " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 " +
   "disabled:opacity-50 disabled:pointer-events-none";
 
+/* Contrast, WCAG AA. The primary fill is the darker emerald step (white on it computes 5.48:1)
+   and its hover goes a further step darker rather than lighter (7.68:1), because white on the
+   step used before measured 3.77:1 and on that variant's old lighter hover only 2.54:1 - both
+   under the 4.5:1 the 14px and 12px labels need. The focus ring every button shares is the same
+   darker step (5.48:1 against white), clearing the 3:1 non-text bar the lighter emerald ring
+   was under at 2.54:1. Written as numbers rather than utility names on purpose - this file is
+   scanned as text, and a utility spelled in prose would emit a real rule. */
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-brand-600 text-white hover:bg-brand-500",
+  primary: "bg-brand-700 text-white hover:bg-brand-800",
   accent: "bg-accent-400 text-ink-900 hover:bg-accent-300",
   secondary: "bg-surface text-brand-700 ring-1 ring-line hover:bg-brand-50",
   ghost: "text-brand-700 hover:bg-brand-50",

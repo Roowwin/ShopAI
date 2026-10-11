@@ -29,10 +29,15 @@ type Props = {
   label: string;
 };
 
+/* The scroll region takes the SAME focus highlight as Button/Input/Select - the darker emerald
+   step, which clears 3:1 against white, rather than the lighter one that measured 2.54:1. It
+   has no label text of its own, so that highlight is the region's only focus cue and must not be
+   left below the non-text bar. Table is admin-only (the storefront has no grid), so this one is
+   not part of the hand-mirrored set - see the note in index.ts. */
 export default function Table({ children, className, label }: Props) {
   return (
     <div
-      className="w-full overflow-x-auto py-1 -my-1 rounded-control focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+      className="w-full overflow-x-auto py-1 -my-1 rounded-control focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700"
       tabIndex={0}
       role="region"
       aria-label={label}
