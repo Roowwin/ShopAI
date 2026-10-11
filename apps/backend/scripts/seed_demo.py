@@ -5,7 +5,9 @@ Every product, lot, asset, order, promotion and customer is created through the 
 endpoints the storefront and the backoffice call. The one thing that cannot go over HTTP is
 the seed staff admin: there is no public "create staff" endpoint, so it is created with
 ``app.bootstrap_staff`` and, on a re-run (when bootstrap cannot hand the password back a
-second time), its password is reset directly so this script can log in again.
+second time), its password is reset directly so this script can log in again. There is no
+default password: a re-run uses ``--admin-password`` when given, otherwise a random one that
+the summary prints once, like the customer passwords.
 
 No other SQL runs: brand/category slugs are the known seed slugs and the API validates them;
 every lookup (products, lots, assets, promotions) goes through a real GET.
@@ -117,17 +119,23 @@ class Api:
 # ---------------------------------------------------------------- seed admin
 
 
-def ensure_admin(api: Api, email: str, password: str) -> tuple[str, bool]:
-    """Create the seed admin (or make an existing one loggable-again) and sign in."""
+def ensure_admin(api: Api, email: str, password_arg: str | None) -> tuple[str, bool]:
+    """Create the seed admin (or make an existing one loggable-again) and sign in.
+
+    Returns the password this run signed in with, and whether the admin was created. There is
+    no default password: when the admin already exists bootstrap cannot hand the old one back,
+    so the caller either passes --admin-password or this generates a random one for the caller
+    to print once.
+    """
     _, generated = asyncio.run(bootstrap(email, "admin"))
     if generated is not None:
         signin = generated
         created = True
     else:
-        # bootstrap only returns a password when it creates the user. On a re-run the seed
-        # admin already exists, so set a known password to authenticate deterministically.
-        asyncio.run(_reset_seed_admin_password(email, password))
-        signin = password
+        # bootstrap only returns a password when it creates the user. On a re-run the seed admin
+        # already exists, so reset it to --admin-password (or a fresh random one).
+        signin = password_arg or strong_password()
+        asyncio.run(_reset_seed_admin_password(email, signin))
         created = False
     r = api.need(api.post("/staff/auth/login", {"email": email, "password": signin}), 200)
     j = r.json()
@@ -156,13 +164,13 @@ def existing_products(api: Api) -> dict[str, int]:
     return {row["slug"]: row["id"] for row in rows}
 
 
-def find_lot_id(api: Api, lot_number: str) -> int | None:
+def find_lot(api: Api, lot_number: str) -> dict | None:
     offset = 0
-    while offset < 1000:
+    while offset < 2000:
         page = api.need(api.get("/staff/lots", params={"limit": 100, "offset": offset}), 200).json()
         for lot in page:
             if lot["lot_number"] == lot_number:
-                return lot["id"]
+                return lot
         if len(page) < 100:
             return None
         offset += 100
@@ -197,10 +205,10 @@ def ensure_lot(api: Api, code: str) -> tuple[int, str, bool]:
     if r.status_code == 201:
         return r.json()["id"], lot_number, True
     if r.status_code == 409:
-        lot_id = find_lot_id(api, lot_number)
-        if lot_id is None:
+        lot = find_lot(api, lot_number)
+        if lot is None:
             raise RuntimeError(f"lot {lot_number} reported as duplicate but not found")
-        return lot_id, lot_number, False
+        return lot["id"], lot_number, False
     api.need(r, 201)
     raise RuntimeError("unreachable")
 
@@ -220,8 +228,13 @@ def ensure_unit(api: Api, product_id: int, lot_number: str, serial: str, grade: 
     return True
 
 
-def activate_lot(api: Api, lot_id: int) -> None:
+def ensure_lot_active(api: Api, lot_number: str, lot_id: int) -> bool:
+    """Activate a lot, skipping the call when a GET shows it is already active."""
+    lot = find_lot(api, lot_number)
+    if lot is not None and lot["status"] == "active":
+        return False
     api.need(api.post(f"/staff/lots/{lot_id}/activate"), 200)
+    return True
 
 
 # ---------------------------------------------------------------- optional phases
@@ -230,15 +243,26 @@ def activate_lot(api: Api, lot_id: int) -> None:
 def rehabilitate(api: Api, count: int) -> int:
     """Push existing RX-BULK units live through the real listing flow.
 
-    Those units are already 'graded', and the DB trigger allows graded -> listed (it does NOT
-    allow graded -> tested), so the flow resumes at grade rather than at test.
+    Two shape notes, both forced by the schema:
+    - the units are already 'graded', and the DB trigger allows graded -> listed (it does NOT
+      allow graded -> tested), so the flow resumes at grade rather than at test;
+    - a listed unit is only catalog-visible when its lot is ACTIVE, and the bulk lot can sit at
+      'completed', so the unit's own lot is activated before it is listed. (An asset cannot be
+      re-lotted: /assets/{id}/move sets the warehouse location, and assets.lot_id is NOT NULL.)
     """
     if count <= 0:
         return 0
     graded = api.need(api.get("/staff/assets", params={"status": "graded", "limit": 100}), 200).json()
     bulk = sorted((a for a in graded if (a["serial_number"] or "").startswith("RX-BULK-")),
                   key=lambda a: a["serial_number"])[:count]
+    seen_lots: set[str] = set()
     for a in bulk:
+        lot_number = a["lot_number"]
+        if lot_number and lot_number not in seen_lots:
+            lot = find_lot(api, lot_number)
+            if lot is not None:
+                ensure_lot_active(api, lot_number, lot["id"])
+            seen_lots.add(lot_number)
         api.need(api.post(f"/staff/assets/{a['id']}/grade", {"grade": "B"}), 200)
         api.need(api.post(f"/staff/assets/{a['id']}/price", {"sale_price_cents": 27900}), 200)
         api.need(api.post(f"/staff/assets/{a['id']}/status", {"status": "listed"}), 200)
@@ -318,8 +342,8 @@ def main() -> int:
     ap.add_argument("--customers", type=int, default=3, help="customer accounts to register")
     ap.add_argument("--rehabilitate", type=int, default=0, help="existing RX-BULK units to list")
     ap.add_argument("--admin-email", default="seed-demo-admin@rfo.local", help="seed staff admin")
-    ap.add_argument("--admin-password", default="Seed-Demo-Admin-2026!",
-                    help="password to (re)set for an existing seed admin")
+    ap.add_argument("--admin-password", default=None,
+                    help="password to set for an existing seed admin (default: generate one, printed once)")
     args = ap.parse_args()
 
     n_products = max(0, min(args.products, len(CATALOG)))
@@ -327,7 +351,7 @@ def main() -> int:
         print(f"note: --products capped at {len(CATALOG)} (demo catalog size)")
 
     api = Api(args.base_url)
-    ensure_admin(api, args.admin_email, args.admin_password)
+    admin_password, admin_created = ensure_admin(api, args.admin_email, args.admin_password)
 
     known = existing_products(api)
     p_new = u_new = lot_new = 0
@@ -343,7 +367,7 @@ def main() -> int:
             serial = f"RX-SEED-{code.upper()}-{u}"
             u_new += int(ensure_unit(api, product_id, lot_number, serial, grade,
                                      unit_price(spec[5], grade)))
-        activate_lot(api, lot_id)
+        ensure_lot_active(api, lot_number, lot_id)
         lots.append((code, lot_number, lot_id))
 
     reh = rehabilitate(api, args.rehabilitate)
@@ -360,11 +384,12 @@ def main() -> int:
     print(f"  orders       placed  {orders:>3}   (skipped {order_skip} already sold)")
     print(f"  promotions   created {promos:>3}")
     print(f"  customers    created {len(customers):>3}   (existing {customers_existing})")
-    if customers:
-        print()
-        print("  customer credentials (shown once - store them now):")
-        for email, pw in customers:
-            print(f"    {email}  {pw}")
+    print()
+    print("  credentials (shown once - store them now):")
+    print(f"    {args.admin_email}  {admin_password}   (seed admin, "
+          f"{'created' if admin_created else 'existing'})")
+    for email, pw in customers:
+        print(f"    {email}  {pw}")
     print()
     print("  storefront: https://rfo.localhost   backoffice: https://admin.rfo.localhost")
     return 0
