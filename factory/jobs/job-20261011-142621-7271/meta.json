@@ -1,1 +1,1 @@
-{ "job_id": "job-20261011-142621-7271", "title": "demo-store seed: POST /staff/products + scripts/seed_demo.py via real flows", "created": "2026-10-11 14:26:21", "branch": null, "builder": null }
+{ "job_id": "job-20261011-142621-7271", "title": "demo-store seed: POST /staff/products + scripts/seed_demo.py via real flows", "created": "2026-10-11 14:26:21", "branch": "factory/job-20261011-142621-7271", "builder": "claude-code v2.1.296 via ollama launch / deepseek-v4.1-flash:cloud, rounds 1-3; reviewer: manual" }

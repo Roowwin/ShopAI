@@ -1,1 +1,1 @@
-{ "job_id": "job-20261011-151438-6603", "title": "fix(seed_demo): scope bearer header to /staff paths only", "created": "2026-10-11 15:14:38", "branch": null, "builder": null }
+{ "job_id": "job-20261011-151438-6603", "title": "fix(seed_demo): scope bearer header to /staff paths only", "created": "2026-10-11 15:14:38", "branch": "factory/job-20261011-151438-6603", "builder": "claude-code v2.1.296 via ollama launch / deepseek-v4.1-flash:cloud, round 1; reviewer: manual" }

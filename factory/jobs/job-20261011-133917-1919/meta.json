@@ -1,1 +1,1 @@
-{ "job_id": "job-20261011-133917-1919", "title": "newsletter...", "created": "2026-10-11 13:39:17", "branch": "factory/job-20261011-133917-1919", "builder": "deepseek-v4.1-flash:cloud via ollama launch" }
+{ "job_id": "job-20261011-133917-1919", "title": "newsletter: public subscribe + admin list + storefront footer form", "created": "2026-10-11 13:39:17", "branch": "factory/job-20261011-133917-1919", "builder": "claude-code v2.1.296 via ollama launch / deepseek-v4.1-flash:cloud, round 1; reviewer: manual" }
