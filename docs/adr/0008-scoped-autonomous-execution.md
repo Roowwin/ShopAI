@@ -102,7 +102,10 @@ same tuples.
 - The role allow-list and the in-body `_require_role` guards still gate every execution; a staff grant cannot widen
   them (decision 9).
 - Caps, audit and the append-only ledger.
-- Agent tokens remain valid **only** on the assistant surface (ADR 0006 decision 7, ADR 0007).
+- Agent tokens remain valid **only** on the assistant surface (ADR 0006 decision 7, ADR 0007) - as built, the agent
+  door is `POST /staff/agents/chat`, a mirror that delegates to `staff_ai.chat` and accepts only `typ="agent"`; see
+  ADR 0007 decision 3's "as built" note. An agent **must be propose-only** until Precondition 2 exists: its
+  delegated identity may carry no role any `TOOL_ROLES` tuple admits.
 - ADR 0006 decisions 1, 2, 3, 5, 6, 7 and 8 are untouched. **ADR 0007 is untouched except where it restates this
   invariant**: its Status clause ("ADR 0006 gates EVERY proposal-to-execute path in this rail without exception")
   and its decision 4 are narrowed for granted pairs exactly as ADR 0006 decision 4 is - an **ungranted** rail is
@@ -147,8 +150,13 @@ and the scorecard must be pasted and archived:
 ## Consequences
 **+** Automation proposes and, where granted, disposes - within caps, fully audited, without credential sharing.
 **Same door, one new authorisation path**: the grant-scoped branch of decision 9 lets an agent identity past
-`TOOL_ROLES` on the existing chat route. The *door* is unchanged; the authorization surface is not, and it is
-bounded by action class and cap. Stated plainly because this is the sentence most likely to be quoted later.
+`TOOL_ROLES` on the agent chat door. Three things must not be misquoted from this document:
+- the agent door is **not literally** `/staff/ai/chat` - it is `POST /staff/agents/chat`, a mirror delegating to the
+  same handler (ADR 0007 decision 3's "as built" note);
+- the delegation carries **no role any `TOOL_ROLES` tuple admits**, so an agent is **propose-only** until a
+  server-enforced single-use Confirm exists (Precondition 2) - a first cut that passed the sponsor's admin role
+  would have let an agent publish a device with no click;
+- what changes is the **authorisation surface**, and it is bounded by action class and cap.
 **+** The Confirm line remains for everything ungranted, and removing grants restores the old behaviour exactly.
 **-** The safety property the test suite asserts today ("a proposal never writes") must be **split, not deleted**:
 ungranted / kill-switch -> zero deltas; granted -> exactly one write plus the audit marker. Approving this ADR
