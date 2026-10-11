@@ -6,8 +6,8 @@ endpoints the storefront and the backoffice call. The one thing that cannot go o
 the seed staff admin: there is no public "create staff" endpoint, so it is created with
 ``app.bootstrap_staff`` and, on a re-run (when bootstrap cannot hand the password back a
 second time), its password is reset directly so this script can log in again. There is no
-default password: a re-run uses ``--admin-password`` when given, otherwise a random one that
-the summary prints once, like the customer passwords.
+default password: a re-run uses ``--admin-password`` when given, otherwise a random one, printed
+once the moment it is set.
 
 No other SQL runs: brand/category slugs are the known seed slugs and the API validates them;
 every lookup (products, lots, assets, promotions) goes through a real GET.
@@ -127,16 +127,11 @@ def ensure_admin(api: Api, email: str, password_arg: str | None) -> tuple[str, b
     so the caller either passes --admin-password or this generates a random one for the caller
     to print once.
     """
-    _, generated = asyncio.run(bootstrap(email, "admin"))
-    if generated is not None:
-        signin = generated
-        created = True
-    else:
-        # bootstrap only returns a password when it creates the user. On a re-run the seed admin
-        # already exists, so reset it to --admin-password (or a fresh random one).
-        signin = password_arg or strong_password()
-        asyncio.run(_reset_seed_admin_password(email, signin))
-        created = False
+    signin, created, generated = asyncio.run(_ensure_admin_row(email, password_arg))
+    if generated:
+        # Print the moment it is set, not only in the final summary: a run that dies later
+        # (a 404, a dropped connection) must not leave the seed admin with an unknown password.
+        print(f"seed admin {email}: password set to {signin} (shown once)")
     r = api.need(api.post("/staff/auth/login", {"email": email, "password": signin}), 200)
     j = r.json()
     if j.get("requires_mfa"):
@@ -145,7 +140,22 @@ def ensure_admin(api: Api, email: str, password_arg: str | None) -> tuple[str, b
     return signin, created
 
 
-async def _reset_seed_admin_password(email: str, password: str) -> None:
+async def _ensure_admin_row(email: str, password_arg: str | None) -> tuple[str, bool, bool]:
+    """Bootstrap, then (if needed) reset the password - both inside ONE event loop.
+
+    bootstrap() disposes the shared engine, and an asyncpg connection belongs to the loop that
+    created it, so a second asyncio.run() would await a future from the first (now dead) loop:
+    "Event loop is closed" / "attached to a different loop". Keep it to a single loop.
+
+    Returns (password, created, generated) - generated is True only when this run invented the
+    password, so the caller knows there is something worth printing once.
+    """
+    _, bootstrap_pw = await bootstrap(email, "admin")
+    if bootstrap_pw is not None:
+        return bootstrap_pw, True, False      # bootstrap already printed it
+    # bootstrap only returns a password when it creates the user; an existing seed admin is
+    # reset to --admin-password, or to a fresh random one the caller prints once.
+    password = password_arg or strong_password()
     eng = get_engine()
     async with eng.begin() as c:
         await c.execute(text("""
@@ -154,6 +164,7 @@ async def _reset_seed_admin_password(email: str, password: str) -> None:
             ON CONFLICT (staff_id) DO UPDATE SET password_hash = EXCLUDED.password_hash
         """), {"h": hash_password(password), "e": email})
     await eng.dispose()
+    return password, False, password_arg is None
 
 
 # ---------------------------------------------------------------- lookups (all HTTP)
@@ -351,7 +362,7 @@ def main() -> int:
         print(f"note: --products capped at {len(CATALOG)} (demo catalog size)")
 
     api = Api(args.base_url)
-    admin_password, admin_created = ensure_admin(api, args.admin_email, args.admin_password)
+    ensure_admin(api, args.admin_email, args.admin_password)
 
     known = existing_products(api)
     p_new = u_new = lot_new = 0
@@ -384,12 +395,11 @@ def main() -> int:
     print(f"  orders       placed  {orders:>3}   (skipped {order_skip} already sold)")
     print(f"  promotions   created {promos:>3}")
     print(f"  customers    created {len(customers):>3}   (existing {customers_existing})")
-    print()
-    print("  credentials (shown once - store them now):")
-    print(f"    {args.admin_email}  {admin_password}   (seed admin, "
-          f"{'created' if admin_created else 'existing'})")
-    for email, pw in customers:
-        print(f"    {email}  {pw}")
+    if customers:
+        print()
+        print("  customer credentials (shown once - store them now):")
+        for email, pw in customers:
+            print(f"    {email}  {pw}")
     print()
     print("  storefront: https://rfo.localhost   backoffice: https://admin.rfo.localhost")
     return 0
