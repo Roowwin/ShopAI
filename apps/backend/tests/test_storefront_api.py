@@ -229,3 +229,95 @@ async def test_newsletter_subscribe_dedupe_and_admin_list(client):
                             {"a": admin_email, "s": sales_email})
             await c.execute(text("DELETE FROM staff_users WHERE email IN (:a, :s)"),
                             {"a": admin_email, "s": sales_email})
+
+
+async def test_best_sellers_lists_paid_product_and_binds_limit(client):
+    """GET /store/best-sellers executes and reports paid sales.
+
+    Before this test the route bound :lim in SQL while passing an empty params dict, so asyncpg
+    could not prepare it and every request 500'd - which the storefront home page swallowed in a
+    bare except, leaving the block permanently empty.
+
+    Hermetic: builds its own product -> lot -> one listed unit through the real staff flow and
+    buys it. finally-cleanup covers the staff identity AND the order side of the sale.
+
+    The order rows have to go: this endpoint's rollup is exactly `order_lines x orders`, so a
+    leftover paid order is a leftover row in the thing under test. Assets/products cannot be
+    removed at all (rfo_app has no DELETE on the append-only stock_movements, which references
+    assets, and both assets and order_lines reference the product), so each run that stayed
+    behind would add one permanent `sold = 1` row to the rollup - and every row in the rollup
+    competes for the route's 12-row ceiling by `ORDER BY sold DESC`, ties broken arbitrarily.
+    Enough runs of a leave-it-behind version tie the fixture out of its own response and the
+    test goes flaky. Deleting the order keeps the rollup at its seed baseline: the sale is still
+    on the ledger (stock_movements -1 cannot be deleted, audit_log keeps the trail) and the
+    product/asset rows stay, they are just invisible to this query without an order line.
+    """
+    await _staff_cleanup()
+    eng = get_engine()
+    email = "pytest-" + uuid.uuid4().hex + "@test.rfo"
+    slug = "pytest-best-" + uuid.uuid4().hex
+    sn = "pytest-best-" + uuid.uuid4().hex
+    oid = None
+    try:
+        _, pw = await bootstrap(email, "admin")
+        r = await client.post("/staff/auth/login", json={"email": email, "password": pw})
+        assert r.status_code == 200, r.text
+        h = _h(r.json()["access_token"])
+
+        r = await client.post("/staff/products", json={"brand_slug": "apple", "category_slug": "phones",
+                                                       "model": "Pytest Best", "title": "Pytest Best Phone",
+                                                       "slug": slug}, headers=h)
+        assert r.status_code == 201, r.text
+        pid = r.json()["id"]
+
+        r = await client.post("/staff/lots", json={"notes": "pytest best-sellers"}, headers=h)
+        assert r.status_code == 201, r.text
+        lot = r.json()
+
+        r = await client.post("/staff/assets/scan-in", json={"lot_number": lot["lot_number"],
+                                                             "serial_number": sn, "product_id": pid}, headers=h)
+        assert r.status_code == 201, r.text
+        aid = r.json()["id"]
+        for step, body in (("status", {"status": "tested"}), ("grade", {"grade": "A"}),
+                           ("price", {"sale_price_cents": 19900}), ("status", {"status": "listed"})):
+            r = await client.post(f"/staff/assets/{aid}/{step}", json=body, headers=h)
+            assert r.status_code == 200, r.text
+        r = await client.post(f"/staff/lots/{lot['id']}/activate", headers=h)
+        assert r.status_code == 200, r.text
+
+        r = await client.post("/store/checkout", json={"asset_ids": [aid], "shipping_country": "AU",
+                                                       "ship_to_name": "T", "ship_line1": "x",
+                                                       "ship_city": "Sydney", "ship_postcode": "2000"})
+        assert r.status_code == 200, r.text
+        oid = r.json()["order_public_id"]
+        r = await client.post(f"/store/orders/{oid}/pay")
+        assert r.status_code == 200, r.text
+        r = await client.post(f"/store/orders/{oid}/simulate-payment")
+        assert r.status_code == 200, r.text
+
+        # the rollup must execute at all - it used to be a hard 500 on every request
+        r = await client.get("/store/best-sellers")
+        assert r.status_code == 200, r.text
+
+        # ... and must report the sale. Rows sharing a sold count are tie-broken arbitrarily, so
+        # ask for the widest window the route allows (le=12) rather than the default 4: the seed
+        # data already holds a `sold = 1` seller that would race this fixture for the last slot.
+        r = await client.get("/store/best-sellers", params={"limit": 12})
+        assert r.status_code == 200, r.text
+        hits = [x for x in r.json() if x["slug"] == slug]
+        assert len(hits) == 1 and hits[0]["sold"] == 1, r.text
+
+        # an explicit small limit exercises the :lim bind that was previously missing entirely
+        r = await client.get("/store/best-sellers", params={"limit": 1})
+        assert r.status_code == 200, r.text
+        assert len(r.json()) == 1, r.text
+    finally:
+        async with eng.begin() as c:
+            await c.execute(text("DELETE FROM refresh_tokens WHERE identity_id IN (SELECT id FROM staff_users WHERE email = :e)"),
+                            {"e": email})
+            await c.execute(text("DELETE FROM staff_users WHERE email = :e"), {"e": email})
+            if oid is not None:
+                for table in ("order_tax_lines", "payments", "order_lines"):
+                    await c.execute(text(f"DELETE FROM {table} WHERE order_id IN (SELECT id FROM orders WHERE public_id = :o)"),
+                                    {"o": oid})
+                await c.execute(text("DELETE FROM orders WHERE public_id = :o"), {"o": oid})
