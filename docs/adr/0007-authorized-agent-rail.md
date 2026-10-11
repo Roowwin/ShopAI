@@ -6,7 +6,7 @@ PROPOSED - builds on ADR 0006 (human-only Confirm): ADR 0006 gates EVERY proposa
 ## Decision
 1. Agent = first-class identity class: role "agent" (service principal), named per instance (e.g. hermes-ops-1), created/rotated/revoked by an admin in the backoffice only.
 2. Credentials: rotatable, revocable, expiring scoped token - distinct from staff password+TOTP (autonomous use makes TOTP impractical). Stored like staff secrets; rotation prints once.
-3. Same door, zero new attack surface: agents speak the EXISTING /staff/assistant chat protocol under the agent identity. No new endpoints.
+3. Same door, zero new attack surface: agents speak the EXISTING /staff/ai/chat protocol under the agent identity. No new endpoints.
 4. INVARIANT (ADR 0006, binding): no write executes without a human Confirm. Read-only ops may run without confirm within caps.
 5. Caps: per-identity AGENT_DAILY_CAP (compose passthrough; CHAT_DAILY_CAP analog) + agent-specific rate limits on the chat route.
 6. Audit: every agent call marked actor type=agent with the identity name; scripts/rehearse_day.py extends to run agent-identity turns (same invariants; content report-only) BEFORE production use.

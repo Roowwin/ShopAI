@@ -295,6 +295,13 @@ async def chat(body: ChatIn,
     return {"type": "executed", "action": action, "results": results}
 
 
+@router.get("/whoami")
+async def whoami(staff: dict = Depends(require_roles("admin", "manager", "technician", "warehouse", "sales"))):
+    return {"user": staff["email"], "role": staff["role"],
+            "can_do": sorted(a for a, rs in TOOL_ROLES.items() if staff["role"] in rs),
+            "note": "roles are set by administrators and cannot be changed via chat"}
+
+
 @router.get("/status")
 async def ai_status(staff: dict = Depends(require_roles("admin", "manager", "technician", "warehouse", "sales"))):
     r = get_redis()

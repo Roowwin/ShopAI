@@ -46,7 +46,7 @@ STAFF_WRITE_DOORS = (
     ("/staff/cms/promotions", {"name": "pytest wall offer", "kind": "percent", "value": 5}),
     ("/staff/assets/0/move", {"location": "WH-WALL"}),
     ("/staff/assets/0/status", {"status": "scrapped"}),
-    ("/staff/assistant", {"message": "scan in serial pytest-wall-probe into lot pytest-wall-lot"}),
+    ("/staff/ai/chat", {"message": "scan in serial pytest-wall-probe into lot pytest-wall-lot"}),
 )
 
 
@@ -171,7 +171,7 @@ async def test_zone_walls_hold(client):
         assert r.status_code == 401, (path, r.status_code, r.text)
     r = await client.put("/staff/cms/home", json={"hero_title": "pytest wall"}, headers=cust)
     assert r.status_code == 401, r.text
-    r = await client.get("/staff/assistant/whoami", headers=cust)
+    r = await client.get("/staff/ai/whoami", headers=cust)
     assert r.status_code == 401, r.text
 
     # ... and with no credential at all, the write doors are shut too
@@ -275,7 +275,7 @@ async def test_assistant_proposal_never_writes_without_the_flag(client):
                   (await c.execute(text("SELECT count(*) FROM assets WHERE lot_id = :l"),
                                    {"l": d["lot_id"]})).scalar_one())
 
-    r = await client.post("/staff/assistant",
+    r = await client.post("/staff/ai/chat",
                           json={"message": f"scan in serial {pending} into lot {d['lot_number']}"},
                           headers=h)
     assert r.status_code == 200, r.text
