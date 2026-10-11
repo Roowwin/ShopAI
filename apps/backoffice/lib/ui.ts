@@ -65,3 +65,18 @@ export function gradeTone(grade: string | null | undefined): string {
    fails WCAG AA, while ink-500 is 4.76:1 and passes. That is a deliberate one-token divergence
    from the mirror, the same spirit as Button's 36px - do not read it as drift. */
 export const kickerClass = "text-eyebrow uppercase text-ink-500";
+
+/* The text link inside a page's own copy - the brand ink, underlined on hover. It sits here
+   beside kickerClass for the same reason: the pair was written out by hand at each call site
+   instead, nine times across the ops pages, and anything copied that many times drifts - one copy
+   quietly takes a different ink and two links that were meant to agree stop agreeing.
+
+   Three of those nine call sites are converted here (the asset and customer detail pages). The
+   other six live in assets/page.tsx, customers/page.tsx, orders/page.tsx and orders/[id]/page.tsx,
+   which are outside this job's allowed surfaces, so they still carry the hand-written pair and
+   should take this constant when they are next touched. That gap is recorded in the job report
+   rather than closed from here.
+
+   Written verbatim rather than composed, exactly as the tones above are: Tailwind scans source
+   TEXT, so a built-up string would emit no rule at all. */
+export const linkClass = "text-brand-700 hover:underline";
