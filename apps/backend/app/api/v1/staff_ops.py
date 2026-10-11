@@ -158,8 +158,13 @@ async def move(asset_id: int, body: MoveIn, staff: dict = Depends(require_roles(
     return {"id": asset.id, "location": asset.location}
 
 
+# Read walls: lot numbers, serials, grades and storage locations are inventory intelligence, so
+# these reads take the same guard as the sibling staff reads (the CMS and newsletter ones) instead
+# of being open to everyone. Before job 8 a customer bearer - or no credential at all - answered
+# 200 with the inventory.
 @router.get("/lots")
-async def list_lots(limit: int = Query(20, le=100), offset: int = 0, db=Depends(get_db)):
+async def list_lots(limit: int = Query(20, le=100), offset: int = 0,
+                    staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
     rows = (await db.execute(select(Lot).options(selectinload(Lot.assets))
                              .order_by(Lot.id.desc()).limit(limit).offset(offset))).scalars().all()
     return [{"id": l.id, "lot_number": l.lot_number, "status": l.status,
@@ -169,7 +174,7 @@ async def list_lots(limit: int = Query(20, le=100), offset: int = 0, db=Depends(
 @router.get("/assets")
 async def list_assets(status: str | None = None, lot_number: str | None = None,
                       product_id: int | None = None, limit: int = Query(20, le=100), offset: int = 0,
-                      db=Depends(get_db)):
+                      staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
     q = select(Asset).options(selectinload(Asset.lot))
     if status:
         q = q.where(Asset.status == status)
@@ -183,7 +188,8 @@ async def list_assets(status: str | None = None, lot_number: str | None = None,
 
 
 @router.get("/movements")
-async def list_movements(asset_id: int | None = None, limit: int = Query(50, le=200), offset: int = 0, db=Depends(get_db)):
+async def list_movements(asset_id: int | None = None, limit: int = Query(50, le=200), offset: int = 0,
+                         staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
     q = select(StockMovement).order_by(StockMovement.id.desc()).limit(limit).offset(offset)
     if asset_id:
         q = q.where(StockMovement.asset_id == asset_id)

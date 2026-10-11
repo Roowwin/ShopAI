@@ -36,7 +36,8 @@ Thumbs.db
 coverage.xml
 loadtests/*.json
 loadtests/*.html
-scripts/
+/scripts/
+# anchored: root ops scripts only - a nested scripts/ dir (apps/backend/scripts) stays tracked
 # phase-delivery recipes (local ops only)
 phase*.ps1*
 *.obsolete
