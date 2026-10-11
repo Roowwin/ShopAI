@@ -8,9 +8,11 @@ each in a transaction that rolls back, so they prove the constraints constrain a
 the shared dev DB.
 
 Nothing here executes an autonomous action: the table is inert, there is no lookup to test, and the
-last test pins why that matters - with the new bounds in place, an agent identity's execute turn is
-STILL a 403 before any dispatch happens. The live-delta half of that regression (storefront and
-ledger unmoved) stays with tests/test_agent_identity.py, which owns it.
+last test pins why that matters - with the bounds in place a hand-aimed agent execute turn is STILL
+refused before any dispatch happens (job 13 reshaped that refusal from 403 to 422, not away). The
+live-delta half of that regression (storefront and ledger unmoved) stays with
+tests/test_agent_identity.py, which owns it, and the grant-gated path that CAN write lives in
+tests/test_autonomy_execute.py.
 """
 import json
 import uuid
@@ -175,16 +177,22 @@ async def test_chat_args_over_the_serialized_ceiling_is_422(client):
     assert r.status_code == 422, r.text
 
 
-# ----------------------------------------------------------------- the door stays propose-only
+# ----------------------------------------------------------------- the rail cannot be hand-aimed
 
-async def test_agent_execute_still_refused_403(client):
-    """With the bounded schema in place the agent door is UNCHANGED: a schema-valid execute turn
-    from an agent identity is refused before any dispatch. The storefront/ledger delta assertions
-    live in tests/test_agent_identity.py and must stay green alongside this."""
+async def test_agent_execute_still_refused_for_a_hand_aimed_turn(client):
+    """With the bounded schema in place the agent door is STILL closed to a hand-aimed execute turn:
+    a schema-valid turn carrying a client-chosen action + args is refused before any dispatch.
+
+    Job 13 reshaped the refusal from 403 to 422 - an agent execute turn may name a `proposal_id` the
+    server stored and nothing else (ADR 0008 decision 8) - and this is the same property it has
+    always been: the client cannot aim the rail, and the storefront/ledger do not move. The
+    storefront/ledger delta assertions live in tests/test_agent_identity.py, and the granted path
+    that CAN write lives in tests/test_autonomy_execute.py; both must stay green alongside this.
+    """
     admin = _h(await _token(client, "admin"))
     _, tok = await _mint(client, admin)
     r = await client.post("/staff/agents/chat", headers=_h(tok), json={
         "message": "list SERIAL-1", "execute": True, "action": "list",
         "args": {"serial_number": "SERIAL-1"}})
-    assert r.status_code == 403, r.text
-    assert "propose-only" in r.json()["detail"]
+    assert r.status_code == 422, r.text
+    assert "proposal_id" in r.json()["detail"], r.text

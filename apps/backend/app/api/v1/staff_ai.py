@@ -2,7 +2,8 @@ import base64
 import json
 import os
 import re
-from datetime import date
+import secrets
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field, field_validator
@@ -11,6 +12,7 @@ from sqlalchemy import text
 from app.api.v1 import staff_ops
 from app.api.v1.deps import require_roles
 from app.api.v1.staff_ops import GradeIn, LotIn, MoveIn, PriceIn, ScanIn, StatusIn
+from app.core.config import get_settings
 from app.core.db import get_db, get_ai_db
 from app.core.redis import get_redis
 from app.services.ai import AIError, ai_json, ai_text
@@ -73,6 +75,10 @@ class ChatIn(BaseModel):
     execute: bool = False
     action: str | None = Field(default=None, max_length=40)
     args: dict | None = None
+    # ADR 0008 decision 8: an AGENT execute turn names a proposal the SERVER stored and may not
+    # carry action/args at all; a proposal id is 32 hex chars, minted server-side, and this is
+    # only the schema's outer bound on it (the key shape is checked again before it reaches Redis).
+    proposal_id: str | None = Field(default=None, max_length=64)
 
     @field_validator("args")
     @classmethod
@@ -159,6 +165,365 @@ async def _resolve_asset(db, serial: str):
     return (await db.execute(text("SELECT id, status FROM assets WHERE serial_number = :s"), {"s": serial})).mappings().first()
 
 
+# ===========================================================================
+# Autonomy machinery (ADR 0008 preconditions 1+2, decisions 4/7/8/9).
+#
+# What lives here is the whole of the rail's new authorisation path, and it is deliberately inert
+# in production: a grant only exists if an admin row exists, the grants surface is a later job, so
+# nothing today can create or enable one and every step below ends in "propose" for an agent that
+# has none. The keys are the ADR's, in the same Redis store as the chat memory and the chat quota.
+#
+# The two halves are:
+#   * a PROPOSAL, persisted server-side when the model proposes - so the decided action, its
+#     validated args and the model that decided it can be read back by an execute turn in another
+#     worker or after a restart (decision 7's precondition, and decision 8's "never re-derive the
+#     action at execute time"); and
+#   * the EXECUTE gate for an agent identity, which runs only from that record.
+# ===========================================================================
+
+_PROPOSAL = "autonomy:proposal:"
+_PROPOSAL_TTL = 86400          # 24h: a proposal is a same-day intent, like the memory it sits beside
+_PROPOSAL_ID = re.compile(r"[0-9a-f]{32}\Z")
+
+
+def _cloud_model() -> str:
+    return (os.environ.get("AI_CLOUD_TEXT_MODEL", "") or "").strip()
+
+
+def _fallback_model() -> str:
+    """The model the rail falls back to when the cloud text model is configured but does not answer."""
+    return (get_settings().AI_TEXT_MODEL or "").strip() or "local"
+
+
+def _deciding_model() -> str:
+    """The model id that produced the decision just made - recorded per proposal (decision 7).
+
+    Read immediately after our own `ai_json` returns, with no await in between, so the
+    process-local LAST_VIA still describes THIS call. That read is the only thing here that is
+    process-local, and its result is persisted with the proposal: the execute path never consults
+    LAST_VIA, which is what makes the guard hold in a second uvicorn worker after a restart, where
+    the dict-based `_FALLBACK_PROPOSAL` guard silently passes.
+    """
+    if ai_svc.LAST_VIA.get("via") == "cloud":
+        return _cloud_model() or "cloud"
+    return _fallback_model()
+
+
+def _is_fallback(decided_by: str | None) -> bool:
+    """Decision 7's predicate: the cloud model is configured, and this proposal was not decided by it.
+
+    (A deployment that points the cloud and local model ids at the same model reads as fallback and
+    therefore proposes only - conservative, and the alternative reading would let a fallback
+    decision auto-execute.)"""
+    return ai_svc.cloud_text_active() and (decided_by or "") == _fallback_model()
+
+
+def _proposed_payload(pid: str | None, action: str, args: dict, resolved: dict, fallback: bool) -> dict:
+    """The proposal response - ONE shape for every path that hands a proposal back.
+
+    A fresh proposal, an ungranted execute turn and an over-cap execute turn all return this, so no
+    caller has to parse two spellings of the same thing and none of the three can be mistaken for
+    a write. `proposal_id` is additive: the staff Confirm flow posts action+args and never reads it,
+    and it is null only when the record could not be persisted at all (`_proposal_store`), which is
+    the one case where no id may be handed out - an id that is not in Redis names nothing, and an
+    agent execute turn requires a stored record before it will run anything.
+    """
+    return {"type": "proposed", "action": action, "args": args, "resolved": resolved,
+            "fallback": fallback, "proposal_id": pid,
+            "hint": "click Execute (sends execute=true with the confirmed args)"}
+
+
+def _identity(staff: dict) -> tuple[str, int]:
+    """(identity_type, identity_id) for the identity behind this turn.
+
+    The agent door delegates with the AGENT's own id (its sponsor's staff id rides along as
+    `staff["id"]` because the sponsor is a real staff_users row and the handlers' writes key on it),
+    so a proposal is scoped to the identity that made it rather than to the sponsor's bucket. Both
+    values are server-set: the agent door reads them off `get_agent`'s row, and `get_staff` never
+    mentions them, so nothing here is client-supplied.
+    """
+    if staff.get("identity_type") == "agent":
+        return "agent", int(staff["identity_id"])
+    return "staff_user", int(staff["id"])
+
+
+async def _proposal_store(r, *, identity_type: str, identity_id: int, action: str, args: dict,
+                          resolved: dict, decided_by: str) -> str:
+    """Persist one proposal and return its id. Raises whatever Redis raises (see `_proposal_load`)."""
+    pid = secrets.token_hex(16)
+    rec = {"identity_type": identity_type, "identity_id": int(identity_id), "action": action,
+           "args": args, "resolved": resolved, "decided_by": decided_by,
+           "created_at": datetime.now(timezone.utc).isoformat(), "consumed": False}
+    await r.set(_PROPOSAL + pid, json.dumps(rec), ex=_PROPOSAL_TTL)
+    return pid
+
+
+async def _proposal_load(r, pid: str | None) -> dict | None:
+    """The stored proposal, or None when the id is not one this server minted or the record expired.
+
+    A machine client supplies the id, so it is shape-checked before it becomes a Redis key, and a
+    Redis outage reads as "no such proposal" - the agent path fails closed to a refusal, never to
+    an execution.
+    """
+    if not pid or not _PROPOSAL_ID.fullmatch(pid):
+        return None
+    try:
+        raw = await r.get(_PROPOSAL + pid)
+    except Exception:
+        return None
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+
+
+# Single-use, atomically (decision 8: "consumed on execution, so it cannot be replayed"). A
+# read-then-write pair would let two concurrent turns on one proposal both see consumed=false and
+# both dispatch - for `scan_in` that is a duplicate asset, not a duplicate audit row - so the
+# check-and-set is one script. Returns 1 when THIS call consumed it, -1 when it was already
+# consumed, 0 when the record is gone.
+_PROPOSAL_CONSUME_LUA = """
+local v = redis.call('GET', KEYS[1])
+if not v then return 0 end
+local d = cjson.decode(v)
+if d['consumed'] then return -1 end
+d['consumed'] = true
+redis.call('SET', KEYS[1], cjson.encode(d), 'KEEPTTL')
+return 1
+"""
+
+
+def _cap_key(identity_type: str, identity_id: int, action: str) -> str:
+    """Decision 4's cap key: day-scoped, per (identity, action), in the chat quota's own store."""
+    return "autonomy:" + str(identity_type) + ":" + str(identity_id) + ":" + str(action) + ":" + date.today().isoformat()
+
+
+# Decision 4's reserve-and-refuse as one atomic step: an INCR followed by a separate DECR is not
+# atomic, so under concurrency it can overshoot and it can go negative, and the ADR asks for one of
+# the two honest options ("reserve-then-refund with a floor of 0, accepting bounded overshoot, or an
+# atomic check-and-increment"). This is the atomic one: returns the post-increment count when the
+# caller is within cap, and -1 when it is over (the counter already put back, so an over-cap turn
+# costs nothing and degrades to a proposal).
+_CAP_RESERVE_LUA = """
+local n = redis.call('INCR', KEYS[1])
+if n == 1 then redis.call('EXPIRE', KEYS[1], ARGV[2]) end
+if n > tonumber(ARGV[1]) then
+  redis.call('DECR', KEYS[1])
+  return -1
+end
+return n
+"""
+
+# The refund half, floor-bounded at 0 and atomic for the same reason: only a counter above zero is
+# decremented, in the same round trip that reads it, so no pair of concurrent refunds can push the
+# day's budget below zero.
+_CAP_REFUND_LUA = """
+local v = tonumber(redis.call('GET', KEYS[1]) or '0')
+if v > 0 then return redis.call('DECR', KEYS[1]) end
+return -1
+"""
+
+
+async def _cap_reserve(r, key: str, cap: int) -> int:
+    """Try to spend one unit of the day's budget. >0 = this execution is within cap; -1 = over."""
+    try:
+        return int(await r.eval(_CAP_RESERVE_LUA, 1, key, int(cap), _PROPOSAL_TTL))
+    except Exception:
+        # Redis unreachable: the cap cannot be enforced, so nothing is reserved and nothing may
+        # execute (the caller treats a non-positive result as over-cap, i.e. proposes instead).
+        return -1
+
+
+async def _cap_refund(r, key: str) -> None:
+    """Give back a unit this execution reserved and provably did not spend."""
+    try:
+        await r.eval(_CAP_REFUND_LUA, 1, key)
+    except Exception:
+        return
+
+
+async def _resolve_action(db, action: str, args: dict) -> dict:
+    """The server-side ids an action needs, from its args - the resolution BOTH doors share.
+
+    The propose path calls this to build the `resolved` it shows and persists; the staff execute
+    path calls it to re-resolve the confirmed action. An agent execution never calls it at all: it
+    runs from the ids stored with the proposal, which is decision 8's "never re-derive the action
+    at execute time" - the ids were resolved once, server-side, from the same record it executes.
+
+    A None among the values means the serial/lot does not exist; the two paths disagree only in how
+    they report that (an answer on propose, a 422 on execute), never in what they resolve to.
+    """
+    if action == "activate_lot":
+        lot = await _resolve_lot(db, args.get("lot_number", ""))
+        return {"lot": {"id": lot["id"], "status": lot["status"]} if lot else None}
+    if action == "scan_in":
+        lot = await _resolve_lot(db, args.get("lot_number", ""))
+        return {"lot_id": lot["id"] if lot else None}
+    if action == "create_lot":
+        return {"ok": True}
+    a = await _resolve_asset(db, args.get("serial_number", ""))
+    return {"asset_id": a["id"] if a else None, "asset_status": a["status"] if a else None}
+
+
+def _handler_input(action: str, args: dict, resolved: dict):
+    """The validated handler input for one action, built from the proposal's own args + ids.
+
+    This is the "args VALIDATED the same way the execute handlers validate" half of the record. The
+    propose path calls it to prove the args it is about to persist are ones the execute path can
+    run; the execute path calls it to build the handler's input from the RECORD's args and ids, by
+    the same defaults this branch has always used - so the execution never sees a raw client dict,
+    and a stored proposal cannot be a dead one. Returns None for `activate_lot`, whose door takes
+    the id and nothing else.
+    """
+    if action == "create_lot":
+        return LotIn(warehouse=args.get("warehouse"), notes=args.get("notes"))
+    if action == "scan_in":
+        return ScanIn(serial_number=args.get("serial_number", ""), lot_id=resolved["lot_id"])
+    if action == "test":
+        return StatusIn(status="tested")
+    if action == "list":
+        return StatusIn(status="listed")
+    if action == "grade":
+        return GradeIn(grade=args.get("grade", "B"))
+    if action == "price":
+        return PriceIn(sale_price_cents=int(args.get("sale_price_cents", 0)))
+    if action == "move":
+        return MoveIn(location=args.get("location", "WH-A-01-01"))
+    return None
+
+
+async def _dispatch(action: str, args: dict, resolved: dict, staff: dict, db) -> list:
+    """Run one action through the staff_ops doors as plain functions and return its result rows.
+
+    Shared by the staff Confirm path and by a granted agent execution, so the two cannot drift into
+    two different writes for one action. The handlers are the authoritative guards (see
+    `staff_ops._require_role`); nothing here re-checks the role, because nothing here can be reached
+    without the check having run inside the handler itself.
+
+    Failures are the handlers' own. Every HTTPException this can raise is raised either before any
+    handler was called (a bad-args coercion, a stale id) or by a handler before its own commit - the
+    403 from the in-body guard, the 404 for a row that is gone, the 422 for an illegal status, the
+    409 from `_409` after a rollback. All four provably wrote nothing, which is what the agent path
+    refunds on (`_NOTHING_WRITTEN`).
+    """
+    results: list = []
+    try:
+        if action == "activate_lot":
+            res = await staff_ops.activate_lot(resolved["lot"]["id"], staff, db)
+            results.append({"lot_number": args.get("lot_number", ""), "lot_status": res["status"]})
+        elif action == "create_lot":
+            res = await staff_ops.create_lot(_handler_input(action, args, resolved), staff, db)
+            results.append({"lot_number": res["lot_number"], "lot_id": res["id"]})
+        elif action == "scan_in":
+            res = await staff_ops.scan_in(_handler_input(action, args, resolved), staff, db)
+            results.append({"asset_id": res["id"], "status": res["status"]})
+        else:
+            aid = resolved["asset_id"]
+            if action == "test":
+                await staff_ops.set_status(aid, StatusIn(status="tested"), staff, db)
+            elif action == "grade":
+                await staff_ops.grade(aid, _handler_input(action, args, resolved), staff, db)
+            elif action == "price":
+                await staff_ops.set_price(aid, _handler_input(action, args, resolved), staff, db)
+            elif action == "list":
+                await staff_ops.set_status(aid, StatusIn(status="listed"), staff, db)
+            elif action == "move":
+                await staff_ops.move(aid, _handler_input(action, args, resolved), staff, db)
+            results.append({"action": action, "asset_id": aid})
+    except HTTPException:
+        raise
+    except (KeyError, ValueError, TypeError) as e:
+        raise HTTPException(status_code=422, detail="bad args: " + str(e)[:120])
+    return results
+
+
+# The HTTP statuses that mean "this execution provably wrote nothing", and are therefore the exact
+# set the autonomy rail refunds a cap unit for (decision 4: "refund only when the execution
+# provably wrote nothing, not merely on a non-2xx"). Each is raised either before a handler ran, or
+# by a handler before its own commit, or after that handler's own rollback - see `_dispatch`. The
+# complement is the ADR's accepted floor-bounded overshoot: a failure AFTER a handler committed
+# cannot happen in this dispatch (nothing runs after a handler but an append), so the boundary is
+# complete rather than merely optimistic - and if a future edit put work after a commit, that work
+# failing would leave the unit spent, which is the conservative direction.
+_NOTHING_WRITTEN = (403, 404, 409, 422)
+
+
+async def _agent_execute(body: ChatIn, staff: dict, db, r) -> dict:
+    """One AGENT execution attempt, run from the server-persisted proposal and nothing else.
+
+    The gate, in order - each step narrowing to the next, and every step a refusal that cannot
+    write:
+
+    1. the turn names a proposal and carries NO action/args (decision 8: a machine client must not
+       be able to substitute args, so a substitution is a 422, not a silently-ignored field);
+    2. the record exists, is an AGENT proposal, and its identity_id is THIS agent's - a proposal is
+       identity-scoped, so one agent can never spend another's (decision 2);
+    3. it is not already consumed (single-use);
+    4. an enabled grant exists for (agent, this agent, action). None -> the turn comes back as a
+       PROPOSAL: absent a grant the Confirm line is exactly what it was (decision 1), and the agent
+       loses nothing but the execution - the record is left unconsumed for whoever can act on it;
+    5. the deciding model was not the fallback (decision 7), read from the record, not from this
+       process;
+    6. the cap is reserved atomically; over-cap -> the turn comes back as a PROPOSAL, never a
+       refusal and never a silent drop (decision 4);
+    7. the proposal is consumed ATOMICALLY (so two concurrent turns cannot both execute it), the
+       action runs from the stored args and ids, and a failure that provably wrote nothing refunds
+       the reserved unit.
+
+    Staff identities do not come through here at all: a human Confirm is untouched, and a staff
+    grant is not creatable by this job (the table admits the type, nothing writes it), so the staff
+    branch below still gates on roles alone.
+    """
+    if body.action is not None or body.args is not None:
+        raise HTTPException(status_code=422, detail=(
+            "an agent execute turn takes proposal_id only - the action and args come from the "
+            "server-side proposal, not from the client"))
+    if not body.proposal_id:
+        raise HTTPException(status_code=422, detail="execute from an agent identity requires proposal_id")
+
+    rec = await _proposal_load(r, body.proposal_id)
+    if rec is None:
+        raise HTTPException(status_code=403, detail="unknown or expired proposal")
+    if rec.get("identity_type") != "agent" or int(rec.get("identity_id") or 0) != int(staff["identity_id"]):
+        raise HTTPException(status_code=403, detail="proposal belongs to another identity")
+    if rec.get("consumed"):
+        raise HTTPException(status_code=403, detail="proposal already consumed")
+    action = rec.get("action") or ""
+    args = rec.get("args") or {}
+    resolved = rec.get("resolved") or {}
+    if action not in TOOL_ROLES:
+        raise HTTPException(status_code=403, detail="proposal names no dispatchable action")
+
+    grant = await staff_ops.enabled_agent_grant(db, staff["identity_id"], action)
+    if grant is None:
+        return _proposed_payload(body.proposal_id, action, args, resolved,
+                                 _is_fallback(rec.get("decided_by")))
+    if _is_fallback(rec.get("decided_by")):
+        raise HTTPException(status_code=403, detail=(
+            "proposed while on the fallback model - re-propose on the primary model to execute"))
+
+    cap_key = _cap_key("agent", staff["identity_id"], action)
+    if await _cap_reserve(r, cap_key, int(grant["daily_cap"])) < 0:
+        return _proposed_payload(body.proposal_id, action, args, resolved, False)
+
+    if await r.eval(_PROPOSAL_CONSUME_LUA, 1, _PROPOSAL + body.proposal_id) != 1:
+        # Lost the race to a concurrent turn on the same proposal, or it expired between the read
+        # and here. Nothing ran, so the reserved unit goes back.
+        await _cap_refund(r, cap_key)
+        raise HTTPException(status_code=403, detail="proposal already consumed")
+    try:
+        results = await _dispatch(action, args, resolved, staff, db)
+    except HTTPException as e:
+        if e.status_code in _NOTHING_WRITTEN:
+            await _cap_refund(r, cap_key)
+        raise
+    await _mem_push(r, str(staff["id"]), body.message,
+                    "executed " + action + " " + json.dumps(args or {})[:80] + " -> " + json.dumps(results)[:80] + " OK")
+    return {"type": "executed", "action": action, "results": results}
+
+
 @router.post("/chat")
 async def chat(body: ChatIn,
                staff: dict = Depends(require_roles("admin", "manager", "technician", "warehouse", "sales")),
@@ -206,7 +571,8 @@ async def chat(body: ChatIn,
         except AIError as e:
             raise HTTPException(status_code=502, detail=str(e))
 
-        fallback = ai_svc.cloud_text_active() and ai_svc.LAST_VIA.get("via") != "cloud"
+        decided_by = _deciding_model()
+        fallback = _is_fallback(decided_by)
         action = decision.get("action", "none")
         if action == "asset_details":
             cargs = decision.get("args") or {}
@@ -238,25 +604,31 @@ async def chat(body: ChatIn,
             return {"type": "answer", "answer": ans, "fallback": fallback}
         if action in TOOL_ROLES:
             args = decision.get("args") or {}
-            resolved: dict = {}
-            if action == "activate_lot":
-                lot = await _resolve_lot(db, args.get("lot_number", ""))
-                resolved["lot"] = {"id": lot["id"], "status": lot["status"]} if lot else None
-            elif action == "scan_in":
-                lot = await _resolve_lot(db, args.get("lot_number", ""))
-                resolved["lot_id"] = lot["id"] if lot else None
-            elif action == "create_lot":
-                resolved["ok"] = True
-            else:
-                a = await _resolve_asset(db, args.get("serial_number", ""))
-                resolved["asset_id"] = a["id"] if a else None
-                resolved["asset_status"] = a["status"] if a else None
+            resolved = await _resolve_action(db, action, args)
             if any(v is None for v in resolved.values()):
                 return {"type": "answer", "answer": "I could not find that serial/lot in the system - check it and ask again."}
+            try:
+                # The record must hold args the execute path can run (ADR 0008 Precondition 2), so the
+                # proposal is put through the handlers' OWN input models here, once. It is a gate on
+                # the record, not a substitute for it: the execute path builds the same models again
+                # from the stored args, and never from a client. Without this an agent would be
+                # handed a proposal that could only ever 422.
+                _handler_input(action, args, resolved)
+            except (KeyError, ValueError, TypeError):
+                return {"type": "answer", "answer": "I could not build a valid " + action + " out of that - check the details and ask again."}
             _FALLBACK_PROPOSAL[sid] = fallback
+            # Persist the proposal before it is answered (ADR 0008 preconditions 1+2): the id in the
+            # response is the ONLY thing an agent execute turn may name, and the record is what such
+            # a turn executes from. A staff proposal is stored too - same record, same identity
+            # scoping - though the human Confirm path posts action+args and never reads it back.
+            ident_type, ident_id = _identity(staff)
+            try:
+                pid = await _proposal_store(r, identity_type=ident_type, identity_id=ident_id,
+                                            action=action, args=args, resolved=resolved, decided_by=decided_by)
+            except Exception:
+                pid = None      # not recorded -> no id is offered (see `_proposed_payload`)
             await _mem_push(r, sid, body.message, "proposed action: " + action)
-            return {"type": "proposed", "action": action, "args": args, "resolved": resolved, "fallback": fallback,
-                    "hint": "click Execute (sends execute=true with the confirmed args)"}
+            return _proposed_payload(pid, action, args, resolved, fallback)
 
         answer = (decision.get("answer") or "").strip()
         if not answer:
@@ -269,6 +641,12 @@ async def chat(body: ChatIn,
         await _mem_push(r, sid, body.message, answer)
         return {"type": "answer", "answer": answer, "fallback": fallback}
 
+    # An AGENT execute turn is its own path, gated by a grant (ADR 0008 decision 9) and run from the
+    # server-persisted proposal. A STAFF execute turn is the human Confirm and is untouched below:
+    # it names the action + args the proposal already showed, and this server resolves them.
+    if staff.get("identity_type") == "agent":
+        return await _agent_execute(body, staff, db, r)
+
     action = body.action or ""
     if action not in TOOL_ROLES:
         raise HTTPException(status_code=422, detail="execute requires a known action + args")
@@ -277,43 +655,10 @@ async def chat(body: ChatIn,
     if staff["role"] not in TOOL_ROLES[action]:
         raise HTTPException(status_code=403, detail="your role cannot execute " + action)
     args = body.args or {}
-    results: list = []
-    try:
-        if action == "activate_lot":
-            lot = await _resolve_lot(db, args.get("lot_number", ""))
-            if lot is None:
-                raise HTTPException(status_code=422, detail="lot not found")
-            res = await staff_ops.activate_lot(lot["id"], staff, db)
-            results.append({"lot_number": args.get("lot_number", ""), "lot_status": res["status"]})
-        elif action == "create_lot":
-            res = await staff_ops.create_lot(LotIn(warehouse=args.get("warehouse"), notes=args.get("notes")), staff, db)
-            results.append({"lot_number": res["lot_number"], "lot_id": res["id"]})
-        elif action == "scan_in":
-            lot = await _resolve_lot(db, args.get("lot_number", ""))
-            if lot is None:
-                raise HTTPException(status_code=422, detail="lot not found")
-            res = await staff_ops.scan_in(ScanIn(serial_number=args.get("serial_number", ""), lot_id=lot["id"]), staff, db)
-            results.append({"asset_id": res["id"], "status": res["status"]})
-        else:
-            a = await _resolve_asset(db, args.get("serial_number", ""))
-            if a is None:
-                raise HTTPException(status_code=422, detail="asset not found")
-            aid = a["id"]
-            if action == "test":
-                await staff_ops.set_status(aid, StatusIn(status="tested"), staff, db)
-            elif action == "grade":
-                await staff_ops.grade(aid, GradeIn(grade=args.get("grade", "B")), staff, db)
-            elif action == "price":
-                await staff_ops.set_price(aid, PriceIn(sale_price_cents=int(args.get("sale_price_cents", 0))), staff, db)
-            elif action == "list":
-                await staff_ops.set_status(aid, StatusIn(status="listed"), staff, db)
-            elif action == "move":
-                await staff_ops.move(aid, MoveIn(location=args.get("location", "WH-A-01-01")), staff, db)
-            results.append({"action": action, "asset_id": aid})
-    except HTTPException:
-        raise
-    except (KeyError, ValueError, TypeError) as e:
-        raise HTTPException(status_code=422, detail="bad args: " + str(e)[:120])
+    resolved = await _resolve_action(db, action, args)
+    if any(v is None for v in resolved.values()):
+        raise HTTPException(status_code=422, detail=("lot not found" if action in ("activate_lot", "scan_in") else "asset not found"))
+    results = await _dispatch(action, args, resolved, staff, db)
     await _mem_push(r, sid, body.message, ("executed " + action + " " + json.dumps(args or {})[:80] + " -> " + json.dumps(results)[:80] + " OK"))
     return {"type": "executed", "action": action, "results": results}
 
