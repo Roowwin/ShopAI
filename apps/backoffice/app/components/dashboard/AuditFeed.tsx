@@ -7,7 +7,13 @@ import { MUTED_TONE } from "./tokens";
    log is append-only at the DB level (0001_initial revokes UPDATE/DELETE on it), so a row here
    can never be an action affordance. The actor is shown as its type plus id: the API's actor_id
    is a staff_users.id, which is what the audit trail itself records - resolving it to an email
-   would be a second query per row, the N+1 this endpoint exists to avoid. */
+   would be a second query per row, the N+1 this endpoint exists to avoid.
+
+   Every cell's CONTENT styling lives on an inner span, never on the TD. TD carries only layout
+   (its own px-3 py-2 align-middle plus whitespace-nowrap here): there is no tailwind-merge, so a
+   colour class on the cell would append to the primitive's rather than replace it, and TD exposes
+   no colour prop to replace it with. Keeping colour one level in is what makes TD's contract
+   ("layout only") true rather than aspirational. */
 type Entry = { at: string; actor_type: string; actor_id: number | null; entity: string; action: string; entity_id: number | null };
 
 type Props = { entries: Entry[] };
@@ -28,20 +34,26 @@ export default function AuditFeed({ entries }: Props) {
         <TBody>
           {entries.map((e, i) => (
             <TR key={`${e.at}-${i}`}>
-              <TD className="text-ink-500 whitespace-nowrap">{when(e.at)}</TD>
+              <TD className="whitespace-nowrap">
+                <span className="text-ink-500">{when(e.at)}</span>
+              </TD>
               <TD>
                 <Badge colorClass={MUTED_TONE}>
                   {e.actor_type}{e.actor_id != null ? ` · ${e.actor_id}` : ""}
                 </Badge>
               </TD>
-              <TD className="font-mono text-xs text-ink-600">
-                {e.entity}{e.entity_id != null ? ` #${e.entity_id}` : ""}
+              <TD>
+                <span className="font-mono text-xs text-ink-600">
+                  {e.entity}{e.entity_id != null ? ` #${e.entity_id}` : ""}
+                </span>
               </TD>
-              <TD className="text-ink-900">{e.action}</TD>
+              <TD>
+                <span className="text-ink-900">{e.action}</span>
+              </TD>
             </TR>
           ))}
           {entries.length === 0 && (
-            <TR><TD colSpan={4} className="text-ink-500">No audit activity yet.</TD></TR>
+            <TR><TD colSpan={4}><span className="text-ink-500">No audit activity yet.</span></TD></TR>
           )}
         </TBody>
       </Table>
