@@ -1,0 +1,146 @@
+import type { ReactNode } from "react";
+import ContentPage, { Note, Section } from "../components/ContentPage";
+
+export const metadata = {
+  title: "Our grades A-D - RFO Store",
+  description: "What grade A, B, C and D mean for cosmetic condition, battery health and price on refurbished devices.",
+};
+
+type Grade = {
+  letter: string;
+  label: string;
+  tone: string;
+  battery: string;
+  looks: string[];
+  best: string;
+};
+
+const GRADES: Grade[] = [
+  {
+    letter: "A",
+    label: "Like new",
+    tone: "bg-emerald-600",
+    battery: "Battery health 90% or better",
+    looks: [
+      "No visible marks when you hold it at arm's length",
+      "Screen free of scratches, chips and shadowing",
+      "Frame and back clean, at most faint marks under direct light",
+    ],
+    best: "Buyers who want the newest-feeling device and the longest battery life.",
+  },
+  {
+    letter: "B",
+    label: "Excellent",
+    tone: "bg-emerald-500",
+    battery: "Battery health 85% or better",
+    looks: [
+      "Light micro-scratches on the frame or back cover",
+      "Screen clean and unmarked when the display is on",
+      "No dents, no cracks, no bent chassis",
+    ],
+    best: "Most customers. Nearly new in the hand, a clear step down in price from Grade A.",
+  },
+  {
+    letter: "C",
+    label: "Good",
+    tone: "bg-amber-500",
+    battery: "Battery health 80% or better",
+    looks: [
+      "Visible scuffs, scratches or small dents on the frame",
+      "Screen may show faint marks that are not visible while it is on",
+      "All wear is cosmetic - the device is fully functional",
+    ],
+    best: "Value hunters who will use a case anyway and would rather save the difference.",
+  },
+  {
+    letter: "D",
+    label: "Fair",
+    tone: "bg-slate-500",
+    battery: "Battery health 80% or better",
+    looks: [
+      "Obvious cosmetic wear: scuffed edges, deeper scratches, small dents",
+      "Possible small blemish in a screen corner, or a replaced screen or battery",
+      "Any replaced part is a genuine-quality part, and it is noted on the condition report",
+    ],
+    best: "The lowest price we can offer on a fully working device - great for a spare, a first phone or a test unit.",
+  },
+];
+
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex gap-3">
+      <span className="w-28 shrink-0 text-slate-500">{label}</span>
+      <span className="flex-1 text-slate-700">{children}</span>
+    </div>
+  );
+}
+
+export default function GradesPage() {
+  return (
+    <ContentPage
+      title="Our grades: A to D"
+      intro="Every device we sell is tested, cleaned and graded by hand on the same four-point scale. The grade describes cosmetic condition only - it never describes how well the device works, because every grade is fully functional and covered by the same 12-month warranty."
+    >
+      <Section title="The scale at a glance">
+        <Row label="Grade A">Like new. Closest to an unboxed device, best battery health, highest price.</Row>
+        <Row label="Grade B">Excellent. Light wear you have to look for. The balanced choice.</Row>
+        <Row label="Grade C">Good. Clearly visible cosmetic wear, functionally identical.</Row>
+        <Row label="Grade D">Fair. Heaviest wear we will sell, fully working, lowest price.</Row>
+      </Section>
+
+      {GRADES.map((g) => (
+        <section key={g.letter} className="rounded-2xl ring-1 ring-slate-200 bg-white p-5">
+          <div className="flex items-center gap-3">
+            <span className={"h-9 w-9 rounded-xl text-white font-bold flex items-center justify-center " + g.tone}>{g.letter}</span>
+            <div>
+              <h2 className="font-semibold">Grade {g.letter} - {g.label}</h2>
+              <p className="text-xs text-slate-500">{g.battery}</p>
+            </div>
+          </div>
+          <ul className="mt-3 space-y-1.5 text-sm text-slate-700 leading-relaxed list-disc pl-5">
+            {g.looks.map((l) => (
+              <li key={l}>{l}</li>
+            ))}
+          </ul>
+          <p className="mt-3 text-sm text-slate-600">
+            <span className="font-medium text-slate-900">Best for: </span>
+            {g.best}
+          </p>
+        </section>
+      ))}
+
+      <Section title="What every grade includes">
+        <p>
+          Grading is the last step, not the only one. Before a device is graded it goes through the same refurbishment and test
+          process regardless of which grade it will end up as:
+        </p>
+        <ul className="space-y-1.5 list-disc pl-5">
+          <li>Full factory reset and secure data wipe, then a clean operating system installed.</li>
+          <li>Every unit serialised and tracked from intake to dispatch, with the masked serial shown on the listing.</li>
+          <li>Function test on screen and touch, cameras, speakers and microphones, Wi-Fi, Bluetooth and cellular, charging port, buttons, biometrics and sensors.</li>
+          <li>Battery health read from the device and recorded on the condition report that ships in the box.</li>
+          <li>Deep clean and sanitise, then a final cosmetic grade against the descriptions above.</li>
+          <li>Network unlocked, so it works on any compatible AU or NZ carrier.</li>
+        </ul>
+      </Section>
+
+      <Section title="Choosing between two grades">
+        <p>
+          The same model at Grade B and Grade C is the same device internally - the difference is what it looks like and what it
+          costs. If the device lives in a case and a screen protector, Grade C or D usually saves money with no functional
+          downside. If you plan to resell it later or want maximum battery life for years of use, pay for Grade A or B.
+        </p>
+        <Note>
+          Grades describe cosmetics honestly and conservatively: we would rather a device arrive looking better than described than
+          the other way around. If a unit does not match its grade, it is covered by the 30-day return policy and the 12-month
+          warranty - see <a className="underline" href="/returns">returns &amp; warranty</a>.
+        </Note>
+        <p>
+          Want to see what is on the shelf in a particular grade right now? Browse the{" "}
+          <a className="text-emerald-700 hover:underline" href="/">shop</a> or check the{" "}
+          <a className="text-emerald-700 hover:underline" href="/faq">FAQ</a> for how ordering works.
+        </p>
+      </Section>
+    </ContentPage>
+  );
+}

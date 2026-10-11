@@ -57,6 +57,7 @@ export default function Header() {
 {cats.slice(0, 6).map((c) => (
             <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className="hover:text-emerald-700">{c.name}</a>
           ))}
+          <a href="/faq" className="hover:text-emerald-700">FAQ</a>
                     <a href="/assistant" className="hover:text-emerald-700">Ask AI</a>
         </nav>
         <div className="relative flex-1 max-w-xl mx-auto">
