@@ -1,6 +1,7 @@
 # architect review round 1
 
-Manual reviewer. Gate 69 passed / 3 deselected; storefront build green 13/13; prod-server route check 10/10 at 200 (worked via the worktree-over-baked-image mount technique - twice proven).
+Manual reviewer. Gate 69/3; store build green 13/13; route check 10/10 (mount technique).
 
-VERDICT: PASS
-- Tokens (motion/ease) exposed through theme - no page hand-writes transitions. Typography scale via primitives. Interactive states COMPLETED on existing components (hover/focus/disabled kept; active added; focus ring extended to cards/links). Reduced motion collapses durations AND cancels literal transforms (0ms would still jump). linkClass unification + underlined-at-rest = no colour-alone meaning; one off-scale spacing corrected.
+VERDICT: PASS (mechanics)
+- Tokens/typography/states/reduced-motion/linkClass all as planned; motion-reduce cancels literal transforms (a nuance most miss).
+- VISUAL ACCEPTANCE: rejected by the owner (not good yet) - escalated; the owner's visual notes drive round 2 (premium direction: display font, palette restraint, air, card depth).
