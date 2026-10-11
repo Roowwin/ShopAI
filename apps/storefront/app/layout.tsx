@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import Header from "./components/Header";
+import FooterNewsletter from "./components/FooterNewsletter";
 import { apiInternal } from "@/lib/api";
 
 export const metadata = { title: "RFO Store", description: "Certified refurbished, delivered across AU & NZ" };
@@ -36,6 +37,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               <p>Prices in AUD incl. applicable GST (AU 10% / NZ 15%).</p>
               <p className="mt-1">Serials shown masked for buyer confidence.</p>
             </div>
+          </div>
+          <div className="max-w-6xl mx-auto px-6 pb-8">
+            <FooterNewsletter />
           </div>
         </footer>
       </body>
