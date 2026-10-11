@@ -4,7 +4,16 @@
 
    `battery` + `looks` are the long form the /grades page renders. `spec` and `useCase` are the two
    one-line descriptions the product page shows per grade: the condition spec, and the most common
-   use case. */
+   use case.
+
+   `tone` and `pill` are design-token classes (see tailwind.config.ts `colors.grade`), not raw palette
+   values. They used to be raw Tailwind classes, which had a live consequence: this file lives in ./lib
+   and Tailwind's `content` glob did not include it, so the classes were never emitted - Grade D's
+   badge background was missing from the built CSS entirely. `content` now covers ./lib; keep these as
+   plain literals so the scanner can still see them.
+
+   A is the brand hue (emerald). B is deliberately sky, not emerald: with both A and B emerald the two
+   badges were indistinguishable at a glance. */
 export type Grade = {
   letter: string;
   label: string;
@@ -20,8 +29,8 @@ export const GRADES: Grade[] = [
   {
     letter: "A",
     label: "Like new",
-    tone: "bg-emerald-600",
-    pill: "bg-emerald-50 text-emerald-700",
+    tone: "bg-grade-a-solid",
+    pill: "bg-grade-a-soft text-grade-a-ink",
     battery: "Battery health 90% or better",
     looks: [
       "No visible marks when you hold it at arm's length",
@@ -34,8 +43,8 @@ export const GRADES: Grade[] = [
   {
     letter: "B",
     label: "Excellent",
-    tone: "bg-emerald-500",
-    pill: "bg-sky-50 text-sky-700",
+    tone: "bg-grade-b-solid",
+    pill: "bg-grade-b-soft text-grade-b-ink",
     battery: "Battery health 85% or better",
     looks: [
       "Light micro-scratches on the frame or back cover",
@@ -48,8 +57,8 @@ export const GRADES: Grade[] = [
   {
     letter: "C",
     label: "Good",
-    tone: "bg-amber-500",
-    pill: "bg-amber-50 text-amber-700",
+    tone: "bg-grade-c-solid",
+    pill: "bg-grade-c-soft text-grade-c-ink",
     battery: "Battery health 80% or better",
     looks: [
       "Visible scuffs, scratches or small dents on the frame",
@@ -62,8 +71,8 @@ export const GRADES: Grade[] = [
   {
     letter: "D",
     label: "Fair",
-    tone: "bg-slate-500",
-    pill: "bg-slate-100 text-slate-600",
+    tone: "bg-grade-d-solid",
+    pill: "bg-grade-d-soft text-grade-d-ink",
     battery: "Battery health 80% or better",
     looks: [
       "Obvious cosmetic wear: scuffed edges, deeper scratches, small dents",
@@ -74,3 +83,8 @@ export const GRADES: Grade[] = [
     useCase: "The lowest price we can offer on a fully working device - great for a spare, a first phone or a test unit.",
   },
 ];
+
+/** Look up a grade by its letter. The one way to turn a grade string from the API into its copy and colours. */
+export function gradeFor(letter: string): Grade | undefined {
+  return GRADES.find((g) => g.letter === letter);
+}

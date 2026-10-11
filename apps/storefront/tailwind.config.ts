@@ -5,8 +5,8 @@ import type { Config } from "tailwindcss";
    `rgb(var(--token) / <alpha-value>)`. The channel values live in globals.css.
 
    `content` must include ./lib: lib/grades.ts holds class strings, and Tailwind only
-   emits classes it can see as literals in a scanned file. When it did not, grade D's
-   `bg-slate-500` was missing from the built CSS entirely. */
+   emits classes it can see as literals in a scanned file. When it did not, Grade D's
+   badge background was missing from the built CSS entirely. */
 const token = (name: string) => `rgb(var(${name}) / <alpha-value>)`;
 
 const config: Config = {
