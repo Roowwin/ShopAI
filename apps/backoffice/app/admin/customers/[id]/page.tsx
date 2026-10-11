@@ -2,10 +2,10 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Badge, Card, Heading, Stat, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
+import { Badge, Card, Heading, Stat, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
 import { aud, when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
-import { statusTone } from "@/lib/ui";
+import { linkClass, statusTone } from "@/lib/ui";
 
 /* One customer: who they are and every order they have placed.
 
@@ -54,14 +54,23 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const shown = data?.orders.length ?? 0;
   const truncated = c != null && c.orders_count > shown;
 
+  /* The one condition that says "the gate below is open". The heading is rendered OUTSIDE that
+     gate on purpose (SSR has no session, and a heading that only appeared once data arrived would
+     leave an SSR response with no heading at all) - but the email in it is PII the API hands only
+     to a qualified session, so the heading takes its value from the same three facts rather than
+     from `c` alone. `c` alone is not the gate: it is empty today only because it derives from
+     gated state, and a second way to seed this state would put an unqualified customer's address
+     in the heading. */
+  const cleared = checked && allowed && c != null && data != null;
+
   return (
     <main className="max-w-5xl mx-auto p-4 space-y-4 min-h-screen">
-      <a href="/admin/customers" className="text-sm text-brand-700 hover:underline">&larr; All customers</a>
-      <Heading level="h1">{c ? c.email : "Customer #" + id}</Heading>
+      <a href="/admin/customers" className={cn("text-sm", linkClass)}>&larr; All customers</a>
+      <Heading level="h1">{cleared && c ? c.email : "Customer #" + id}</Heading>
 
       {msg && <Card className="p-4"><p className="text-sm text-ink-600">{msg}</p></Card>}
 
-      {checked && allowed && c && data && (
+      {cleared && c && data && (
         <>
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Stat label="Orders" value={c.orders_count} />
@@ -97,7 +106,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 {data.orders.map((o) => (
                   <TR key={o.id}>
                     <TD className="font-mono text-xs">
-                      <a href={"/admin/orders/" + o.id} className="text-brand-700 hover:underline">{o.public_id.slice(0, 8)}</a>
+                      <a href={"/admin/orders/" + o.id} className={linkClass}>{o.public_id.slice(0, 8)}</a>
                     </TD>
                     <TD><Badge colorClass={statusTone(o.status)}>{o.status}</Badge></TD>
                     <TD className="text-right tabular-nums">{o.item_count}</TD>
