@@ -117,11 +117,14 @@ async def home_content(db=Depends(get_db)):
             out.update(stored)
             slug = str((deal or {}).get("product_slug") or "").strip() if isinstance(deal, dict) else ""
             if slug:
+                # INNER JOIN on purpose: the deal card may only publish when the product has at
+                # least one listed asset in an active lot. A LEFT JOIN would still return the
+                # product row (null price) for a stockless product and publish an empty card.
                 prod = (await db.execute(text("""
                     SELECT p.title, p.image_url, min(a.sale_price_cents) AS price_from_cents
                     FROM products p
-                    LEFT JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
-                                      AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
+                    JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
+                                 AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
                     WHERE p.slug = :s AND p.status = 'active'
                     GROUP BY p.title, p.image_url
                 """), {"s": slug})).mappings().first()
