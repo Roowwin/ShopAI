@@ -52,10 +52,18 @@ same tuples.
      existing chat cap and memory;
    - the counter **increments on execution only** (not on propose), so a proposal that is never granted costs
      nothing;
-   - a refused or failed execution **is refunded** (decrement), so a transient error cannot consume a day's budget;
+   - a refused or failed execution **is refunded** (decrement), so a transient error cannot consume a day's
+     budget. Two cases this must pin, because the handlers commit inside themselves (`set_status`/`set_price`
+     mutate and commit, then return): refund only when the execution **provably wrote nothing**, not merely on a
+     non-2xx - otherwise a failure *after* the mutation would refund a write that stands; and make the
+     reserve/refund pair **atomic or floor-bounded** (reserve-then-refund with a floor of 0, accepting bounded
+     overshoot, or an atomic check-and-increment), since an `INCR` then `DECR` is not atomic and can overshoot or
+     go negative under concurrency;
    - **over-cap degrades to propose**: returned as a proposal for a human Confirm, never executed and never
      silently dropped. This deliberately does NOT copy `CHAT_DAILY_CAP`, which increments before its role and
      fallback checks and never refunds.
+   These per-(identity, action) caps are **cumulative with, not an alternative to**, ADR 0006 decision 5's
+   per-identity `AGENT_DAILY_CAP` (untouched) - both must be satisfied.
 5. **Audit.** Every autonomous execution writes the same mutation audit row as a human one, plus
    `meta.autonomy = {grant_id, identity}`. Agent executions use `actor_type = 'agent'`. `audit_log` is
    append-only; autonomy adds no new write path. Note this touches **every** `staff_ops` handler (they hardcode
@@ -69,16 +77,20 @@ same tuples.
    The deciding model must be recorded **per proposal, server-side (Redis, alongside the memory and cap keys)**, and
    the execute path must read it from there. This is a precondition, not a nicety.
 8. **Never re-derive the action at execute time.** Auto-execution runs **from the server-persisted, validated
-   proposal** (its `action`, `args` and resolved ids), never from a client echo of them. Today's execute branch
+   proposal** (its `action`, `args` and resolved ids), never from a client echo of them. The stored proposal is
+   **identity-scoped and single-use** (consumed on execution, so it cannot be replayed). Today's execute branch
    re-reads `body.action`/`body.args` and re-resolves the asset, defaulting grade and location - so this is new
    machinery to build, not a constraint on existing behaviour, and a machine client must not be able to
    substitute args.
 9. **Agent identities are authorised by a grant, not by a role.** `staff_users.role` admits no `agent` and every
    `TOOL_ROLES` tuple is a staff-role tuple, so an agent can execute nothing today. Resolution: the execution gate
-   for an **agent** identity is a valid enabled grant for that action (created by an admin, bounded by the class and
-   cap), while staff roles continue to be governed by `TOOL_ROLES`. **A staff grant may only be created for an
-   action the identity's role already permits** - a grant never widens a role tuple. The in-body `_require_role`
-   guard is extended to accept "role permits it" OR "a valid agent grant exists", and nothing else.
+   for an **agent** identity is a valid enabled grant for that action, while staff roles continue to be governed by
+   `TOOL_ROLES`. **A staff grant may only be created for an action the identity's role already permits** - a grant
+   never widens a role tuple. The in-body `_require_role` guard is extended to accept "role permits it" OR - **and
+   only for `identity_type == 'agent'`** - "a valid enabled agent grant for this action exists", and nothing else.
+   Two properties this path rests on, which are therefore obligations: **the grantable action set is closed to
+   `TOOL_ROLES` keys** (an action the rail cannot dispatch cannot be granted), and **grants are created only by an
+   admin** in the backoffice. Without both, the branch would be a general bypass rather than a bounded one.
 10. **Revocation gates the future; it does not recall the past.** Disabling a grant or flipping a kill switch stops
     the *next* execution. An action already dispatched is not undone - a device already published stays published
     and a price already set stays set. Operators must be told this, because "instant" is otherwise read as recall.
@@ -133,8 +145,10 @@ and the scorecard must be pasted and archived:
 - **revocation**: disable a grant, then execute -> refused, and previously published state unchanged (decision 10).
 
 ## Consequences
-**+** Automation proposes and, where granted, disposes - within caps, fully audited, without credential sharing and
-without a new attack surface.
+**+** Automation proposes and, where granted, disposes - within caps, fully audited, without credential sharing.
+**Same door, one new authorisation path**: the grant-scoped branch of decision 9 lets an agent identity past
+`TOOL_ROLES` on the existing chat route. The *door* is unchanged; the authorization surface is not, and it is
+bounded by action class and cap. Stated plainly because this is the sentence most likely to be quoted later.
 **+** The Confirm line remains for everything ungranted, and removing grants restores the old behaviour exactly.
 **-** The safety property the test suite asserts today ("a proposal never writes") must be **split, not deleted**:
 ungranted / kill-switch -> zero deltas; granted -> exactly one write plus the audit marker. Approving this ADR
@@ -150,8 +164,9 @@ Inherited from ADR 0006 decision 8: unattended multi-step execution chains, and 
 (store) zone.
 
 ## Open questions for the owner (acceptance)
-1. **Outward actions are grantable.** The owner has decided this; recorded as an explicit decision with its blast
-   radius stated rather than as a default anyone inherits.
+1. **Confirm outward actions are grantable.** The owner has already directed this; it is recorded here as an
+   explicit decision with its blast radius stated, rather than as a default anyone inherits. Listed only so the
+   acceptance is explicit rather than implied.
 2. **Caps cover admin/manager**, departing from `CHAT_DAILY_CAP`'s exemption - confirm.
 3. **The Preconditions are a gate, not a checklist.** Confirm that no grant is enabled until all eight are built and
    the rehearsal scorecard (including the cross-worker fallback and agent-turn cases) is archived.
