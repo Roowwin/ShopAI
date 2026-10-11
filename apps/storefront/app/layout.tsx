@@ -16,24 +16,24 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang="en-AU">
       <body className="bg-surface-muted text-ink-900 min-h-screen flex flex-col">
         <Header />
-        {promo && (<div className="bg-emerald-600 text-white text-xs px-6 py-1.5 text-center">{promo}</div>)}
+        {promo && (<div className="bg-brand-600 text-white text-xs px-6 py-1.5 text-center">{promo}</div>)}
         <div className="flex-1">{children}</div>
-        <footer className="bg-slate-900 text-slate-300 mt-12">
+        <footer className="bg-ink-900 text-ink-300 mt-12">
           <div className="max-w-6xl mx-auto px-6 py-8 grid gap-6 md:grid-cols-3 text-sm">
             <div>
-              <p className="font-semibold text-white flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500"></span>RFO Store</p>
-              <p className="text-xs text-slate-400 mt-1">Certified refurbished electronics. Every device renewed, graded and tracked - e-waste kept out of landfill.</p>
+              <p className="font-semibold text-white flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-brand-500"></span>RFO Store</p>
+              <p className="text-xs text-ink-400 mt-1">Certified refurbished electronics. Every device renewed, graded and tracked - e-waste kept out of landfill.</p>
             </div>
             <div className="text-xs space-y-1">
-              <a href="/" className="block hover:text-emerald-300">Shop</a>
-              <a href="/search" className="block hover:text-emerald-300">Search</a>
-              <a href="/assistant" className="block hover:text-emerald-300">Ask the AI</a>
-              <a href="/faq" className="block hover:text-emerald-300">FAQ</a>
-              <a href="/contact" className="block hover:text-emerald-300">Contact</a>
-              <a href="/grades" className="block hover:text-emerald-300">Our grades A-D</a>
-              <a href="/returns" className="block hover:text-emerald-300">Returns &amp; warranty</a>
+              <a href="/" className="block hover:text-brand-300">Shop</a>
+              <a href="/search" className="block hover:text-brand-300">Search</a>
+              <a href="/assistant" className="block hover:text-brand-300">Ask the AI</a>
+              <a href="/faq" className="block hover:text-brand-300">FAQ</a>
+              <a href="/contact" className="block hover:text-brand-300">Contact</a>
+              <a href="/grades" className="block hover:text-brand-300">Our grades A-D</a>
+              <a href="/returns" className="block hover:text-brand-300">Returns &amp; warranty</a>
             </div>
-            <div className="text-xs text-slate-400">
+            <div className="text-xs text-ink-400">
               <p>Prices in AUD incl. applicable GST (AU 10% / NZ 15%).</p>
               <p className="mt-1">Serials shown masked for buyer confidence.</p>
             </div>

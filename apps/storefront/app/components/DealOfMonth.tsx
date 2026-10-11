@@ -1,6 +1,6 @@
 import { aud } from "@/lib/api";
 import ProductArt from "./ProductArt";
-import { Badge, Card, Heading } from "./ui";
+import { Badge, Button, Card, Heading } from "./ui";
 
 type Deal = {
   title?: string | null;
@@ -19,8 +19,8 @@ export default function DealOfMonth({ deal }: { deal?: Deal | null }) {
       <Card radius="control" interactive href={"/products/" + deal.product_slug} className="mt-4 flex flex-col md:flex-row overflow-hidden">
         <ProductArt slug={deal.product_slug} imageUrl={deal.image_url} alt={title} className="md:w-1/2 w-full aspect-[4/3] object-cover"
           fallback={
-          <div className="md:w-1/2 w-full aspect-[4/3] bg-gradient-to-br from-emerald-50 to-emerald-100 flex items-center justify-center">
-            <span className="text-2xl font-bold text-emerald-600">{title.slice(0, 2).toUpperCase()}</span>
+          <div className="md:w-1/2 w-full aspect-[4/3] bg-gradient-to-br from-brand-50 to-brand-100 flex items-center justify-center">
+            <span className="text-2xl font-bold text-brand-600">{title.slice(0, 2).toUpperCase()}</span>
           </div>
           } />
         <div className="p-5 md:w-1/2 flex flex-col justify-center">
@@ -31,7 +31,7 @@ export default function DealOfMonth({ deal }: { deal?: Deal | null }) {
           <p className="text-brand-700 font-semibold mt-2">
             {deal.price_from_cents !== null && deal.price_from_cents !== undefined ? aud(deal.price_from_cents) : "-"}
           </p>
-          <span className="self-start mt-4 bg-brand-600 text-white rounded-control px-5 py-2.5 font-semibold">View deal</span>
+          <Button as="span" variant="primary" className="self-start mt-4">View deal</Button>
         </div>
       </Card>
     </section>

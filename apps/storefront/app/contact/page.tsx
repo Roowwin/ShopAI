@@ -18,9 +18,9 @@ export default function ContactPage() {
       intro="We are an online-only store, so email is the fastest way to reach a human. Every message is answered by our Australian support team - no offshore call centre, no ticket maze."
     >
       <Section title="Customer support">
-        <div className="rounded-xl bg-slate-50 ring-1 ring-slate-200 px-4 py-3">
-          <p className="font-medium text-slate-900">support@rfostore.com.au</p>
-          <p className="text-slate-600 mt-0.5">
+        <div className="rounded-control bg-surface-sunken ring-1 ring-line px-4 py-3">
+          <p className="font-medium text-ink-900">support@rfostore.com.au</p>
+          <p className="text-ink-600 mt-0.5">
             Orders, delivery, returns and warranty claims. Typical reply time is under 4 business hours, and no later than the next
             business day.
           </p>
@@ -32,15 +32,15 @@ export default function ContactPage() {
       </Section>
 
       <Section title="Opening hours">
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-line">
           {HOURS.map((h) => (
             <div key={h.day} className="flex items-center justify-between py-2 first:pt-0 last:pb-0">
-              <span className="text-slate-600">{h.day}</span>
+              <span className="text-ink-600">{h.day}</span>
               <span className="font-medium">{h.hours}</span>
             </div>
           ))}
         </div>
-        <p className="text-slate-500">
+        <p className="text-ink-500">
           Messages that arrive outside these hours are queued and answered in order the next business morning. New Zealand customers:
           our hours are the same clock time as yours, two hours ahead of your local time.
         </p>
@@ -51,7 +51,7 @@ export default function ContactPage() {
           Placeholder address - confirm with support before sending anything, and never ship a device without a return authorisation
           email from us first:
         </p>
-        <p className="font-mono text-xs bg-slate-50 ring-1 ring-slate-200 rounded-xl px-4 py-3 text-slate-700">
+        <p className="font-mono text-xs bg-surface-sunken ring-1 ring-line rounded-control px-4 py-3 text-ink-700">
           RFO Store - Returns
           <br />
           Unit 4, 12 Example Street
@@ -77,9 +77,9 @@ export default function ContactPage() {
 
       <Section title="Before you write">
         <Note>
-          Many questions are already answered instantly in our <a className="underline" href="/faq">FAQ</a>, including dispatch
+          Many questions are already answered instantly in our <a className="text-brand-700 underline" href="/faq">FAQ</a>, including dispatch
           times, grade meanings and what is covered by the 12-month warranty. For stock questions, the{" "}
-          <a className="underline" href="/assistant">AI assistant</a> can check live availability and prices for you right away.
+          <a className="text-brand-700 underline" href="/assistant">AI assistant</a> can check live availability and prices for you right away.
         </Note>
       </Section>
     </ContentPage>

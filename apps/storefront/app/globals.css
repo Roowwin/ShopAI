@@ -40,6 +40,10 @@
     --line: 226 232 240;
     --line-strong: 203 213 225;
 
+    --danger-50: 254 242 242;
+    --danger-200: 254 202 202;
+    --danger-600: 220 38 38;
+
     --grade-a-solid: 5 150 105;
     --grade-a-soft: 236 253 245;
     --grade-a-ink: 4 120 87;

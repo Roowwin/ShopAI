@@ -4,7 +4,7 @@ import { useState } from "react";
 import { aud } from "@/lib/api";
 import { cartAdd, cartGet } from "@/lib/cart";
 import { GRADES } from "@/lib/grades";
-import { Badge, Card, EmptyState, Heading } from "../../components/ui";
+import { Badge, Button, Card, EmptyState, Heading } from "../../components/ui";
 
 type Unit = { id: number; grade: string; sale_price_cents: number; serial_tail: string };
 type Row = {
@@ -65,9 +65,9 @@ export default function GradePanel({ units, title }: { units: Unit[]; title: str
                 <span className="text-xs text-ink-400">from</span>
                 <span className="font-semibold text-sm">{aud(r.cheapest.sale_price_cents)}</span>
                 {inCart.includes(r.cheapest.id) ? (
-                  <a href="/cart" className="text-xs rounded-lg bg-indigo-50 text-indigo-700 px-3 py-1.5">In cart - view</a>
+                  <Button href="/cart" variant="secondary" size="sm">In cart - view</Button>
                 ) : (
-                  <button className="text-xs rounded-lg bg-indigo-600 text-white px-3 py-1.5 hover:bg-indigo-500" onClick={() => add(r.cheapest)}>Add to cart</button>
+                  <Button variant="primary" size="sm" onClick={() => add(r.cheapest)}>Add to cart</Button>
                 )}
               </div>
             </div>

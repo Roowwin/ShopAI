@@ -2,6 +2,7 @@ import { apiInternal, aud } from "@/lib/api";
 import LoadMore from "./components/LoadMore";
 import DealOfMonth from "./components/DealOfMonth";
 import ProductArt from "./components/ProductArt";
+import { Button, Card, Eyebrow, Heading } from "./components/ui";
 
 export const revalidate = 30;
 
@@ -22,46 +23,46 @@ export default async function Home() {
   } catch { void 0; }
   return (
     <main>
-      <section className="bg-gradient-to-r from-emerald-700 via-emerald-800 to-emerald-950 text-white px-8 py-12">
-        <p className="text-[11px] uppercase tracking-widest text-emerald-200">RFO Store</p>
-        <h1 className="text-3xl font-semibold mt-2">{promo ?? hero.hero_title}</h1>
-        <p className="text-emerald-100 mt-2 max-w-xl">{promo ? "Sale prices below - " + hero.hero_sub : hero.hero_sub}</p>
-        <a href="#shop" className="inline-block mt-5 bg-amber-400 text-slate-900 rounded-xl px-5 py-2.5 font-semibold hover:bg-amber-300">{hero.cta_label}</a>
+      <section className="bg-gradient-to-r from-brand-700 via-brand-800 to-brand-950 text-white px-8 py-12">
+        <p className="text-eyebrow uppercase text-brand-200">RFO Store</p>
+        <Heading level="display" className="mt-2">{promo ?? hero.hero_title}</Heading>
+        <p className="text-brand-100 mt-2 max-w-xl">{promo ? "Sale prices below - " + hero.hero_sub : hero.hero_sub}</p>
+        <Button variant="accent" href="#shop" className="mt-5">{hero.cta_label}</Button>
       </section>
       <DealOfMonth deal={hero.deal_of_month} />
       <section className="max-w-6xl mx-auto px-4 pt-10">
-        <div className="flex items-end justify-between"><h2 className="text-xl font-semibold">New arrivals</h2><a href="/" className="text-xs text-emerald-700">View all</a></div>
+        <div className="flex items-end justify-between"><Heading level="h2">New arrivals</Heading><a href="/" className="text-xs text-brand-700">View all</a></div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
           {arrivals.map((i) => (
-            <a key={i.slug} href={"/products/" + i.slug} className="rounded-xl ring-1 ring-slate-200 bg-white overflow-hidden hover:ring-emerald-300 transition">
+            <Card key={i.slug} radius="control" interactive href={"/products/" + i.slug} className="overflow-hidden">
               <ProductArt slug={i.slug} imageUrl={i.image_url} alt={i.title} className="w-full aspect-[4/3] object-cover"
                 fallback={
-                <div className="aspect-[4/3] bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-                  <span className="text-lg font-bold text-slate-400">{(i.brand || "?").slice(0, 2).toUpperCase()}</span></div>
+                <div className="aspect-[4/3] bg-gradient-to-br from-surface-sunken to-line flex items-center justify-center">
+                  <span className="text-lg font-bold text-ink-400">{(i.brand || "?").slice(0, 2).toUpperCase()}</span></div>
                 } />
               <div className="p-3"><p className="font-medium truncate text-sm">{i.title}</p>
                 <p className="text-sm font-semibold mt-1">{i.price_from_cents !== null ? aud(i.price_from_cents) : "-"}</p></div>
-            </a>
+            </Card>
           ))}
         </div>
       </section>
       {best.length > 0 && (
       <section className="max-w-6xl mx-auto px-4 pt-8">
-        <h2 className="text-xl font-semibold">Best sellers</h2>
-        <p className="text-xs text-slate-400">Most purchased by real customers (paid orders).</p>
+        <Heading level="h2">Best sellers</Heading>
+        <p className="text-xs text-ink-400">Most purchased by real customers (paid orders).</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
           {best.map((i) => (
-            <a key={i.slug} href={"/products/" + i.slug} className="rounded-xl ring-1 ring-slate-200 bg-white p-3 hover:ring-emerald-300 transition">
-              <p className="text-[11px] uppercase tracking-wider text-slate-400">{i.brand}</p>
+            <Card key={i.slug} radius="control" interactive href={"/products/" + i.slug} className="p-3">
+              <Eyebrow>{i.brand}</Eyebrow>
               <p className="font-medium truncate text-sm">{i.title}</p>
-              <p className="text-xs text-slate-500 mt-1">{i.sold} sold</p>
-            </a>
+              <p className="text-xs text-ink-500 mt-1">{i.sold} sold</p>
+            </Card>
           ))}
         </div>
       </section>)}
 
       <section id="shop" className="max-w-6xl mx-auto px-4 pt-10 pb-8">
-        <h2 className="text-xl font-semibold">Our products</h2>
+        <Heading level="h2">Our products</Heading>
         <LoadMore initial={items.filter((_: any, k: number) => k >= 4)} categories={cats} />
       </section>
     </main>

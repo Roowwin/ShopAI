@@ -1,7 +1,7 @@
 import { apiInternal, aud } from "@/lib/api";
 import GradePanel from "./GradePanel";
 import ProductArt from "../../components/ProductArt";
-import { Badge, Card, Eyebrow, Heading } from "../../components/ui";
+import { Badge, Button, Card, Eyebrow, Heading } from "../../components/ui";
 import { notFound } from "next/navigation";
 
 export const revalidate = 0;
@@ -32,11 +32,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <ProductArt slug={slug} imageUrl={p.image_url} alt={p.title}
             className="w-full aspect-[4/3] rounded-card object-cover ring-1 ring-line bg-surface-sunken"
             fallback={
-            <div className="aspect-[4/3] rounded-card bg-gradient-to-br from-slate-200 to-slate-300 flex flex-col items-center justify-center text-slate-500">
+            <div className="aspect-[4/3] rounded-card bg-gradient-to-br from-line to-line-strong flex flex-col items-center justify-center text-ink-500">
               <div className="text-center">
-                <p className="text-4xl font-bold text-slate-400">{(p.brand || "?").slice(0, 2).toUpperCase()}</p>
+                <p className="text-4xl font-bold text-ink-400">{(p.brand || "?").slice(0, 2).toUpperCase()}</p>
                 <p className="text-xs mt-2">Product photo coming soon</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">{p.brand} {p.model}</p>
+                <p className="text-[10px] text-ink-400 mt-0.5">{p.brand} {p.model}</p>
               </div>
             </div>} />
           <div className="grid grid-cols-3 gap-2 mt-3 text-[11px] text-ink-500">
@@ -73,7 +73,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               <p className="text-sm font-medium">Not sure which unit fits?</p>
               <p className="text-xs text-ink-300">Ask the AI - it answers from live stock only.</p>
             </div>
-            <a href={"/assistant?about=" + slug} className="shrink-0 text-xs rounded-lg bg-emerald-600 px-3 py-2 hover:bg-emerald-500">Ask the AI</a>
+            <Button href={"/assistant?about=" + slug} size="sm" className="shrink-0">Ask the AI</Button>
           </div>
         </div>
       </div>

@@ -75,7 +75,7 @@ export default function GradesPage() {
         <Note>
           Grades describe cosmetics honestly and conservatively: we would rather a device arrive looking better than described than
           the other way around. If a unit does not match its grade, it is covered by the 30-day return policy and the 12-month
-          warranty - see <a className="underline" href="/returns">returns &amp; warranty</a>.
+          warranty - see <a className="text-brand-700 underline" href="/returns">returns &amp; warranty</a>.
         </Note>
         <p>
           Want to see what is on the shelf in a particular grade right now? Browse the{" "}

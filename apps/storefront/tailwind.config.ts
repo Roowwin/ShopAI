@@ -48,6 +48,12 @@ const config: Config = {
           900: token("--ink-900"),
           DEFAULT: token("--ink-900"),
         },
+        // destructive actions (cart remove, checkout errors)
+        danger: {
+          50: token("--danger-50"),
+          200: token("--danger-200"),
+          600: token("--danger-600"),
+        },
         // page, card and sunken backgrounds
         surface: {
           DEFAULT: token("--surface"),

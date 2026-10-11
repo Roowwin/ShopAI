@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { API, aud } from "@/lib/api";
 import ProductArt from "./ProductArt";
-import { Badge, Card, EmptyState, Eyebrow } from "./ui";
+import { Badge, Button, Card, EmptyState, Eyebrow } from "./ui";
 
 type Cat = { name: string; n: number };
 
@@ -37,9 +37,9 @@ export default function LoadMore({ initial, categories }: { initial: any[]; cate
     <div>
       {categories && categories.length > 1 && (
         <div className="flex flex-wrap gap-2 mt-4">
-          <button onClick={() => pick(null)} className={"text-xs rounded-full px-3 py-1.5 border " + (cat === null ? "bg-emerald-600 text-white border-emerald-600" : "bg-white border-slate-200 hover:border-emerald-300")}>All</button>
+          <Button variant={cat === null ? "primary" : "secondary"} size="sm" onClick={() => pick(null)}>All</Button>
           {categories.map((c) => (
-            <button key={c.name} onClick={() => pick(c.name)} className={"text-xs rounded-full px-3 py-1.5 border " + (cat === c.name ? "bg-emerald-600 text-white border-emerald-600" : "bg-white border-slate-200 hover:border-emerald-300")}>{c.name} ({c.n})</button>
+            <Button key={c.name} variant={cat === c.name ? "primary" : "secondary"} size="sm" onClick={() => pick(c.name)}>{c.name} ({c.n})</Button>
           ))}
         </div>
       )}
@@ -49,8 +49,8 @@ export default function LoadMore({ initial, categories }: { initial: any[]; cate
             <div className="relative">
               <ProductArt slug={i.slug} imageUrl={i.image_url} alt={i.title} className="w-full aspect-[4/3] object-cover"
                 fallback={
-                <div className="aspect-[4/3] bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-                  <span className="text-xl font-bold text-slate-400">{(i.brand || "?").slice(0, 2).toUpperCase()}</span>
+                <div className="aspect-[4/3] bg-gradient-to-br from-surface-sunken to-line flex items-center justify-center">
+                  <span className="text-xl font-bold text-ink-400">{(i.brand || "?").slice(0, 2).toUpperCase()}</span>
                 </div>} />
               {!i.image_url && (
                 <Badge colorClass="bg-brand-600 text-white" className="absolute top-2 right-2">Eco choice</Badge>
@@ -71,7 +71,7 @@ export default function LoadMore({ initial, categories }: { initial: any[]; cate
       </div>
       {more && (
         <div className="text-center mt-6">
-          <button className="border border-emerald-200 text-emerald-700 rounded-xl px-6 py-2 hover:bg-emerald-50 disabled:opacity-50" onClick={() => void fetchPage(false, cat)} disabled={busy}>{busy ? "Loading..." : "Load more"}</button>
+          <Button variant="secondary" onClick={() => void fetchPage(false, cat)} disabled={busy}>{busy ? "Loading..." : "Load more"}</Button>
         </div>
       )}
     </div>

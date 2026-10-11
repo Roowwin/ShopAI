@@ -1,5 +1,5 @@
 import { apiInternal, aud } from "@/lib/api";
-import { Badge, Card, EmptyState, Eyebrow, Heading } from "../components/ui";
+import { Badge, Button, Card, EmptyState, Eyebrow, Heading, Input } from "../components/ui";
 
 export const revalidate = 0;
 
@@ -13,8 +13,8 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     <main className="max-w-6xl mx-auto px-4 pt-8 pb-10">
       <Heading level="h1">Search</Heading>
       <form className="mt-4" action="/search" method="get">
-        <input name="q" defaultValue={q ?? ""} className="border rounded-xl px-4 py-2.5 w-full md:w-96" placeholder="e.g. galaxy s21" />
-        <button className="bg-emerald-600 text-white rounded-xl px-5 py-2.5 ml-2">Search</button>
+        <Input name="q" defaultValue={q ?? ""} className="md:w-96" placeholder="e.g. galaxy s21" />
+        <Button type="submit" className="ml-2">Search</Button>
       </form>
       {q && <p className="text-xs text-ink-400 mt-3">Results for "{q}" - {items.length} found (source: live catalog, today)</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-5">

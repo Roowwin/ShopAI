@@ -16,7 +16,7 @@ const VARIANTS: Record<Variant, string> = {
   accent: "bg-accent-400 text-ink-900 hover:bg-accent-300",
   secondary: "bg-surface text-brand-700 ring-1 ring-line hover:bg-brand-50",
   ghost: "text-brand-700 hover:bg-brand-50",
-  danger: "bg-surface text-red-600 ring-1 ring-red-200 hover:bg-red-50",
+  danger: "bg-surface text-danger-600 ring-1 ring-danger-200 hover:bg-danger-50",
 };
 
 const SIZES: Record<Size, string> = {
