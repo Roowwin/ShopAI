@@ -59,6 +59,10 @@ STAFF_READS = (
     ("/staff/orders/999999999999", {}),
     ("/staff/customers/999999999999", {}),
     ("/staff/assets/999999999999", {}),
+    # Same reason as /staff/overview: the agent listing returns an object, so only the
+    # "no credential -> 401" leg applies. It is admin-only, and an AGENT token is 401 here too -
+    # see tests/test_agent_identity.py, which sweeps this tuple with an agent bearer.
+    ("/staff/agents", {}),
 )
 
 
