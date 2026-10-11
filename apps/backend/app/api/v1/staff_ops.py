@@ -238,6 +238,20 @@ HOME_DEFAULTS = {"hero_title": "Renewed tech. Zero waste.",
                  "hero_sub": "Certified refurbished devices - serialised, graded, warehouse-tracked.",
                  "cta_label": "Shop devices"}
 
+DEAL_BADGE = "Deal of the Month"
+
+
+def _clean_deal_of_month(raw):
+    """Normalise the CMS deal_of_month record; None when unset/blank (block off)."""
+    if not isinstance(raw, dict):
+        return None
+    slug = str(raw.get("product_slug") or "").strip()
+    if not slug:
+        return None
+    return {"title": str(raw.get("title") or "").strip()[:140],
+            "product_slug": slug[:140],
+            "badge": str(raw.get("badge") or "").strip()[:40] or DEAL_BADGE}
+
 
 @router.get("/cms/home")
 async def cms_get_home(staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
@@ -245,6 +259,8 @@ async def cms_get_home(staff: dict = Depends(require_roles("admin", "manager")),
     out = dict(HOME_DEFAULTS)
     if row is not None:
         out.update(row[0])
+    if _clean_deal_of_month(out.get("deal_of_month")) is None:
+        out.pop("deal_of_month", None)
     return out
 
 
@@ -253,6 +269,9 @@ async def cms_put_home(body: dict, staff: dict = Depends(require_roles("admin", 
     val = {"hero_title": str(body.get("hero_title") or HOME_DEFAULTS["hero_title"])[:120],
            "hero_sub": str(body.get("hero_sub") or HOME_DEFAULTS["hero_sub"])[:240],
            "cta_label": str(body.get("cta_label") or HOME_DEFAULTS["cta_label"])[:40]}
+    deal = _clean_deal_of_month(body.get("deal_of_month"))
+    if deal is not None:
+        val["deal_of_month"] = deal
     await db.execute(text("INSERT INTO site_settings (key, value) VALUES ('home', CAST(:v AS jsonb)) ON CONFLICT (key) DO UPDATE SET value = CAST(:v AS jsonb), updated_at = now()"), {"v": json.dumps(val)})
     await db.commit()
     await audit(db, "staff", entity="cms", action="home_updated", actor_id=staff["id"], after=val)

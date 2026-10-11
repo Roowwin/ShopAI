@@ -112,7 +112,30 @@ async def home_content(db=Depends(get_db)):
     try:
         row = (await db.execute(text("SELECT value FROM site_settings WHERE key = 'home'"))).first()
         if row is not None and row[0]:
-            out.update(row[0])
+            stored = dict(row[0])
+            deal = stored.pop("deal_of_month", None)
+            out.update(stored)
+            slug = str((deal or {}).get("product_slug") or "").strip() if isinstance(deal, dict) else ""
+            if slug:
+                # INNER JOIN on purpose: the deal card may only publish when the product has at
+                # least one listed asset in an active lot. A LEFT JOIN would still return the
+                # product row (null price) for a stockless product and publish an empty card.
+                prod = (await db.execute(text("""
+                    SELECT p.title, p.image_url, min(a.sale_price_cents) AS price_from_cents
+                    FROM products p
+                    JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
+                                 AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
+                    WHERE p.slug = :s AND p.status = 'active'
+                    GROUP BY p.title, p.image_url
+                """), {"s": slug})).mappings().first()
+                if prod is not None:
+                    out["deal_of_month"] = {
+                        "title": str(deal.get("title") or "").strip() or prod["title"],
+                        "product_slug": slug,
+                        "badge": str(deal.get("badge") or "").strip() or "Deal of the Month",
+                        "image_url": prod["image_url"],
+                        "price_from_cents": (int(prod["price_from_cents"])
+                                             if prod["price_from_cents"] is not None else None)}
     except Exception:
         pass
     return out

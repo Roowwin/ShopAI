@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
-type Hero = { hero_title: string; hero_sub: string; cta_label: string };
+type Deal = { title: string; product_slug: string; badge: string };
+type Hero = { hero_title: string; hero_sub: string; cta_label: string; deal_of_month?: Deal | null };
 type Promo = { id: number; name: string; kind: string; value: number; active: boolean };
 type CProd = { id: number; title: string; slug: string; category: string; image_url: string | null; featured: boolean; listed_units: number };
 
@@ -27,6 +28,17 @@ export default function CmsPage() {
     const r = await apiFetch("/staff/cms/home", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(hero) });
     flash(r.ok ? "Homepage saved - live on the storefront" : "Save failed");
     if (r.ok) { const j: any = await r.json().catch(() => ({})); setHero(j); }
+  }
+
+  function setDealSlug(slug: string) {
+    const s = slug.trim();
+    if (!s) { setHero({ ...hero, deal_of_month: null }); return; }
+    const match = prods.find((p) => p.slug === s);
+    setHero({ ...hero, deal_of_month: {
+      title: match?.title ?? hero.deal_of_month?.title ?? "",
+      product_slug: s,
+      badge: hero.deal_of_month?.badge || "Deal of the Month",
+    } });
   }
 
   async function addPromo() {
@@ -58,6 +70,9 @@ export default function CmsPage() {
           onChange={(e) => setHero({ ...hero, hero_title: e.target.value })} />
         <input className="border rounded-xl px-3 py-2 w-full mb-2" placeholder="hero subtitle" value={hero.hero_sub}
           onChange={(e) => setHero({ ...hero, hero_sub: e.target.value })} />
+        <input className="border rounded-xl px-3 py-2 w-full mb-2" placeholder="deal of the month product slug (blank = off)"
+          value={hero.deal_of_month?.product_slug ?? ""}
+          onChange={(e) => setDealSlug(e.target.value)} />
         <div className="flex gap-2">
           <input className="border rounded-xl px-3 py-2 flex-1" placeholder="button label (e.g. Shop devices)" value={hero.cta_label}
             onChange={(e) => setHero({ ...hero, cta_label: e.target.value })} />

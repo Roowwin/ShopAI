@@ -39,6 +39,73 @@ async def test_search(client):
     assert r.json() == []
 
 
+async def test_home_content_deal_publish_gate(client):
+    """home-content publishes deal_of_month only for an active product holding at least one
+    listed asset in an active lot - never for a stockless product, and never for the
+    unset/blank/bad-slug states.
+
+    Hermetic: owns its product and restores site_settings itself, so it depends on no
+    hand-seeded lot and on no pre-existing CMS pin.
+    """
+    eng = get_engine()
+    slug = "pytest-stockless-" + uuid.uuid4().hex
+    email = "pytest-" + uuid.uuid4().hex + "@test.rfo"
+    async with eng.begin() as c:
+        prev = (await c.execute(text("SELECT value::text FROM site_settings WHERE key = 'home'"))).scalar_one_or_none()
+        await c.execute(text("""
+            INSERT INTO products (brand_id, category_id, model, title, slug, status)
+            SELECT (SELECT id FROM brands ORDER BY id LIMIT 1),
+                   (SELECT id FROM categories ORDER BY id LIMIT 1),
+                   'pytest-stockless', 'Pytest stockless device', :s, 'active'
+        """), {"s": slug})
+    try:
+        # fixture guard: the product really is live and really is stockless, so an absent block
+        # cannot be mistaken for a missing or typo'd slug.
+        async with eng.begin() as c:
+            row = (await c.execute(text("""
+                SELECT p.status, count(a.id) FROM products p
+                LEFT JOIN assets a ON a.product_id = p.id
+                WHERE p.slug = :s GROUP BY p.status
+            """), {"s": slug})).first()
+        assert row is not None and row[0] == "active" and row[1] == 0, "fixture must be a live, stockless product"
+
+        _, pw = await bootstrap(email, "admin")
+        r = await client.post("/staff/auth/login", json={"email": email, "password": pw})
+        assert r.status_code == 200, r.text
+        tok = r.json()["access_token"]
+        h = _h(tok)
+
+        async def pin(deal):
+            body = {"hero_title": "Pytest hero"}
+            if deal is not None:
+                body["deal_of_month"] = deal
+            r = await client.put("/staff/cms/home", json=body, headers=h)
+            assert r.status_code == 200, r.text
+            r = await client.get("/store/home-content")
+            assert r.status_code == 200, r.text
+            return r.json()
+
+        # unset: no record stored at all
+        assert "deal_of_month" not in await pin(None), "unset must publish nothing"
+        # blank slug: normalised away by the CMS write
+        assert "deal_of_month" not in await pin({"product_slug": "   ", "title": "x", "badge": "y"}), "blank slug must publish nothing"
+        # bad slug: product does not exist
+        assert "deal_of_month" not in await pin({"product_slug": slug + "-nope", "title": "x", "badge": "y"}), "bad slug must publish nothing"
+        # stockless: product is live and active but has no listed asset in an active lot
+        body = await pin({"product_slug": slug, "title": "Pytest deal", "badge": "Deal of the Month"})
+        assert "deal_of_month" not in body, "stockless product must not publish a deal card"
+        assert body["hero_title"] == "Pytest hero", "endpoint still serves the rest of the CMS payload"
+    finally:
+        async with eng.begin() as c:
+            await c.execute(text("DELETE FROM products WHERE slug = :s"), {"s": slug})
+            if prev is None:
+                await c.execute(text("DELETE FROM site_settings WHERE key = 'home'"))
+            else:
+                await c.execute(text("UPDATE site_settings SET value = CAST(:v AS jsonb) WHERE key = 'home'"), {"v": prev})
+            await c.execute(text("DELETE FROM refresh_tokens WHERE identity_id IN (SELECT id FROM staff_users WHERE email = :e)"), {"e": email})
+            await c.execute(text("DELETE FROM staff_users WHERE email = :e"), {"e": email})
+
+
 async def test_guest_checkout_to_paid(client):
     await _staff_cleanup()
     eng = get_engine()
