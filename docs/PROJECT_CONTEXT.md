@@ -14,7 +14,7 @@
 ## STANDING RULES (full, carried from v3 + today)
 - PS 5.1: [IO.File]::WriteAllText + UTF8Encoding($false), LF/no-BOM; NEVER Set-Content/Out-File; never name PS vars $home/$args/$error/$host. 2-arg WriteAllText = UTF8 no-BOM by .NET default.
 - $var: inside double-quoted strings = drive-qualified syntax -> ${var}: or here-strings. Content carrying quotes/& -> SINGLE-QUOTE here-strings (@'...'@), never inline "...".
-- cmd/native args strip embedded double quotes (3x burned): single quotes / Read-Host / here-strinig-into-FILES, never console JSON.
+- cmd/native args strip embedded double quotes (3x burned): single quotes / Read-Host / here-string-into-FILES, never console JSON.
 - Small per-file pastes + checkpoint prints; big multi-command pastes mangle (evidence: junk file from split paste). Parser aborts whole batch on parse error.
 - Long outputs: git --no-pager. Verify backend edits: docker compose run --rm api python -c "import app.main; print('IMPORT OK')". After api/worker recreate: restart nginx. Raw .NET IO uses process CWD (Join-Path (Get-Location)).
 - SQLAlchemy text() + asyncpg: NO :param::TYPE casts inside text() - branch in Python.
