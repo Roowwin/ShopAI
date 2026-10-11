@@ -1,15 +1,20 @@
 import type { ElementType, ReactNode } from "react";
 import { cn } from "./cn";
 
-/* The single answer to "same heading level, different size on every page". Every page h1 is
-   24px; the hero is the one intentional 30px `display`. */
+/* The single answer to "same heading level, different size on every page". The size, weight,
+   leading and tracking of each level now come from the `display`/`h1`/`h2`/`h3` steps of the type
+   scale in tailwind.config.ts - this file only decides which level maps to which tag, so the
+   rhythm cannot drift one page at a time. The hero is the one intentional `display`.
+
+   No colour is set here on purpose: headings inherit, which is what keeps the hero's h1 white on
+   the dark band while every h2 on a card is ink-900 from the body. */
 type Level = "display" | "h1" | "h2" | "h3";
 
 const LEVELS: Record<Level, { tag: ElementType; className: string }> = {
-  display: { tag: "h1", className: "text-3xl font-semibold tracking-tight" },
-  h1: { tag: "h1", className: "text-2xl font-semibold tracking-tight" },
-  h2: { tag: "h2", className: "text-lg font-semibold" },
-  h3: { tag: "h3", className: "text-sm font-semibold" },
+  display: { tag: "h1", className: "text-display" },
+  h1: { tag: "h1", className: "text-h1" },
+  h2: { tag: "h2", className: "text-h2" },
+  h3: { tag: "h3", className: "text-h3" },
 };
 
 type Props = {

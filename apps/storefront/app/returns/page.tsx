@@ -1,4 +1,5 @@
 import ContentPage, { Note, Section } from "../components/ContentPage";
+import { linkClass } from "../components/ui";
 
 export const metadata = {
   title: "Returns & warranty - RFO Store",
@@ -66,7 +67,7 @@ export default function ReturnsPage() {
         </ul>
         <p>
           Start the claim by emailing{" "}
-          <a className="text-brand-700 hover:underline" href="mailto:support@rfostore.com.au">support@rfostore.com.au</a> with your
+          <a className={linkClass} href="mailto:support@rfostore.com.au">support@rfostore.com.au</a> with your
           order number. Photos or a short video of the fault speed things up a lot.
         </p>
       </Section>
@@ -104,7 +105,7 @@ export default function ReturnsPage() {
           <li>Normal battery ageing after 12 months, or battery drain caused by apps and settings rather than a hardware fault.</li>
           <li>Theft or loss after delivery.</li>
           <li>Devices with the serial label or internal serial removed, altered or made unreadable.</li>
-          <li>Cosmetic wear that was accurately described by the grade you bought - see <a className="text-brand-700 hover:underline" href="/grades">our grades</a> for what each grade allows.</li>
+          <li>Cosmetic wear that was accurately described by the grade you bought - see <a className={linkClass} href="/grades">our grades</a> for what each grade allows.</li>
         </ul>
         <p>
           None of this limits your rights under the Australian Consumer Law or the New Zealand Consumer Guarantees Act. Our
@@ -131,11 +132,11 @@ export default function ReturnsPage() {
       <Section title="Questions before you buy">
         <Note>
           Not sure whether something is covered? Ask us before you order - email support@rfostore.com.au or check the{" "}
-          <a className="text-brand-700 underline" href="/faq">FAQ</a>, which covers grading, battery health and delivery times. We would rather
+          <a className={linkClass} href="/faq">FAQ</a>, which covers grading, battery health and delivery times. We would rather
           answer a question up front than process a return later.
         </Note>
         <p>
-          Ready to shop? Browse the <a className="text-brand-700 hover:underline" href="/">current stock</a> - every listing shows
+          Ready to shop? Browse the <a className={linkClass} href="/">current stock</a> - every listing shows
           its grade, battery health and how many units are on the shelf.
         </p>
       </Section>

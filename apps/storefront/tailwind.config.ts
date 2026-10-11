@@ -54,11 +54,12 @@ const config: Config = {
           200: token("--danger-200"),
           600: token("--danger-600"),
         },
-        // page, card and sunken backgrounds
+        // page, card and sunken backgrounds; `pressed` is the active/press fill of a control
         surface: {
           DEFAULT: token("--surface"),
           muted: token("--surface-muted"),
           sunken: token("--surface-sunken"),
+          pressed: token("--surface-pressed"),
         },
         // hairlines
         line: {
@@ -84,8 +85,34 @@ const config: Config = {
         // if the variable is ever absent, instead of making the declaration invalid.
         sans: ["var(--font-sans, system-ui)", "sans-serif"],
       },
+      /* The type scale. Each heading step carries its own weight, leading and tracking, so a
+         page writes `text-h2` and never hand-rolls `text-lg font-semibold`. Display is the one
+         deliberately large step (hero, product price) and gets the tightest tracking of the set;
+         tracking loosens as the size drops, which is what keeps a big line from looking airy and
+         a small one from looking cramped. `lead` is the reading size for page intros, `body` the
+         size inside cards and long copy.
+
+         Colour rhythm, applied by the primitives: headings inherit (so the hero's h1 stays white
+         on the dark band, and an h2 sitting on a card is ink-900 from the body), body copy is
+         ink-600, meta is ink-500, the eyebrow kicker is ink-400. */
       fontSize: {
         eyebrow: ["0.6875rem", { lineHeight: "1rem", letterSpacing: "0.1em" }],
+        display: ["2.25rem", { lineHeight: "1.1", letterSpacing: "-0.025em", fontWeight: "600" }],
+        h1: ["1.5rem", { lineHeight: "1.25", letterSpacing: "-0.02em", fontWeight: "600" }],
+        h2: ["1.125rem", { lineHeight: "1.35", letterSpacing: "-0.012em", fontWeight: "600" }],
+        h3: ["0.875rem", { lineHeight: "1.4", letterSpacing: "-0.006em", fontWeight: "600" }],
+        lead: ["1.0625rem", { lineHeight: "1.7" }],
+        body: ["0.875rem", { lineHeight: "1.65" }],
+      },
+      /* Motion tokens live in globals.css as CSS custom properties (see the comment there).
+         `ease-out` is intentionally re-pointed at --ease-out: the design system owns the curve,
+         and no component in either app used Tailwind's stock `ease-out` before this. */
+      transitionDuration: {
+        fast: "var(--motion-fast)",
+        base: "var(--motion-base)",
+      },
+      transitionTimingFunction: {
+        out: "var(--ease-out)",
       },
     },
   },

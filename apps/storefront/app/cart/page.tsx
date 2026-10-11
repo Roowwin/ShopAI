@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { API, aud } from "@/lib/api";
 import { cartGet, cartRemove, cartTotal, cartClear, CartLine } from "@/lib/cart";
-import { Button, Card, Heading, Input } from "../components/ui";
+import { Button, Card, cn, fieldClass, Heading, Input, linkClass } from "../components/ui";
 
 export default function CartPage() {
   const [lines, setLines] = useState<CartLine[]>([]);
@@ -57,7 +57,7 @@ export default function CartPage() {
     <main className="max-w-2xl mx-auto pt-8 px-4 pb-12 space-y-5">
       <Heading level="h1">Your cart</Heading>
       <Card className="p-5">
-        {lines.length === 0 && <p className="text-ink-500">Cart is empty - <a className="text-brand-700" href="/">browse the shop</a>.</p>}
+        {lines.length === 0 && <p className="text-ink-500">Cart is empty - <a className={linkClass} href="/">browse the shop</a>.</p>}
         {lines.map((l) => (
           <div key={l.asset_id} className="flex items-center justify-between gap-3 border-b border-line py-3 last:border-0">
             <div className="min-w-0">
@@ -75,7 +75,7 @@ export default function CartPage() {
       {lines.length > 0 && (
         <Card className="p-5 space-y-3">
           <Heading level="h2">Delivery (AU / NZ)</Heading>
-          <select className="rounded-control ring-1 ring-line bg-surface px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-700" value={country} onChange={(e) => setCountry(e.target.value)}>
+          <select className={cn(fieldClass, "px-3 py-2.5 ring-1 ring-line bg-surface hover:ring-line-strong")} value={country} onChange={(e) => setCountry(e.target.value)}>
             <option value="AU">Australia (GST 10%)</option>
             <option value="NZ">New Zealand (GST 15%)</option>
           </select>

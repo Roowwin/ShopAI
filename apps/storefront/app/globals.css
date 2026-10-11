@@ -36,6 +36,10 @@
     --surface: 255 255 255;
     --surface-muted: 248 250 252;
     --surface-sunken: 241 245 249;
+    /* The pressed fill for a control the shopper is actively clicking. A role of its own
+       rather than a reuse of --line: the two happen to share a value today, and pairing
+       them would mean a later tweak to a hairline silently restyled every input press. */
+    --surface-pressed: 226 232 240;
 
     /* The hairline boundaries below sit deliberately under the 3:1 non-text bar against white
        (1.23:1 and 1.48:1). A recorded exception, not an oversight: raising them would put mid-grey
@@ -59,5 +63,25 @@
     --grade-d-solid: 100 116 139;
     --grade-d-soft: 241 245 249;
     --grade-d-ink: 71 85 105;
+
+    /* Motion. The one source of truth for every transition in the storefront: two durations
+       (controls = fast, surfaces that move = base) and a single ease-out curve that starts
+       quickly and settles, which reads calmer than the browser default. Tailwind maps these
+       in tailwind.config.ts, so components write `duration-fast ease-out` and no page ever
+       hand-picks a millisecond value. */
+    --motion-fast: 150ms;
+    --motion-base: 200ms;
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Reduced motion: the durations collapse to zero, so every token-driven transition in the
+     app becomes an instant state change without any component having to opt out. Components
+     that also translate on hover/press carry `motion-reduce:` variants for the movement
+     itself - a 0ms transition would still jump the element a pixel. */
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --motion-fast: 0ms;
+      --motion-base: 0ms;
+    }
   }
 }
