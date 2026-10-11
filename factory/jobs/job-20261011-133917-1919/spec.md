@@ -14,7 +14,7 @@ Backlog (order revised in docs/PROJECT_CONTEXT.md v5: newsletter before wishlist
 - Tests hermetic (own fixtures + finally cleanup incl. created subscribers, tokens, staff), no hand-seeded dependence.
 - Gate green with the 4 deselects (counts grow with new tests - run and report them); storefront and backoffice builds green; tsc shows no NEW errors (assistant-page:125 pre-existing known).
 - Migration additive-only; existing migrations 0001-0008 untouched.
-- Allowed surfaces: new migration file, the store router file hosting the endpoint, backend tests, apps/backoffice/app/admin/newsletter/*, apps/storefront/app/layout.tsx (+ one new footer component), lib additions if needed. Anything else = CHANGES.
+- Allowed surfaces: new migration file, the store router file hosting the PUBLIC subscribe endpoint, staff_ops.py (admin list under /staff/newsletter), backend tests, apps/backoffice/app/admin/newsletter/*, apps/storefront/app/layout.tsx (+ one new footer component), lib additions if needed. Anything else = CHANGES.
 
 ## Constraints
 - Work only on branch factory/<job-id> (git worktree provided)
