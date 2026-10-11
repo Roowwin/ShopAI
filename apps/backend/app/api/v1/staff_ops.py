@@ -25,6 +25,9 @@ router = APIRouter(prefix="/staff", tags=["staff-ops"])
 #   * each handler re-checks its tuple in-body via `_require_role`, so the guard holds however
 #     the function is invoked (the route's `Depends` stays as well - belt and braces, and it
 #     preserves the 403 for the HTTP door).
+# For these seven routes the IN-BODY guard is the authoritative one: `Depends` is the weaker twin,
+# so editing only the route decorator is a dead edit (the body check runs regardless). Change both,
+# from the one constant - do not "fix" the wrong one.
 # Keep every set otherwise unchanged: these values ARE live authorization.
 # ---------------------------------------------------------------------------
 ROLES_CREATE_LOT = ("admin", "manager", "warehouse")
