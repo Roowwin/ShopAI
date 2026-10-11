@@ -1,4 +1,5 @@
 import { Badge, Card, Heading, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
+import { when } from "@/lib/format";
 import { MUTED_TONE } from "./tokens";
 
 /* The recent-activity feed: the last 20 audit rows the API hands back, as a Table.
@@ -17,11 +18,6 @@ import { MUTED_TONE } from "./tokens";
 type Entry = { at: string; actor_type: string; actor_id: number | null; entity: string; action: string; entity_id: number | null };
 
 type Props = { entries: Entry[] };
-
-function when(iso: string): string {
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? iso : d.toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
-}
 
 export default function AuditFeed({ entries }: Props) {
   return (

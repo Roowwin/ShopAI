@@ -1,16 +1,12 @@
 import { Stat } from "@/app/components/ui";
+import { aud } from "@/lib/format";
 
 /* The dashboard's headline numbers, as one grid of Stat tiles.
 
-   Every money figure is formatted here and nowhere else: the API speaks cents, and a cent value
-   rendered raw (112618000) is the one number on this page a human cannot read. There is no
-   `aud()` in this app's lib/api.ts - only the storefront exports one - so the formatter is
-   defined here, beside its only consumer, rather than reaching across apps. It is deliberately
-   NOT exported: StatRow is its only caller, and a lone consumer is not an API.
+   Money is formatted by lib/format.ts's `aud`, not by a local copy: the ops pages need the same
+   currency format, and J5's module-local definition existed only because lib/ was outside that
+   job's surfaces. One formatter, imported by every money figure in the app.
    Props are the API's own sub-objects, so this file needs no type shared with the page. */
-function aud(cents: number): string {
-  return (cents / 100).toLocaleString("en-AU", { style: "currency", currency: "AUD" });
-}
 
 type Props = {
   inventory: { total_units: number };

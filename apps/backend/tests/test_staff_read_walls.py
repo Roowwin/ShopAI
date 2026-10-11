@@ -48,6 +48,17 @@ STAFF_READS = (
     # list-returning reads. Adding it to READ_WALLS would fail on a CORRECT response, so the
     # "no credential -> 401" sweep is the wall this route can honour.
     ("/staff/overview", {}),
+    # Job 20's six ops views. All six return an OBJECT, so they belong HERE for the same reason
+    # /staff/overview does - READ_WALLS's admin leg asserts `r.json() == []`, and every one of
+    # these answers a correct 200 with a dict. The detail probes are aimed past every identity
+    # (a data-free id), so this sweep cannot read a real order, customer or asset even if the
+    # auth dependency one day stopped running first.
+    ("/staff/orders", {"limit": 1, "offset": 1_000_000}),
+    ("/staff/customers", {"limit": 1, "offset": 1_000_000}),
+    ("/staff/audit", {"limit": 1, "offset": 1_000_000}),
+    ("/staff/orders/999999999999", {}),
+    ("/staff/customers/999999999999", {}),
+    ("/staff/assets/999999999999", {}),
 )
 
 
