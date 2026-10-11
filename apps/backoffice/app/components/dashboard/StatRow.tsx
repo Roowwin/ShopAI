@@ -1,0 +1,39 @@
+import { Stat } from "@/app/components/ui";
+
+/* The dashboard's headline numbers, as one grid of Stat tiles.
+
+   Every money figure is formatted here and nowhere else: the API speaks cents, and a cent value
+   rendered raw (112618000) is the one number on this page a human cannot read. There is no
+   `aud()` in this app's lib/api.ts - only the storefront exports one - so the formatter is
+   defined here, beside its only consumer, rather than reaching across apps.
+   Props are the API's own sub-objects, so this file needs no type shared with the page. */
+export function aud(cents: number): string {
+  return (cents / 100).toLocaleString("en-AU", { style: "currency", currency: "AUD" });
+}
+
+type Props = {
+  inventory: { total_units: number };
+  stockValue: { at_cost_cents: number; at_list_cents: number; listed_units: number; cost_known_units: number };
+  reservations: { active: number; expiring_24h: number };
+  orders: { orders_30d: number; revenue_paid_cents_30d: number; aov_cents: number };
+  newsletter: { total: number };
+};
+
+export default function StatRow({ inventory, stockValue, reservations, orders, newsletter }: Props) {
+  return (
+    <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <Stat label="Units listed" value={stockValue.listed_units}
+            sub={`of ${inventory.total_units} units on hand`} />
+      <Stat label="Stock value at cost" value={aud(stockValue.at_cost_cents)}
+            sub={`${stockValue.cost_known_units} units with a cost`} />
+      <Stat label="Stock value at list" value={aud(stockValue.at_list_cents)}
+            sub={`${stockValue.listed_units} units priced`} />
+      <Stat label="Active reservations" value={reservations.active}
+            sub={`${reservations.expiring_24h} expiring in 24h`} />
+      <Stat label="Orders (30 days)" value={orders.orders_30d} />
+      <Stat label="Revenue paid (30 days)" value={aud(orders.revenue_paid_cents_30d)} />
+      <Stat label="Average order value" value={aud(orders.aov_cents)} />
+      <Stat label="Newsletter" value={newsletter.total} sub="subscribers" />
+    </section>
+  );
+}
