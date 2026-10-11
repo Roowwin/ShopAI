@@ -367,6 +367,34 @@ async def set_price(asset_id: int, body: PriceIn, staff: dict = Depends(require_
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
     return {"id": asset.id, "sale_price_cents": asset.sale_price_cents}
+# ------------- Promotion guards (ADR 0008 Precondition 4) -------------
+# Every handler below was route-`Depends`-only, and the ADR's own premise is that a plain-function
+# dispatch skips `Depends` entirely - so none of them had the in-body twin the seven railway doors
+# carry, and promoting one into the rail later would have needed it first. It is here now, for all
+# six, ahead of any promotion: cms_put_home, cms_edit_product, approve_listing and create_product
+# were the four the ADR names, and cms_add_promotion / cms_edit_promotion were found by sweeping
+# this file for the same shape (a write reachable without the role check).
+#
+# These are ROLE-ONLY paths, and that is structural rather than stated: none of the action names
+# below is in GUARDED_ACTIONS, so `_require_role`'s grant branch refuses an agent identity before it
+# looks anything up - a grant can never authorise a path the rail cannot dispatch. `None` is passed
+# for the session on purpose: this guard must not be able to reach a grant row even by accident.
+#
+# The role tuples are constants used by BOTH the decorator and the body, so the two cannot drift
+# apart - which is the rule the header of this file sets for the seven railway doors, applied here
+# from the start rather than after the fact. Keep every set otherwise unchanged: these ARE live
+# authorization.
+ROLES_APPROVE_LISTING = ("admin", "manager", "sales")
+ROLES_CMS = ("admin", "manager")
+ROLES_CREATE_PRODUCT = ("admin", "manager")
+ACTION_APPROVE_LISTING = "approve_listing"
+ACTION_CMS_PUT_HOME = "cms_put_home"
+ACTION_CMS_ADD_PROMOTION = "cms_add_promotion"
+ACTION_CMS_EDIT_PROMOTION = "cms_edit_promotion"
+ACTION_CMS_EDIT_PRODUCT = "cms_edit_product"
+ACTION_CREATE_PRODUCT = "create_product"
+
+
 class ProductListingIn(BaseModel):
     title: str = Field(max_length=140)
     description: str = Field(max_length=4000)
@@ -374,8 +402,9 @@ class ProductListingIn(BaseModel):
 
 @router.post("/products/{product_id}/listing")
 async def approve_listing(product_id: int, body: ProductListingIn,
-                          staff: dict = Depends(require_roles("admin", "manager", "sales")),
+                          staff: dict = Depends(require_roles(*ROLES_APPROVE_LISTING)),
                           db=Depends(get_db)):
+    await _require_role(staff, ROLES_APPROVE_LISTING, ACTION_APPROVE_LISTING, None)
     prod = await db.get(Product, product_id)
     if prod is None:
         raise HTTPException(status_code=404, detail="product not found")
@@ -426,7 +455,8 @@ async def cms_get_home(staff: dict = Depends(require_roles("admin", "manager")),
 
 
 @router.put("/cms/home")
-async def cms_put_home(body: dict, staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+async def cms_put_home(body: dict, staff: dict = Depends(require_roles(*ROLES_CMS)), db=Depends(get_db)):
+    await _require_role(staff, ROLES_CMS, ACTION_CMS_PUT_HOME, None)
     val = {"hero_title": str(body.get("hero_title") or HOME_DEFAULTS["hero_title"])[:120],
            "hero_sub": str(body.get("hero_sub") or HOME_DEFAULTS["hero_sub"])[:240],
            "cta_label": str(body.get("cta_label") or HOME_DEFAULTS["cta_label"])[:40]}
@@ -448,7 +478,8 @@ async def cms_list_promotions(staff: dict = Depends(require_roles("admin", "mana
 
 
 @router.post("/cms/promotions")
-async def cms_add_promotion(body: dict, staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+async def cms_add_promotion(body: dict, staff: dict = Depends(require_roles(*ROLES_CMS)), db=Depends(get_db)):
+    await _require_role(staff, ROLES_CMS, ACTION_CMS_ADD_PROMOTION, None)
     name = str(body.get("name") or "New offer")[:80]
     kind = body.get("kind") or "percent"
     if kind not in ("percent", "fixed"):
@@ -464,7 +495,8 @@ async def cms_add_promotion(body: dict, staff: dict = Depends(require_roles("adm
 
 
 @router.patch("/cms/promotions/{pid}")
-async def cms_edit_promotion(pid: int, body: dict, staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+async def cms_edit_promotion(pid: int, body: dict, staff: dict = Depends(require_roles(*ROLES_CMS)), db=Depends(get_db)):
+    await _require_role(staff, ROLES_CMS, ACTION_CMS_EDIT_PROMOTION, None)
     changed = {}
     for k in ("name", "kind", "value", "active"):
         if k in body:
@@ -499,7 +531,8 @@ async def cms_list_products(staff: dict = Depends(require_roles("admin", "manage
 
 
 @router.patch("/cms/products/{pid}")
-async def cms_edit_product(pid: int, body: dict, staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+async def cms_edit_product(pid: int, body: dict, staff: dict = Depends(require_roles(*ROLES_CMS)), db=Depends(get_db)):
+    await _require_role(staff, ROLES_CMS, ACTION_CMS_EDIT_PRODUCT, None)
     upd = []
     params: dict = {"i": pid}
     if "image_url" in body:
@@ -560,7 +593,8 @@ def _product_json(row) -> dict:
 
 
 @router.post("/products", status_code=201)
-async def create_product(body: ProductIn, staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+async def create_product(body: ProductIn, staff: dict = Depends(require_roles(*ROLES_CREATE_PRODUCT)), db=Depends(get_db)):
+    await _require_role(staff, ROLES_CREATE_PRODUCT, ACTION_CREATE_PRODUCT, None)
     brand_id = (await db.execute(text("SELECT id FROM brands WHERE slug = :s"),
                                 {"s": body.brand_slug})).scalar_one_or_none()
     if brand_id is None:
