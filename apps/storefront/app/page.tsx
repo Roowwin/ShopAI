@@ -1,5 +1,6 @@
 import { apiInternal, aud } from "@/lib/api";
 import LoadMore from "./components/LoadMore";
+import DealOfMonth from "./components/DealOfMonth";
 
 export const revalidate = 30;
 
@@ -26,6 +27,7 @@ export default async function Home() {
         <p className="text-emerald-100 mt-2 max-w-xl">{promo ? "Sale prices below - " + hero.hero_sub : hero.hero_sub}</p>
         <a href="#shop" className="inline-block mt-5 bg-amber-400 text-slate-900 rounded-xl px-5 py-2.5 font-semibold hover:bg-amber-300">{hero.cta_label}</a>
       </section>
+      <DealOfMonth deal={hero.deal_of_month} />
       <section className="max-w-6xl mx-auto px-4 pt-10">
         <div className="flex items-end justify-between"><h2 className="text-xl font-semibold">New arrivals</h2><a href="/" className="text-xs text-emerald-700">View all</a></div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
