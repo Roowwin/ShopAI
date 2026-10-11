@@ -29,7 +29,26 @@ router = APIRouter(prefix="/staff", tags=["staff-ops"])
 # so editing only the route decorator is a dead edit (the body check runs regardless). Change both,
 # from the one constant - do not "fix" the wrong one.
 # Keep every set otherwise unchanged: these values ARE live authorization.
+#
+# ADR 0008 decision 9 adds a SECOND way past the in-body guard, for agent identities only: an
+# enabled agent grant for the action the handler is performing. That branch is keyed on the
+# ACTION constants below, which are the `staff_ai.TOOL_ROLES` keys - so the grantable set is closed
+# to what the rail can actually dispatch (a handler passes its OWN action name; no caller supplies
+# one), and `test_autonomy_execute.py` pins GUARDED_ACTIONS equal to TOOL_ROLES so a future action
+# cannot be granted without a door behind it (or a door added without a name to grant).
 # ---------------------------------------------------------------------------
+ACTION_CREATE_LOT = "create_lot"
+ACTION_ACTIVATE_LOT = "activate_lot"
+ACTION_SCAN_IN = "scan_in"
+ACTION_GRADE = "grade"
+ACTION_PRICE = "price"
+ACTION_MOVE = "move"
+# One door serves two chat actions: received->tested is `test`, graded->listed is `list`, and
+# `set_status` names them from the status it is actually writing (see `_STATUS_ACTIONS` below).
+ACTION_TEST = "test"
+ACTION_LIST = "list"
+GUARDED_ACTIONS = frozenset((ACTION_CREATE_LOT, ACTION_ACTIVATE_LOT, ACTION_SCAN_IN, ACTION_GRADE,
+                             ACTION_PRICE, ACTION_MOVE, ACTION_TEST, ACTION_LIST))
 ROLES_CREATE_LOT = ("admin", "manager", "warehouse")
 ROLES_ACTIVATE_LOT = ("admin", "manager")
 ROLES_SCAN_IN = ("admin", "manager", "warehouse", "technician")
@@ -42,14 +61,89 @@ ROLES_PRICE = ("admin", "manager", "sales")
 ROLES_SET_STATUS = ("admin", "manager", "warehouse")
 
 
-def _require_role(staff: dict, roles: tuple[str, ...]) -> None:
-    """In-body twin of the route's ``Depends(require_roles(*roles))``.
+async def enabled_agent_grant(db, identity_id: int | None, action: str):
+    """The ENABLED grant that authorises `action` for this AGENT identity, or None.
+
+    identity_type is the literal 'agent' and not a parameter: an agent execution may only ever be
+    authorised by an agent grant (ADR 0008 decision 9), so a staff grant cannot reach this branch
+    even if one exists. A staff grant additionally may only be created for an action the role
+    already permits, which is why the role path below is untouched - a grant never widens a tuple.
+
+    `action` is always one of the GUARDED_ACTIONS names: it is a handler's own name for what it is
+    about to do, never anything client-supplied. Callers check that closure before calling.
+    """
+    if identity_id is None:
+        return None
+    return (await db.execute(text(
+        "SELECT id, action_class, daily_cap FROM autonomy_grants"
+        " WHERE identity_type = 'agent' AND identity_id = :i AND action = :a AND enabled"),
+        {"i": identity_id, "a": action})).mappings().first()
+
+
+async def _require_role(staff: dict, roles: tuple[str, ...], action: str, db=None):
+    """In-body twin of the route's ``Depends(require_roles(*roles))``, widened per ADR 0008 d.9.
 
     `staff_ai.chat` calls these handlers as plain functions, which skips every FastAPI
-    dependency. Same status and detail as `deps.require_roles`, so both doors refuse alike.
+    dependency, so the guard has to live in the body however the function is reached. Two ways
+    past it, and only two:
+
+    * the ROLE permits it - the staff rail, unchanged, and the only branch a staff identity or a
+      hand-built dict can take (the grant branch is skipped outright for `identity_type != 'agent'`,
+      before any database access); or
+    * the identity is an AGENT and an enabled agent grant exists for `action`. Never a role: the
+      delegated agent role is one no tuple admits, and that is the point.
+
+    Returns the authorising grant row (None on the role path) so the caller can write
+    `meta.autonomy` from the row that actually authorised the write, instead of re-reading
+    anything. The refusal is byte-identical to `deps.require_roles`' - an identity with no grant
+    and an identity with the wrong role are indistinguishable from outside.
+
+    Deliberately async and session-taking: the grant lookup is the only reason, and a caller with
+    no session (a plain call from a test, a future non-request dispatch) is refused rather than
+    trusted.
     """
-    if staff["role"] not in roles:
+    if staff["role"] in roles:
+        return None
+    if staff.get("identity_type") != "agent" or db is None or action not in GUARDED_ACTIONS:
         raise HTTPException(status_code=403, detail="insufficient role")
+    grant = await enabled_agent_grant(db, staff.get("identity_id"), action)
+    if grant is None:
+        raise HTTPException(status_code=403, detail="insufficient role")
+    return grant
+
+
+def _audit_actor(staff: dict) -> tuple[str, int]:
+    """(actor_type, actor_id) for the mutation audit row this identity's execution writes.
+
+    A staff turn is ('staff', staff_users.id) exactly as before. An agent execution is 'agent'
+    (ADR 0008 decision 5) and its actor_id is the AGENT's own id, not the sponsor's: the overview
+    reads `actor_type = 'staff'` precisely because actor_id is a staff_users id only for staff
+    rows, and filing an autonomous publish under the sponsoring admin's id is the misattribution
+    ADR 0008 exists to make visible. Note `stock_movements.actor_staff_id` is NOT changed - it is
+    a foreign key to staff_users, so it keeps the sponsor there; the ledger entry that identifies
+    the acting identity is this audit row, plus `meta.autonomy`.
+    """
+    if staff.get("identity_type") == "agent":
+        return "agent", staff["identity_id"]
+    return "staff", staff["id"]
+
+
+async def _audit_execution(db, staff: dict, grant, *, entity: str, action: str,
+                           entity_id: int | None = None, before: dict | None = None,
+                           after: dict | None = None, meta: dict | None = None) -> None:
+    """The audit row for a write this identity performed, for the seven guarded handlers.
+
+    Same row as a human execution, with the actor class taken from the identity context and, when
+    an agent grant authorised it, `meta.autonomy = {grant_id, identity}` (ADR 0008 decision 5).
+    The grant comes from the guard that just ran, so the id recorded is the id that authorised -
+    there is no request field anywhere in this path for a client to forge an autonomy mark with.
+    """
+    actor_type, actor_id = _audit_actor(staff)
+    if grant is not None:
+        meta = {**(meta or {}),
+                "autonomy": {"grant_id": grant["id"], "identity": staff.get("identity_name")}}
+    await audit(db, actor_type, entity=entity, action=action, entity_id=entity_id,
+                actor_id=actor_id, before=before, after=after, meta=meta)
 
 
 class LotIn(BaseModel):
@@ -79,6 +173,12 @@ class MoveIn(BaseModel):
 
 
 def _409(e: Exception) -> None:
+    """409 for a commit the database refused.
+
+    Always called AFTER `await db.rollback()`, and never after our own commit of a write that
+    stands - which is what makes a 409 (like this file's 403/404/422) a failure the autonomy rail
+    can refund a cap for: it provably wrote nothing. See `staff_ai._NOTHING_WRITTEN`.
+    """
     orig = getattr(e, "orig", None)
     msg = str(orig).replace("\n", " ")[:200] if orig is not None else str(e)[:200]
     raise HTTPException(status_code=409, detail=msg)
@@ -91,11 +191,12 @@ async def _gen_lot_number(db) -> str:
 
 @router.post("/lots", status_code=201)
 async def create_lot(body: LotIn, staff: dict = Depends(require_roles(*ROLES_CREATE_LOT)), db=Depends(get_db)):
-    _require_role(staff, ROLES_CREATE_LOT)
+    grant = await _require_role(staff, ROLES_CREATE_LOT, ACTION_CREATE_LOT, db)
     ln = body.lot_number or await _gen_lot_number(db)
     lot = Lot(lot_number=ln, status="intake", warehouse=body.warehouse, notes=body.notes)
     db.add(lot)
-    await audit(db, "staff", entity="lot", action="lot_create", actor_id=staff["id"], meta={"lot_number": ln})
+    await _audit_execution(db, staff, grant, entity="lot", action="lot_create",
+                           meta={"lot_number": ln})
     try:
         await db.commit()
     except SQLAlchemyError as e:
@@ -105,14 +206,14 @@ async def create_lot(body: LotIn, staff: dict = Depends(require_roles(*ROLES_CRE
 
 @router.post("/lots/{lot_id}/activate")
 async def activate_lot(lot_id: int, staff: dict = Depends(require_roles(*ROLES_ACTIVATE_LOT)), db=Depends(get_db)):
-    _require_role(staff, ROLES_ACTIVATE_LOT)
+    grant = await _require_role(staff, ROLES_ACTIVATE_LOT, ACTION_ACTIVATE_LOT, db)
     lot = await db.get(Lot, lot_id)
     if lot is None:
         raise HTTPException(status_code=404, detail="lot not found")
     before = {"status": lot.status}
     lot.status = "active"
-    await audit(db, "staff", entity="lot", entity_id=lot.id, action="lot_activate",
-                actor_id=staff["id"], before=before, after={"status": "active"})
+    await _audit_execution(db, staff, grant, entity="lot", entity_id=lot.id, action="lot_activate",
+                           before=before, after={"status": "active"})
     try:
         await db.commit()
     except SQLAlchemyError as e:
@@ -122,7 +223,7 @@ async def activate_lot(lot_id: int, staff: dict = Depends(require_roles(*ROLES_A
 
 @router.post("/assets/scan-in", status_code=201)
 async def scan_in(body: ScanIn, staff: dict = Depends(require_roles(*ROLES_SCAN_IN)), db=Depends(get_db)):
-    _require_role(staff, ROLES_SCAN_IN)
+    grant = await _require_role(staff, ROLES_SCAN_IN, ACTION_SCAN_IN, db)
     if (body.lot_id is None) == (body.lot_number is None):
         raise HTTPException(status_code=422, detail="provide exactly one of lot_id / lot_number")
     lot = (await db.execute(select(Lot).where(Lot.id == body.lot_id) if body.lot_id
@@ -135,8 +236,8 @@ async def scan_in(body: ScanIn, staff: dict = Depends(require_roles(*ROLES_SCAN_
     try:
         await db.flush()
         db.add(StockMovement(asset_id=asset.id, qty=1, reason="intake_scan", actor_staff_id=staff["id"]))
-        await audit(db, "staff", entity="asset", entity_id=asset.id, action="scan_in",
-                    actor_id=staff["id"], after={"serial": body.serial_number, "lot": lot.lot_number})
+        await _audit_execution(db, staff, grant, entity="asset", entity_id=asset.id, action="scan_in",
+                               after={"serial": body.serial_number, "lot": lot.lot_number})
         await db.commit()
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
@@ -146,7 +247,7 @@ async def scan_in(body: ScanIn, staff: dict = Depends(require_roles(*ROLES_SCAN_
 
 @router.post("/assets/{asset_id}/grade")
 async def grade(asset_id: int, body: GradeIn, staff: dict = Depends(require_roles(*ROLES_GRADE)), db=Depends(get_db)):
-    _require_role(staff, ROLES_GRADE)
+    grant = await _require_role(staff, ROLES_GRADE, ACTION_GRADE, db)
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
@@ -157,8 +258,8 @@ async def grade(asset_id: int, body: GradeIn, staff: dict = Depends(require_role
         asset.cost_cents = body.cost_cents
     if body.condition_report is not None:
         asset.condition_report = body.condition_report
-    await audit(db, "staff", entity="asset", entity_id=asset.id, action="grade",
-                actor_id=staff["id"], before=before, after={"status": "graded", "grade": body.grade})
+    await _audit_execution(db, staff, grant, entity="asset", entity_id=asset.id, action="grade",
+                           before=before, after={"status": "graded", "grade": body.grade})
     try:
         await db.commit()
     except SQLAlchemyError as e:
@@ -166,9 +267,16 @@ async def grade(asset_id: int, body: GradeIn, staff: dict = Depends(require_role
     return {"id": asset.id, "status": asset.status, "grade": asset.grade}
 
 
+# The chat actions this one door performs, named by the status it is asked to write. A status that
+# is not here (any hand-made call, or a transition the rail does not carry) names no action, so the
+# agent branch of `_require_role` has nothing to look a grant up against and refuses: the grantable
+# set stays closed to the actions the rail actually dispatches.
+_STATUS_ACTIONS = {"tested": ACTION_TEST, "listed": ACTION_LIST}
+
+
 @router.post("/assets/{asset_id}/status")
 async def set_status(asset_id: int, body: StatusIn, staff: dict = Depends(require_roles(*ROLES_SET_STATUS)), db=Depends(get_db)):
-    _require_role(staff, ROLES_SET_STATUS)
+    grant = await _require_role(staff, ROLES_SET_STATUS, _STATUS_ACTIONS.get(body.status, ""), db)
     if body.status == "graded":
         raise HTTPException(status_code=422, detail="use /grade to enter graded state")
     asset = await db.get(Asset, asset_id)
@@ -176,8 +284,8 @@ async def set_status(asset_id: int, body: StatusIn, staff: dict = Depends(requir
         raise HTTPException(status_code=404, detail="asset not found")
     before = {"status": asset.status}
     asset.status = body.status
-    await audit(db, "staff", entity="asset", entity_id=asset.id, action="status",
-                actor_id=staff["id"], before=before, after={"status": body.status, "note": body.note})
+    await _audit_execution(db, staff, grant, entity="asset", entity_id=asset.id, action="status",
+                           before=before, after={"status": body.status, "note": body.note})
     try:
         await db.commit()   # trigger enforces legal transitions; lot auto-complete/reopen fires here
     except SQLAlchemyError as e:
@@ -187,14 +295,14 @@ async def set_status(asset_id: int, body: StatusIn, staff: dict = Depends(requir
 
 @router.post("/assets/{asset_id}/move")
 async def move(asset_id: int, body: MoveIn, staff: dict = Depends(require_roles(*ROLES_MOVE)), db=Depends(get_db)):
-    _require_role(staff, ROLES_MOVE)
+    grant = await _require_role(staff, ROLES_MOVE, ACTION_MOVE, db)
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
     before = {"location": asset.location}
     asset.location = body.location
-    await audit(db, "staff", entity="asset", entity_id=asset.id, action="move",
-                actor_id=staff["id"], before=before, after={"location": body.location})
+    await _audit_execution(db, staff, grant, entity="asset", entity_id=asset.id, action="move",
+                           before=before, after={"location": body.location})
     try:
         await db.commit()
     except SQLAlchemyError as e:
@@ -246,14 +354,14 @@ class PriceIn(BaseModel):
 
 @router.post("/assets/{asset_id}/price")
 async def set_price(asset_id: int, body: PriceIn, staff: dict = Depends(require_roles(*ROLES_PRICE)), db=Depends(get_db)):
-    _require_role(staff, ROLES_PRICE)
+    grant = await _require_role(staff, ROLES_PRICE, ACTION_PRICE, db)
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
     before = {"sale_price_cents": asset.sale_price_cents}
     asset.sale_price_cents = body.sale_price_cents
-    await audit(db, "staff", entity="asset", entity_id=asset.id, action="price",
-                actor_id=staff["id"], before=before, after={"sale_price_cents": body.sale_price_cents})
+    await _audit_execution(db, staff, grant, entity="asset", entity_id=asset.id, action="price",
+                           before=before, after={"sale_price_cents": body.sale_price_cents})
     try:
         await db.commit()
     except SQLAlchemyError as e:

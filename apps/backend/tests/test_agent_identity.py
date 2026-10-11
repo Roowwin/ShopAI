@@ -140,13 +140,20 @@ async def test_agent_token_authenticates_on_the_assistant_surface(client):
 
 
 async def test_agent_execute_is_refused_and_moves_nothing(client):
-    """The blocking finding, pinned: an agent token cannot drive an execute turn.
+    """The blocking finding, still pinned: an agent token cannot drive an execute turn by naming one.
 
     This is the one that matters. The chat door dispatches into staff_ops as plain function calls
     (the route's Depends never evaluates), agent_tokens.staff_id is the CREATING ADMIN's id, and
     every TOOL_ROLES tuple contains admin - so if the mirror delegated the sponsor's role, this
-    exact request would publish a real unit on the storefront with no human, no grant and no cap,
-    audited as the admin's own action. It must 403 with the storefront and the ledger unmoved.
+    exact request would publish a real unit on the storefront with no grant and no cap, audited as
+    the admin's own action.
+
+    What changed with ADR 0008 decision 8 is the SHAPE of the refusal, not the property: an agent
+    execute turn may only name a `proposal_id` the server stored, so a turn carrying a client-chosen
+    action + args is a 422 rather than a 403, and the storefront and the ledger stay unmoved either
+    way. The granted path - the one that really does execute - is
+    `tests/test_autonomy_execute.py`, which the ADR requires be a separate, explicit test rather
+    than a weakening of this one.
     """
     admin = await _staff(client, "admin")
     _, tok = await _mint(client, admin)
@@ -156,7 +163,7 @@ async def test_agent_execute_is_refused_and_moves_nothing(client):
     r = await client.post("/staff/agents/chat", headers=_h(tok), json={
         "message": "list " + serial, "execute": True, "action": "list",
         "args": {"serial_number": serial}})
-    assert r.status_code == 403, r.text
+    assert r.status_code == 422, r.text
     assert await _publish_deltas() == before
 
     eng = get_engine()

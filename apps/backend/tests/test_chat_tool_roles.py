@@ -15,6 +15,11 @@ handler re-checks its tuple in its own body, and this file is what makes a re-wi
 the three surfaces fail loudly.
 
 Hermetic and model-free: it reads two dicts and calls handlers that refuse before touching a db.
+
+ADR 0008 decision 9 adds a second way past the in-body guard - an enabled agent grant for the action
+the handler performs - and the same drift alarm covers it: a grant can only name an action a guarded
+door performs (`staff_ops.GUARDED_ACTIONS`), and that set is pinned equal to `TOOL_ROLES` here. The
+grant branch itself is probed in tests/test_autonomy_execute.py, which owns the DB side.
 """
 import pytest
 from fastapi import HTTPException
@@ -63,6 +68,24 @@ def test_chat_tool_roles_derive_from_ops_doors():
     for action, (door, frozen) in CHAT_ACTION_DOORS.items():
         assert staff_ai.TOOL_ROLES[action] is door, action            # derived, not copied
         assert staff_ai.TOOL_ROLES[action] == door == frozen, action  # and still the frozen set
+
+
+def test_the_grantable_action_set_is_the_rails_own_action_set():
+    """ADR 0008 decision 9's closure obligation, as a drift alarm.
+
+    The grant branch lets an agent past the in-body guard, so what a grant can NAME has to be
+    exactly what a guarded door PERFORM - no wider, and no door left out. `GUARDED_ACTIONS` is the
+    set `staff_ops._require_role` will look a grant up against (an action outside it is refused
+    without a query, whatever the table says), and each name is passed by the handler that performs
+    it, never by a caller. Equality against TOOL_ROLES therefore pins both directions: a new
+    dispatchable action with no door to guard it fails here, and a new door whose action name is
+    missing from the set fails too.
+    """
+    assert staff_ops.GUARDED_ACTIONS == frozenset(staff_ai.TOOL_ROLES)
+    assert set(CHAT_ACTION_DOORS) == set(staff_ops.GUARDED_ACTIONS)
+    # the two names one door answers to, spelled out: set_status derives them from the status it
+    # writes, so the mapping is part of the contract and not an implementation detail
+    assert staff_ops._STATUS_ACTIONS == {"tested": "test", "listed": "list"}
 
 
 async def test_ops_handlers_guard_their_own_body():
