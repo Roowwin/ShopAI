@@ -67,6 +67,9 @@ async def _cleanup():
         await r.delete(staff_ai._PROPOSAL + pid)
     for aid in _CREATED["agents"]:
         keys = [k async for k in r.scan_iter(match="autonomy:agent:" + str(aid) + ":*")]
+        # The identity's day counter (AGENT_DAILY_CAP) lives in its own namespace and is spent by
+        # every action, so it is swept by the same identity id rather than by an action prefix.
+        keys += [k async for k in r.scan_iter(match="autonomy:identity:" + str(aid) + ":*")]
         if keys:
             await r.delete(*keys)
     _CREATED["agents"].clear()
@@ -544,6 +547,103 @@ async def test_a_failed_execution_refunds_the_cap_unit(client, fake_model):
     assert r.status_code == 200, (r.status_code, r.text)
     assert r.json()["type"] == "executed", r.json()
     assert await _status(aid_ok) == "listed"
+
+
+# ------------------------------------------- the per-identity day cap (ADR 0007 decision 5)
+
+async def test_the_identity_cap_is_cumulative_with_the_per_action_cap(client, fake_model, monkeypatch):
+    """`AGENT_DAILY_CAP = 1` with a grant cap of 5: the SECOND turn proposes, the grant untouched.
+
+    ADR 0008 decision 4 makes the two caps cumulative, so the identity's day budget has to be able
+    to refuse an execution the per-action cap would have allowed. The per-action counter is read
+    back and asserted to be 1 - it was incremented for the refused turn and given straight back -
+    so neither counter can be what the assertion is really measuring: the identity budget refused,
+    and refusing cost nothing on either side.
+    """
+    admin = await _staff(client, "admin")
+    agent_id, agent = await _agent(client, admin, "hermes-identity-cap")
+    await _grant(agent_id, "list", daily_cap=5)
+    monkeypatch.setenv("AGENT_DAILY_CAP", "1")
+    _, ids, serials = await _stage_units(client, admin, count=2)
+
+    fake_model("list", {"serial_number": serials[0]})
+    first = await _propose(client, agent)
+    assert (await _execute(client, agent, first["proposal_id"])).status_code == 200
+    assert await _status(ids[0]) == "listed"
+
+    fake_model("list", {"serial_number": serials[1]})
+    second = await _propose(client, agent)
+    before = await _counts()
+    r = await _execute(client, agent, second["proposal_id"])
+    assert r.status_code == 200, r.text
+    assert r.json()["type"] == "proposed", r.json()
+    assert r.json()["proposal_id"] == second["proposal_id"], r.json()
+    assert await _counts() == before, "an over-cap turn must write nothing"
+    assert await _status(ids[1]) == "graded", "the second unit must not have been listed"
+    assert (await _record(second["proposal_id"]))["consumed"] is False
+
+    redis = get_redis()
+    assert int(await redis.get(staff_ai._identity_cap_key(agent_id)) or 0) == 1
+    assert int(await redis.get(staff_ai._cap_key("agent", agent_id, "list")) or 0) == 1, \
+        "the per-action unit the refused turn reserved must have gone back"
+
+
+async def test_a_failed_execution_refunds_the_identity_unit_too(client, fake_model, monkeypatch):
+    """The refund covers the identity counter as well: a 409 that wrote nothing gives the day back.
+
+    Same boundary as the per-action refund, one level up - and with `AGENT_DAILY_CAP = 1` it is the
+    only unit there is, so a missing identity refund would leave the identity with no budget for
+    the rest of the day after one transient failure.
+    """
+    admin = await _staff(client, "admin")
+    agent_id, agent = await _agent(client, admin, "hermes-identity-refund")
+    await _grant(agent_id, "list", daily_cap=5)
+    monkeypatch.setenv("AGENT_DAILY_CAP", "1")
+
+    lot_id, units = await _received_units(client, admin, 2)
+    (doomed_id, doomed_sn), (aid_ok, sn_ok) = units
+    await _advance_to_graded_and_priced(client, admin, aid_ok)
+    assert (await client.post(f"/staff/lots/{lot_id}/activate", headers=admin)).status_code == 200
+
+    fake_model("list", {"serial_number": doomed_sn})
+    doomed = await _propose(client, agent)
+    assert (await _execute(client, agent, doomed["proposal_id"])).status_code == 409
+    assert await _status(doomed_id) == "received"
+
+    fake_model("list", {"serial_number": sn_ok})
+    ok = await _propose(client, agent)
+    r = await _execute(client, agent, ok["proposal_id"])
+    assert r.status_code == 200 and r.json()["type"] == "executed", (r.status_code, r.text)
+    assert await _status(aid_ok) == "listed"
+
+
+async def test_an_unparseable_identity_cap_fails_closed(client, fake_model, monkeypatch):
+    """A typo'd `AGENT_DAILY_CAP` freezes the rail, it does not remove the cap.
+
+    `1O` (letter O) is present but not a number, and it reads as 0 - nothing may execute - rather
+    than as "no cap". The same fixture then runs with the value fixed, so the freeze cannot be a
+    broken grant or token passing for a control that is not there.
+    """
+    admin = await _staff(client, "admin")
+    agent_id, agent = await _agent(client, admin, "hermes-identity-typo")
+    await _grant(agent_id, "list", daily_cap=5)
+    _, ids, serials = await _stage_units(client, admin)
+
+    monkeypatch.setenv("AGENT_DAILY_CAP", "1O")
+    fake_model("list", {"serial_number": serials[0]})
+    prop = await _propose(client, agent)
+    before = await _counts()
+    r = await _execute(client, agent, prop["proposal_id"])
+    assert r.status_code == 200 and r.json()["type"] == "proposed", (r.status_code, r.text)
+    assert await _counts() == before, "a typo must not let an execution through"
+    assert await _status(ids[0]) == "graded"
+
+    monkeypatch.setenv("AGENT_DAILY_CAP", "1")      # the control: same turn, value fixed
+    fake_model("list", {"serial_number": serials[0]})
+    ok = await _propose(client, agent)
+    r = await _execute(client, agent, ok["proposal_id"])
+    assert r.status_code == 200 and r.json()["type"] == "executed", (r.status_code, r.text)
+    assert await _status(ids[0]) == "listed"
 
 
 # ---------------------------------------------------------------- decision 7
