@@ -1,4 +1,5 @@
 import { Badge, Card, Heading, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
+import { MUTED_TONE } from "./tokens";
 
 /* The recent-activity feed: the last 20 audit rows the API hands back, as a Table.
 
@@ -19,7 +20,7 @@ function when(iso: string): string {
 export default function AuditFeed({ entries }: Props) {
   return (
     <Card className="p-4">
-      <Heading level="h3" as="h2" className="mb-2">Recent activity</Heading>
+      <Heading level="h2">Recent activity</Heading>
       <Table label="Recent audit activity">
         <THead>
           <TH>When</TH><TH>Actor</TH><TH>Entity</TH><TH>Action</TH>
@@ -29,7 +30,7 @@ export default function AuditFeed({ entries }: Props) {
             <TR key={`${e.at}-${i}`}>
               <TD className="text-ink-500 whitespace-nowrap">{when(e.at)}</TD>
               <TD>
-                <Badge colorClass="bg-surface-sunken text-ink-600">
+                <Badge colorClass={MUTED_TONE}>
                   {e.actor_type}{e.actor_id != null ? ` · ${e.actor_id}` : ""}
                 </Badge>
               </TD>

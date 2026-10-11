@@ -5,9 +5,10 @@ import { Stat } from "@/app/components/ui";
    Every money figure is formatted here and nowhere else: the API speaks cents, and a cent value
    rendered raw (112618000) is the one number on this page a human cannot read. There is no
    `aud()` in this app's lib/api.ts - only the storefront exports one - so the formatter is
-   defined here, beside its only consumer, rather than reaching across apps.
+   defined here, beside its only consumer, rather than reaching across apps. It is deliberately
+   NOT exported: StatRow is its only caller, and a lone consumer is not an API.
    Props are the API's own sub-objects, so this file needs no type shared with the page. */
-export function aud(cents: number): string {
+function aud(cents: number): string {
   return (cents / 100).toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 }
 

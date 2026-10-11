@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, logout } from "@/lib/api";
@@ -9,6 +10,7 @@ import { requireRole, useMe } from "@/lib/session";
 import AuditFeed from "@/app/components/dashboard/AuditFeed";
 import AttentionList from "@/app/components/dashboard/AttentionList";
 import StatRow from "@/app/components/dashboard/StatRow";
+import { NOTICE_TONE } from "@/app/components/dashboard/tokens";
 
 /* The staff overview: /admin stops being a profile card and becomes the dashboard.
 
@@ -19,11 +21,6 @@ import StatRow from "@/app/components/dashboard/StatRow";
    The identity header is kept from the page this replaces (email + role + Sign out), and the
    heading renders OUTSIDE the load branch: SSR has no session, so a heading that only appeared
    once data arrived would leave an SSR response with no heading at all. */
-const ASSET_STATUSES = ["received", "tested", "in_repair", "graded", "listed",
-                        "reserved", "sold", "shipped", "returned", "scrapped"];
-const GRADES = ["A", "B", "C", "D"];
-const LOT_STATUSES = ["intake", "active", "completed", "cancelled"];
-
 type Overview = {
   generated_at: string;
   inventory: { by_status: Record<string, number>; by_grade: Record<string, number>; total_units: number };
@@ -35,6 +32,39 @@ type Overview = {
   audit_feed: { at: string; actor_type: string; actor_id: number | null; entity: string; action: string; entity_id: number | null }[];
   needs_attention: { kind: string; count: number; label: string; items?: { id: number; title: string }[] }[];
 };
+
+/* Every count table on this page is rendered from the payload's OWN keys - never a list re-typed
+   here. The API zero-fills each grouped count from the DB's CHECK constraints, and that guarantee
+   is only real if the UI iterates what the API sent: a table driven by a local list would drop a
+   value the DB admits later without a word. (Round 1 did exactly that - it listed `cancelled` for
+   lots while the API seeds only intake/active/completed, so that row was drawn from a key the
+   payload never contained.) Python's dict order carries through JSON and JS objects, so the API's
+   lifecycle order is the display order, with any unexpected value appended rather than dropped. */
+function Breakdown({ title, label, keyLabel, valueLabel, rows, renderKey }: {
+  title: string;
+  label: string;
+  keyLabel: string;
+  valueLabel: string;
+  rows: [string, number][];
+  renderKey?: (key: string) => ReactNode;
+}) {
+  return (
+    <Card className="p-4">
+      <Heading level="h3" className="mb-2">{title}</Heading>
+      <Table label={label}>
+        <THead><TH>{keyLabel}</TH><TH>{valueLabel}</TH></THead>
+        <TBody>
+          {rows.map(([key, n]) => (
+            <TR key={key}>
+              <TD>{renderKey ? renderKey(key) : <span className="text-ink-900">{key}</span>}</TD>
+              <TD className="text-right tabular-nums">{n}</TD>
+            </TR>
+          ))}
+        </TBody>
+      </Table>
+    </Card>
+  );
+}
 
 export default function AdminHome() {
   const router = useRouter();
@@ -77,7 +107,7 @@ export default function AdminHome() {
         </div>
       </header>
 
-      {msg && <div className="rounded-control bg-accent-100 text-accent-700 px-3 py-2 text-sm">{msg}</div>}
+      {msg && <div className={`rounded-control px-3 py-2 text-sm ${NOTICE_TONE}`}>{msg}</div>}
 
       {!checked && <p className="text-sm text-ink-500">Loading...</p>}
 
@@ -98,50 +128,23 @@ export default function AdminHome() {
           <section>
             <Heading level="h2" className="mb-2">Inventory</Heading>
             <div className="grid gap-4 lg:grid-cols-3">
-              <Card className="p-4">
-                <Heading level="h3" className="mb-2">Units by status</Heading>
-                <Table label="Units by status">
-                  <THead><TH>Status</TH><TH>Units</TH></THead>
-                  <TBody>
-                    {ASSET_STATUSES.map((s) => (
-                      <TR key={s}>
-                        <TD><Badge colorClass={statusTone(s)}>{s}</Badge></TD>
-                        <TD className="text-right tabular-nums">{data.inventory.by_status[s] ?? 0}</TD>
-                      </TR>
-                    ))}
-                  </TBody>
-                </Table>
-              </Card>
+              <Breakdown title="Units by status" label="Units by status" keyLabel="Status" valueLabel="Units"
+                         rows={Object.entries(data.inventory.by_status)}
+                         renderKey={(s) => <Badge colorClass={statusTone(s)}>{s}</Badge>} />
+              <Breakdown title="Units by grade" label="Units by grade" keyLabel="Grade" valueLabel="Units"
+                         rows={Object.entries(data.inventory.by_grade)}
+                         renderKey={(g) => <Badge colorClass={gradeTone(g)}>{g}</Badge>} />
+              <Breakdown title="Lots by status" label="Lots by status" keyLabel="Status" valueLabel="Lots"
+                         rows={Object.entries(data.lots.by_status)} />
+            </div>
+          </section>
 
-              <Card className="p-4">
-                <Heading level="h3" className="mb-2">Units by grade</Heading>
-                <Table label="Units by grade">
-                  <THead><TH>Grade</TH><TH>Units</TH></THead>
-                  <TBody>
-                    {GRADES.map((g) => (
-                      <TR key={g}>
-                        <TD><Badge colorClass={gradeTone(g)}>{g}</Badge></TD>
-                        <TD className="text-right tabular-nums">{data.inventory.by_grade[g] ?? 0}</TD>
-                      </TR>
-                    ))}
-                  </TBody>
-                </Table>
-              </Card>
-
-              <Card className="p-4">
-                <Heading level="h3" className="mb-2">Lots by status</Heading>
-                <Table label="Lots by status">
-                  <THead><TH>Status</TH><TH>Lots</TH></THead>
-                  <TBody>
-                    {LOT_STATUSES.map((s) => (
-                      <TR key={s}>
-                        <TD className="text-ink-900">{s}</TD>
-                        <TD className="text-right tabular-nums">{data.lots.by_status[s] ?? 0}</TD>
-                      </TR>
-                    ))}
-                  </TBody>
-                </Table>
-              </Card>
+          <section>
+            <Heading level="h2" className="mb-2">Orders</Heading>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <Breakdown title="Orders by state (30 days)" label="Orders by state, last 30 days"
+                         keyLabel="State" valueLabel="Orders"
+                         rows={Object.entries(data.orders.by_state)} />
             </div>
           </section>
         </>

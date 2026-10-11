@@ -13,13 +13,23 @@ them are the blocks in the response (by_status, by_grade, lots, stock_value, res
 orders, newsletter, audit_feed, restock); the other two are the needs_attention predicates the
 nine do not cover (intake lots that actually hold units, and units stuck in repair).
 
-INDEX REALITY (verified against the live DB, and left alone on purpose): covered today are
-assets_status_idx, assets_product_idx, orders_status_idx, reservations_expires_idx and
-audit_at_idx. THREE of these aggregates are sequential scans: by_grade (no index on
-assets.grade), the in-repair-stale count (no index on assets.updated_at) and the orders revenue
-filter (no index on orders.placed_at). At the current volume (~6.2k assets, hundreds of orders)
-each is sub-millisecond, so this job adds NO index. When the tables grow, those three are the
-first to want one.
+INDEX REALITY (measured on the live DB with EXPLAIN ANALYZE - do not read this as "all covered"):
+by_status does NOT scan the heap - it is an Index Only Scan of assets_status_idx (a few heap
+fetches aside, until the table is vacuumed). The in-repair-stale count is an Index Scan of that
+same index with `Index Cond: status = 'in_repair'` plus a Filter on updated_at: there is no
+assets.updated_at index, and none is needed at this selectivity, because the status index already
+carries the predicate (0.07 ms measured). reservations_expires_idx carries the reservations
+filter, and audit_at_idx serves the audit feed - how that index copes with a *selective*
+actor_type filter is J8's concern, since J8 is what starts writing actor_type='agent'.
+
+TWO STATEMENTS ARE FULL SEQUENTIAL SCANS OF assets, and they are the ones that actually cost:
+by_grade (there is no assets.grade index) at ~0.9 ms and stock_value (an unconditional aggregate
+over every row, so it can use no WHERE) at ~0.9 ms. At ~0.17 us/row they are the same O(assets)
+cost, so they scale together: at ~300k assets (~50x today) the pair is ~100 ms. The orders revenue
+filter is unindexed too (no orders.placed_at index), but it scans a small table - it only begins
+to matter around ~1M orders. At the current volume (~6.3k assets, hundreds of orders) the whole
+endpoint is comfortably sub-budget (~12 ms), so this job adds NO index. When the tables grow,
+assets.grade and the two full-assets scans are the first to want one.
 """
 from datetime import datetime, timezone
 
