@@ -154,7 +154,7 @@ async def best_sellers(limit: int = Query(4, le=12), db=Depends(get_db)):
         WHERE ol.product_id IS NOT NULL
         GROUP BY p.id, p.slug, p.title, p.model, b.name
         ORDER BY sold DESC
-        LIMIT :lim"""), {}).mappings().all())
+        LIMIT :lim"""), {"lim": limit})).mappings().all()
 
 
     return [{"id": r["id"], "slug": r["slug"], "title": r["title"], "model": r["model"],
