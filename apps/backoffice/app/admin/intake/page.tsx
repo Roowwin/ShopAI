@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Badge, Button, Card, Heading, Input, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
-import { gradeTone, selectClass, statusTone } from "@/lib/ui";
+import { Badge, Button, Card, Heading, Input, Select, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
+import { gradeTone, statusTone } from "@/lib/ui";
 
 type Lot = { id: number; lot_number: string; status: string; warehouse: string | null; asset_count: number };
 type Draft = { brand: string; model: string; serial_visible: string; condition_notes: string; suggested_grade: string; confidence: string };
@@ -94,17 +94,17 @@ export default function IntakePage() {
       <Card className="p-6 space-y-3">
         <Heading level="h3" as="h2">Scan-in</Heading>
         <div className="flex gap-3">
-          <select className={selectClass} value={lotId ?? ""} onChange={(e) => setLotId(e.target.value ? parseInt(e.target.value) : null)}>
+          <Select value={lotId ?? ""} onChange={(e) => setLotId(e.target.value ? parseInt(e.target.value) : null)}>
             <option value="">select lot...</option>
             {lots.map((l) => <option key={l.id} value={l.id}>{l.lot_number} ({l.status}, {l.asset_count} units)</option>)}
-          </select>
+          </Select>
           <Input className="flex-1" placeholder="serial number" value={serial} onChange={(e) => setSerial(e.target.value)} />
           <Button onClick={scanIn}>Scan</Button>
         </div>
       </Card>
 
       <Card className="p-6">
-        <Table>
+        <Table label="Lots">
           <THead>
             <TH>Lot</TH><TH>Status</TH><TH>WH</TH><TH>Units</TH>
           </THead>

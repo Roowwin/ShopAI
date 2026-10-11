@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { API, apiFetch } from "@/lib/api";
-import { Button, Card, Heading } from "@/app/components/ui";
-import { selectClass } from "@/lib/ui";
+import { Button, Card, Heading, Select } from "@/app/components/ui";
 
 type Cat = { id: number; slug: string; title: string };
 
@@ -39,10 +38,10 @@ export default function ListingsPage() {
       <Heading level="h1">AI listings (human-approved)</Heading>
       <p className="text-xs text-ink-500">Drafts use verified product facts only - you approve before anything publishes (ACCC-safe wording rule).</p>
       <Card className="p-6 space-y-3">
-        <select className={selectClass + " w-full"} value={pid ?? ""} onChange={(e) => setPid(e.target.value ? parseInt(e.target.value) : null)}>
+        <Select className="w-full" value={pid ?? ""} onChange={(e) => setPid(e.target.value ? parseInt(e.target.value) : null)}>
           <option value="">choose product...</option>
           {cat.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
-        </select>
+        </Select>
         <Button onClick={draftIt} disabled={busy || pid == null}>Generate draft</Button>
       </Card>
       {draft && (

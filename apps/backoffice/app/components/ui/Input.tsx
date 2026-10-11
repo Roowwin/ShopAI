@@ -12,11 +12,14 @@ const TONES: Record<"light" | "sunken" | "dark", string> = {
 
 type Props = ComponentPropsWithoutRef<"input"> & { tone?: "light" | "sunken" | "dark" };
 
+/* `py-2` = the backoffice's one 36px control height (text-sm's 20px line box + 8px either
+   side), so an Input and a Button on the same row line up exactly. The storefront's roomier
+   padding is tuned to its 44px touch control - see the comment in Button.tsx. */
 export default function Input({ tone = "light", className, ...rest }: Props) {
   return (
     <input
       className={cn(
-        "w-full rounded-control px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-brand-500",
+        "w-full rounded-control px-4 py-2 text-sm outline-none transition focus:ring-2 focus:ring-brand-500",
         TONES[tone],
         className,
       )}

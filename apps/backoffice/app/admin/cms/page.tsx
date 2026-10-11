@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Button, Card, Heading, Input, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
-import { selectClass } from "@/lib/ui";
+import { Button, Card, Heading, Input, Select, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
 import { requireRole, useMe } from "@/lib/session";
 
 type Deal = { title: string; product_slug: string; badge: string };
@@ -73,7 +72,7 @@ export default function CmsPage() {
     return (
       <main className="max-w-6xl mx-auto p-4 min-h-screen">
         <div className="bg-ink-900 text-white rounded-card px-5 py-3 mb-4 flex items-center gap-3">
-          <b>Website CMS</b>
+          <Heading level="h1">Website CMS</Heading>
         </div>
         <div className="rounded-control bg-accent-100 text-accent-700 px-3 py-2 text-sm">admin or manager role required</div>
       </main>
@@ -83,7 +82,7 @@ export default function CmsPage() {
   return (
     <main className="max-w-6xl mx-auto p-4 min-h-screen">
       <div className="bg-ink-900 text-white rounded-card px-5 py-3 mb-4 flex items-center gap-3">
-        <b>Website CMS</b>
+        <Heading level="h1">Website CMS</Heading>
         <span className="text-xs text-ink-400">hero content - offers - featured products (live on the storefront)</span>
       </div>
       {msg && (<div className="rounded-control bg-brand-100 text-brand-900 px-3 py-2 mb-3 text-sm">{msg}</div>)}
@@ -106,7 +105,7 @@ export default function CmsPage() {
 
       <Card className="p-4 mb-4">
         <Heading level="h3" as="h2" className="mb-2">Offers</Heading>
-        <Table>
+        <Table label="Offers">
           <THead>
             <TH>Name</TH><TH>Tier</TH><TH>Value</TH><TH>Status</TH><TH></TH>
           </THead>
@@ -117,7 +116,11 @@ export default function CmsPage() {
                 <TD>{p.kind}</TD>
                 <TD>{p.value}{p.kind === "percent" ? "%" : ""}</TD>
                 <TD>
-                  <button className={p.active ? "text-brand-700 font-semibold" : "text-ink-400"} onClick={() => void togglePromo(p)}>{p.active ? "Active" : "Off"}</button>
+                  {/* size="inline" keeps the toggle's text on the cell's own text grid; ghost =
+                      the active (brand) state, muted = the quiet off state. */}
+                  <Button size="inline" variant={p.active ? "ghost" : "muted"} onClick={() => void togglePromo(p)}>
+                    {p.active ? "Active" : "Off"}
+                  </Button>
                 </TD>
                 <TD className="text-xs text-ink-400">id {p.id}</TD>
               </TR>
@@ -129,10 +132,10 @@ export default function CmsPage() {
           <div className="w-48">
             <Input placeholder="offer name" value={np.name} onChange={(e) => setNp({ ...np, name: e.target.value })} />
           </div>
-          <select className={selectClass} value={np.kind} onChange={(e) => setNp({ ...np, kind: e.target.value })}>
+          <Select value={np.kind} onChange={(e) => setNp({ ...np, kind: e.target.value })}>
             <option value="percent">percent</option>
             <option value="fixed">fixed</option>
-          </select>
+          </Select>
           <div className="w-24">
             <Input type="number" value={np.value} onChange={(e) => setNp({ ...np, value: Number(e.target.value) })} />
           </div>
@@ -142,7 +145,7 @@ export default function CmsPage() {
 
       <Card className="p-4">
         <Heading level="h3" as="h2" className="mb-2">Products - image URL and featured</Heading>
-        <Table>
+        <Table label="Products">
           <THead>
             <TH>Product</TH><TH>Units</TH><TH>Image URL</TH><TH>Featured</TH><TH></TH>
           </THead>

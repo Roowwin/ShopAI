@@ -44,13 +44,6 @@ const GRADE_TONE: Record<Grade, string> = {
 
 const NEUTRAL = "bg-surface-sunken text-ink-600";
 
-/* The native <select> control. The design system deliberately has no Select primitive (the
-   storefront ships none, and Input is an <input>), so without this every page retypes the same
-   ~110-char string - which is the exact copy-paste the rest of this job removes. Metrics match
-   Input, so a select and an input on the same row line up. Plain literal, same glob rule. */
-export const selectClass =
-  "rounded-control ring-1 ring-line bg-surface px-4 py-2.5 text-sm text-ink-900 outline-none transition focus:ring-2 focus:ring-brand-500";
-
 /* Unknown or absent values fall back to neutral rather than throwing: the API can return a
    lifecycle step the UI has not been taught yet, and a missing chip is not worth a 500. */
 export function statusTone(status: string | null | undefined): string {
@@ -62,3 +55,13 @@ export function gradeTone(grade: string | null | undefined): string {
   if (!grade) return NEUTRAL;
   return GRADE_TONE[grade as Grade] ?? NEUTRAL;
 }
+
+/* The uppercase kicker - the SINGLE definition of the eyebrow, used by Table's header row and
+   by Stat's label. It is a class and not the storefront's Eyebrow component because a table
+   header row is a `<tr>` and cannot contain the `<p>` that Eyebrow renders; see the note in
+   app/components/ui/index.ts.
+
+   `ink-500`, not the storefront Eyebrow's `ink-400`: at 11px, ink-400 on white is 2.56:1 and
+   fails WCAG AA, while ink-500 is 4.76:1 and passes. That is a deliberate one-token divergence
+   from the mirror, the same spirit as Button's 36px - do not read it as drift. */
+export const kickerClass = "text-eyebrow uppercase text-ink-500";

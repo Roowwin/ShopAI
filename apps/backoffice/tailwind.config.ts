@@ -32,6 +32,9 @@ const config: Config = {
         },
         // the storefront's single secondary CTA token (amber). Here it carries the
         // CMS/newsletter notice flash, which used to be a raw amber-100/amber-800 pair.
+        // Contrast note: accent-700 on accent-100 is 4.51:1 - it passes WCAG AA, but with no
+        // margin, down from amber-800's 6.37:1. Left as-is to keep the scale identical to the
+        // storefront's; add an accent-800 token if that flash ever needs to be heavier.
         accent: {
           50: token("--accent-50"),
           100: token("--accent-100"),

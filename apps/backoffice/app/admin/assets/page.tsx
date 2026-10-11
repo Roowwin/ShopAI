@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Badge, Button, Card, Heading, Input, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
-import { gradeTone, selectClass, statusTone } from "@/lib/ui";
+import { Badge, Button, Card, Heading, Input, Select, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
+import { gradeTone, statusTone } from "@/lib/ui";
 
 type Asset = { id: number; public_id: string; serial_number: string | null; status: string; grade: string | null; lot_number: string };
 
@@ -47,17 +47,17 @@ export default function AssetsPage() {
       <Heading level="h1">Assets workbench</Heading>
 
       <div className="flex gap-3">
-        <select className={selectClass} value={status} onChange={(e) => setStatus(e.target.value)}>
+        <Select value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">any status</option>
           {STATUSES.map((s) => <option key={s}>{s}</option>)}
-        </select>
+        </Select>
         <div className="w-56">
           <Input placeholder="lot number" value={lotNumber} onChange={(e) => setLotNumber(e.target.value)} />
         </div>
       </div>
 
       <Card className="p-4">
-        <Table>
+        <Table label="Assets">
           <THead>
             <TH>Serial</TH><TH>Status</TH><TH>Grade</TH><TH>Lot</TH>
           </THead>
@@ -88,7 +88,7 @@ export default function AssetsPage() {
             </div>
             <div className="space-y-2">
               <div className="flex gap-2 items-center">
-                <select className={selectClass} value={grade} onChange={(e) => setGrade(e.target.value)}>{GRADES.map((g) => <option key={g}>{g}</option>)}</select>
+                <Select value={grade} onChange={(e) => setGrade(e.target.value)}>{GRADES.map((g) => <option key={g}>{g}</option>)}</Select>
                 <div className="w-28">
                   <Input placeholder="cost cents" value={cost} onChange={(e) => setCost(e.target.value)} />
                 </div>

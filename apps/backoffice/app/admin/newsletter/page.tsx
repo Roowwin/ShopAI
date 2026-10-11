@@ -42,7 +42,7 @@ export default function NewsletterPage() {
   return (
     <main className="max-w-6xl mx-auto p-4 min-h-screen">
       <div className="bg-ink-900 text-white rounded-card px-5 py-3 mb-4 flex items-center gap-3">
-        <b>Newsletter</b>
+        <Heading level="h1">Newsletter</Heading>
         <span className="text-xs text-ink-400">public signups from the storefront footer</span>
       </div>
       {msg && (<div className="rounded-control bg-accent-100 text-accent-700 px-3 py-2 mb-3 text-sm">{msg}</div>)}
@@ -52,7 +52,7 @@ export default function NewsletterPage() {
           <Heading level="h3" as="h2">Subscribers</Heading>
           <span className="text-sm text-ink-500">{total} total</span>
         </div>
-        <Table>
+        <Table label="Newsletter subscribers">
           <THead>
             <TH>Email</TH><TH>Subscribed</TH>
           </THead>

@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { logout } from "@/lib/api";
+import { Button } from "@/app/components/ui";
 
 /* Every entry here must have a page behind it. Orders / Customers / Audit are intentionally
    absent: those pages do not exist yet, and linking them would ship three 404s. */
@@ -41,12 +42,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         })}
         <span className="ml-auto flex items-center gap-3">
           <span className="text-ink-400">RFO Backoffice</span>
-          <button
-            className="rounded-control ring-1 ring-ink-600 px-3 py-1 text-ink-300 hover:bg-ink-700"
-            onClick={async () => { try { await logout(); } finally { router.replace("/"); } }}
-          >
+          {/* Through the Button primitive, not the ~28px hand-rolled control this used to be, so
+              it sits on the one 36px control height. `onDark` is the documented backoffice-only
+              variant for a control on the dark nav surface. */}
+          <Button variant="onDark" onClick={async () => { try { await logout(); } finally { router.replace("/"); } }}>
             Sign out
-          </button>
+          </Button>
         </span>
       </nav>
       {children}
