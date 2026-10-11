@@ -14,7 +14,17 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
       r = await fetch(API + path, { ...init, headers, credentials: "include", cache: "no-store" });
     }
   }
-  if (r.status === 401) { sessionStorage.removeItem("rfo_access"); location.href = "/admin"; throw new Error("session expired - redirecting to login"); }
+  if (r.status === 401) {
+    sessionStorage.removeItem("rfo_access");
+    // The sign-in endpoints answer 401 for bad credentials - hand that back so the login /
+    // MFA page can show the reason instead of reloading itself.
+    // Everything else is a dead session. Send the user to the LOGIN page ("/"). Redirecting
+    // to "/admin" looped forever: /admin is itself behind this check, so it re-401s on arrival.
+    if (!path.startsWith("/staff/auth/")) {
+      location.href = "/";
+      throw new Error("session expired - redirecting to login");
+    }
+  }
   return r;
 }
 
