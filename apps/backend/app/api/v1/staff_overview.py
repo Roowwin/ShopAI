@@ -8,10 +8,14 @@ Everything here reads the app DB (`get_db` -> rfo_app) straight off the base tab
 views are deliberately NOT used: their DDL exists nowhere in version control (only their
 consumers appear in the repo), and a user-facing page must not depend on unversioned DB state.
 
-Eleven set-based aggregates, no N+1 - one statement per block, never a query per row. Nine of
+Eighteen set-based aggregates, no N+1 - one statement per block, never a query per row. Nine of
 them are the blocks in the response (by_status, by_grade, lots, stock_value, reservations,
 orders, newsletter, audit_feed, restock); the other two are the needs_attention predicates the
-nine do not cover (intake lots that actually hold units, and units stuck in repair).
+nine do not cover (intake lots that actually hold units, and units stuck in repair). The last
+seven (pricing_pending, stuck, lots_stuck, grade_mix, category_mix, revenue_7d, team_activity)
+are the `dashboard` block the /admin/dashboard page reads; they are appended to this same
+endpoint rather than given a second route, because the dashboard is still ONE screen and a
+second summary door would be a second place a read can leak.
 
 INDEX REALITY (measured on the live DB with EXPLAIN ANALYZE - do not read this as "all covered"):
 by_status does NOT scan the heap - it is an Index Only Scan of assets_status_idx (a few heap
@@ -30,6 +34,24 @@ filter is unindexed too (no orders.placed_at index), but it scans a small table 
 to matter around ~1M orders. At the current volume (~6.3k assets, hundreds of orders) the whole
 endpoint is comfortably sub-budget (~12 ms), so this job adds NO index. When the tables grow,
 assets.grade and the two full-assets scans are the first to want one.
+
+The dashboard block adds seven more statements, and six of them are cheap because they ride
+indexes that were already there (all measured at ~6.9k assets): pricing_pending, stuck and
+grade_mix are Index Scans of assets_status_idx - their whole predicate is `status = ...`, with a
+Filter for the price / the intake age - at 0.7 / 0.2 / 0.2 ms; category_mix is that same status
+index scan hash-joined to products and categories, 0.3 ms; lots_stuck is a Seq Scan of the small
+lots table (1.6k rows), 0.2 ms; and the 7-day revenue scan is the SAME unindexed small-orders
+scan the 30-day block already pays for, 0.9 ms. Note grade_mix is an Index Scan, NOT the full
+assets scan by_grade needs: the `status = 'listed'` predicate is what keeps it off the heap.
+
+The seventh, team_activity, is the one statement here whose cost tracks the TABLE rather than the
+predicate. Measured today it is a Seq Scan + HashAggregate over audit_log (2041 actor groups,
+3.0 ms): the planner does NOT use audit_at_idx, because a 7-day window over a table whose rows are
+mostly recent is not selective enough to beat a scan, and `actor_type = 'staff'` lands as a Filter
+on top rather than an Index Cond. audit_log is append-only and never pruned, so this is the
+statement to watch - it is the only new one that grows with everything ever audited, and it is
+what a composite (at, actor_type) or a partial actor_type index would be for. Deliberately NOT
+added here: at ~3 ms it is not yet worth an index, and this job adds none.
 """
 from datetime import datetime, timezone
 
@@ -141,12 +163,82 @@ async def overview(staff: dict = Depends(require_roles("admin", "manager")), db=
 
     restock_count = int(restock_rows[0][2]) if restock_rows else 0
 
+    # ---------------- the /admin/dashboard block ----------------
+    # Graded units that carry no price. chk_listed_has_price only stops a LISTED unit reaching the
+    # storefront unpriced, so a graded unit can sit unpriced indefinitely - that gap is the whole
+    # alert. No index on status+price; it rides assets_status_idx like the rest of the counts.
+    pricing_pending = (await db.execute(text("""
+        SELECT count(*) FROM assets WHERE status = 'graded' AND sale_price_cents IS NULL
+    """))).scalar_one()
+
+    # Stuck = still in received/tested, aged by assets.intake_at - NOT updated_at. The
+    # rfo_touch_updated_at trigger rewrites updated_at on every UPDATE, so it can never answer
+    # "how long has this unit sat here" (and cannot even be backdated for a test). intake_at is
+    # written once at scan-in and no trigger touches it. array_agg picks the oldest serial in the
+    # SAME single scan; a NULL serial is legal and sorts first, and reporting it is honest - an
+    # unnamed oldest unit is still the oldest unit.
+    stuck = (await db.execute(text("""
+        SELECT count(*), (array_agg(serial_number ORDER BY intake_at ASC))[1]
+        FROM assets
+        WHERE status IN ('received', 'tested') AND intake_at < now() - interval '7 days'
+    """))).one()
+
+    # Lots received (received_at, again untriggered) and still in intake after 14 days - never
+    # activated. A lot that moved on to active/completed is history, not a backlog.
+    lots_stuck = (await db.execute(text("""
+        SELECT count(*) FROM lots
+        WHERE status = 'intake' AND received_at < now() - interval '14 days'
+    """))).scalar_one()
+
+    # grade_mix is LISTED units only - the storefront-facing mix, not every graded unit (that is
+    # inventory.by_grade). The DB pins listed => grade IS NOT NULL, so the status filter is the
+    # whole predicate.
+    grade_mix = _counts(GRADES, (await db.execute(text(
+        "SELECT grade, count(*) FROM assets WHERE status = 'listed' GROUP BY grade"))).all())
+
+    # category_mix: the same listed population, by product category. An asset with no product_id
+    # cannot have a category, so the JOINs drop it - the mix reports what is ON SALE, and an
+    # unassigned unit is not. Ordered by size so the list reads largest first.
+    category_rows = (await db.execute(text("""
+        SELECT c.name, count(*)
+        FROM assets a
+        JOIN products p ON p.id = a.product_id
+        JOIN categories c ON c.id = p.category_id
+        WHERE a.status = 'listed'
+        GROUP BY c.name
+        ORDER BY count(*) DESC, c.name
+    """))).all()
+    category_mix = {str(name): int(n) for name, n in category_rows}
+
+    # Paid revenue/orders over 7 days, the same "paid only" rule orders_30d already uses.
+    rev7 = (await db.execute(text("""
+        SELECT count(*), COALESCE(sum(total_cents), 0) FROM orders
+        WHERE status = 'paid' AND placed_at >= now() - interval '7 days'
+    """))).one()
+
+    # team_activity: staff-authored audit rows of the last 7 days, grouped by actor, top five.
+    # LEFT JOIN, not JOIN: audit_log keeps no FK either way, so an actor whose staff row was
+    # deleted keeps its activity with a NULL email instead of vanishing - the trail outlives the
+    # account. `actor_type = 'staff'` is load-bearing: actor_id is a staff_users id only for
+    # staff rows (customer rows hold a users id, system rows hold none), so grouping without it
+    # would silently merge two different id spaces.
+    team_rows = (await db.execute(text("""
+        SELECT a.actor_id, s.email, count(*)
+        FROM audit_log a
+        LEFT JOIN staff_users s ON s.id = a.actor_id
+        WHERE a.actor_type = 'staff' AND a.actor_id IS NOT NULL
+          AND a.at >= now() - interval '7 days'
+        GROUP BY a.actor_id, s.email
+        ORDER BY count(*) DESC, a.actor_id ASC
+        LIMIT 5
+    """))).all()
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "inventory": {
             "by_status": by_status,
             "by_grade": by_grade,
-            # sum of the status groups, not a twelfth statement: assets.status is NOT NULL, so
+            # sum of the status groups, not a statement of its own: assets.status is NOT NULL, so
             # the group counts sum to exactly count(*) FROM assets.
             "total_units": sum(by_status.values()),
         },
@@ -165,6 +257,21 @@ async def overview(staff: dict = Depends(require_roles("admin", "manager")), db=
             "aov_cents": round(revenue_paid / orders_30d) if orders_30d else 0,
         },
         "newsletter": {"total": int(newsletter_total)},
+        # The /admin/dashboard page's own block. Field names are the page's contract - the counts
+        # the page shows as KPI tiles and alerts, plus the two mixes and the leaderboard its two
+        # hand-rolled SVG charts read.
+        "dashboard": {
+            "pricing_pending": int(pricing_pending),
+            "revenue_last_7d_cents": int(rev7[1]),
+            "orders_last_7d": int(rev7[0]),
+            "stuck_assets": {"count": int(stuck[0]), "oldest_serial_number": stuck[1]},
+            "lots_stuck": {"count": int(lots_stuck)},
+            "grade_mix": grade_mix,
+            "category_mix": category_mix,
+            "team_activity": [
+                {"actor_id": r[0], "actor_email": r[1], "actions": int(r[2])} for r in team_rows
+            ],
+        },
         "audit_feed": [
             {"at": _iso(r[0]), "actor_type": r[1], "actor_id": r[2],
              "entity": r[3], "action": r[4], "entity_id": r[5]}

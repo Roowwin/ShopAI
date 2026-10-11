@@ -9,6 +9,7 @@ import { Button } from "@/app/components/ui";
    in the same commit as those pages, so the nav never advertised a route that was not there. */
 const LINKS = [
   { href: "/admin", label: "Home" },
+  { href: "/admin/dashboard", label: "Dashboard" },
   { href: "/admin/intake", label: "Intake" },
   { href: "/admin/assets", label: "Assets" },
   { href: "/admin/orders", label: "Orders" },
