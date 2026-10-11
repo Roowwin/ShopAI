@@ -118,3 +118,56 @@ async def test_move_audited(client):
         n = (await c.execute(text("SELECT count(*) FROM audit_log WHERE entity = :e AND entity_id = :i AND action = :a"),
                              {"e": "asset", "i": aid, "a": "move"})).scalar_one()
     assert n >= 1
+
+
+async def test_create_product_rbac_validation_and_slug(client):
+    """POST /staff/products: auth + role gate, happy path, duplicate slug, unknown refs.
+
+    Hermetic: the rows it creates are deleted in a finally. No assets are attached to them,
+    so the delete cannot orphan anything.
+    """
+    await _cleanup()
+    eng = get_engine()
+    suffix = uuid.uuid4().hex[:8]
+    slug = "pytest-product-" + suffix
+    auto_slug = "pytest-auto-" + suffix
+    body = {"brand_slug": "apple", "category_slug": "phones", "model": "Pytest Phone",
+            "title": "Pytest Phone", "description": "pytest body", "specs": {"storage": "64GB"}}
+    try:
+        # unauthenticated -> 401 (valid body, so the failure is the missing token)
+        r = await client.post("/staff/products", json={**body, "slug": slug})
+        assert r.status_code == 401, r.text
+
+        # authenticated but not admin/manager -> 403
+        tok_sales = await _staff(client, "sales")
+        r = await client.post("/staff/products", json={**body, "slug": slug}, headers=_h(tok_sales))
+        assert r.status_code == 403, r.text
+
+        tok = await _staff(client, "admin")
+
+        # unknown brand / category -> 422, and nothing is written
+        r = await client.post("/staff/products", json={**body, "slug": slug, "brand_slug": "acme"}, headers=_h(tok))
+        assert r.status_code == 422, r.text
+        r = await client.post("/staff/products", json={**body, "slug": slug, "category_slug": "gadgets"}, headers=_h(tok))
+        assert r.status_code == 422, r.text
+
+        # admin creates it -> 201 and the full row comes back
+        r = await client.post("/staff/products", json={**body, "slug": slug}, headers=_h(tok))
+        assert r.status_code == 201, r.text
+        row = r.json()
+        assert row["slug"] == slug and row["status"] == "active"
+        assert row["brand_id"] and row["category_id"] and row["public_id"]
+        assert row["model"] == "Pytest Phone" and row["title"] == "Pytest Phone"
+        assert row["description"] == "pytest body" and row["specs"]["storage"] == "64GB"
+
+        # duplicate slug -> 409
+        r = await client.post("/staff/products", json={**body, "slug": slug}, headers=_h(tok))
+        assert r.status_code == 409, r.text
+
+        # slug omitted -> derived from the title
+        r = await client.post("/staff/products", json={**body, "title": "Pytest Auto " + suffix}, headers=_h(tok))
+        assert r.status_code == 201, r.text
+        assert r.json()["slug"] == auto_slug, r.text
+    finally:
+        async with eng.begin() as c:
+            await c.execute(text("DELETE FROM products WHERE slug IN (:s, :a)"), {"s": slug, "a": auto_slug})
