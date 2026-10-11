@@ -231,6 +231,52 @@ def _autonomy_enabled() -> bool:
     return (os.environ.get("AI_AUTONOMY", "") or "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def _identity_daily_cap() -> int | None:
+    """ADR 0007 decision 5's `AGENT_DAILY_CAP` - the per-IDENTITY day budget, and the INNER cap.
+
+    Cumulative with, not an alternative to, the per-(identity, action) cap this file already spends
+    (ADR 0008 decision 4's "both must be satisfied"): a granted identity with a generous per-action
+    cap still runs out of day, because one counter is shared by every action it performs. `None`
+    means NO identity cap, which is the shipped default - the rail is inert without a grant, and a
+    budget no operator set is a number nobody chose.
+
+    Read at EXECUTION time from the process environment, exactly like `AI_AUTONOMY` (compose passes
+    it through; changing it needs an api restart). A value that is present but not a whole number
+    reads as ZERO, not as "no cap": a typo must never silently remove a control, so the rail
+    degrades to propose-only until an operator fixes it. Zero itself is a legal setting ("freeze
+    this identity") and reads the same way - and it is why the ceiling is not clamped up to 1.
+    """
+    raw = (os.environ.get("AGENT_DAILY_CAP", "") or "").strip()
+    if not raw:
+        return None
+    try:
+        return max(int(raw), 0)
+    except ValueError:
+        return 0
+
+
+def _identity_cap_key(identity_id: int) -> str:
+    """The per-identity day key, `autonomy:identity:<id>:<date>`, beside the per-action keys.
+
+    Deliberately NOT the per-action shape (`autonomy:{type}:{id}:{action}:{date}`): this counter is
+    spent by every granted action the identity performs, which is the point. The literal segment
+    `identity` also keeps it out of `autonomy:agent:*`, the namespace an identity's per-action keys
+    live in, so a sweep of one cannot be mistaken for a sweep of the other.
+    """
+    return "autonomy:identity:" + str(identity_id) + ":" + date.today().isoformat()
+
+
+async def _refund_identity_cap(r, key: str | None) -> None:
+    """Give back the identity unit too, when this execution took one (`None` = no cap configured).
+
+    The per-action unit and the identity unit are reserved together and refunded together, through
+    the same floor-bounded script - a failure that provably wrote nothing gives both back, and an
+    over-cap refusal of the second gives the first back.
+    """
+    if key is not None:
+        await _cap_refund(r, key)
+
+
 def _proposed_payload(pid: str | None, action: str, args: dict, resolved: dict, fallback: bool) -> dict:
     """The proposal response - ONE shape for every path that hands a proposal back.
 
@@ -484,8 +530,10 @@ async def _agent_execute(body: ChatIn, staff: dict, db, r) -> dict:
        loses nothing but the execution - the record is left unconsumed for whoever can act on it;
     6. the deciding model was not the fallback (decision 7), read from the record, not from this
        process;
-    7. the cap is reserved atomically; over-cap -> the turn comes back as a PROPOSAL, never a
-       refusal and never a silent drop (decision 4);
+    7. the per-action cap is reserved atomically, and then the per-IDENTITY day cap
+       (`AGENT_DAILY_CAP`, ADR 0007 decision 5) is reserved from the same script against its own
+       key, because the two are cumulative; over EITHER -> the turn comes back as a PROPOSAL, never
+       a refusal and never a silent drop (decision 4), and anything already reserved goes back;
     8. the proposal is consumed ATOMICALLY (so two concurrent turns cannot both execute it), the
        action runs from the stored args and ids, and a failure that provably wrote nothing refunds
        the reserved unit.
@@ -532,16 +580,28 @@ async def _agent_execute(body: ChatIn, staff: dict, db, r) -> dict:
     if await _cap_reserve(r, cap_key, int(grant["daily_cap"])) < 0:
         return _proposed_payload(body.proposal_id, action, args, resolved, False)
 
+    # The identity's own day budget, spent by the same execution through the same two scripts
+    # against a different key (ADR 0007 decision 5, cumulative with the per-action cap above). It is
+    # taken only after the per-action unit was granted, and it is given back everywhere that one is:
+    # a turn the identity cap refuses costs neither counter anything.
+    id_cap = _identity_daily_cap()
+    id_key = _identity_cap_key(staff["identity_id"]) if id_cap is not None else None
+    if id_key is not None and await _cap_reserve(r, id_key, id_cap) < 0:
+        await _cap_refund(r, cap_key)
+        return _proposed_payload(body.proposal_id, action, args, resolved, False)
+
     if await r.eval(_PROPOSAL_CONSUME_LUA, 1, _PROPOSAL + body.proposal_id) != 1:
         # Lost the race to a concurrent turn on the same proposal, or it expired between the read
-        # and here. Nothing ran, so the reserved unit goes back.
+        # and here. Nothing ran, so every reserved unit goes back.
         await _cap_refund(r, cap_key)
+        await _refund_identity_cap(r, id_key)
         raise HTTPException(status_code=403, detail="proposal already consumed")
     try:
         results = await _dispatch(action, args, resolved, staff, db)
     except HTTPException as e:
         if e.status_code in _NOTHING_WRITTEN:
             await _cap_refund(r, cap_key)
+            await _refund_identity_cap(r, id_key)
         raise
     await _mem_push(r, str(staff["id"]), body.message,
                     "executed " + action + " " + json.dumps(args or {})[:80] + " -> " + json.dumps(results)[:80] + " OK")
