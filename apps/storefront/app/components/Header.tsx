@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { API, aud } from "@/lib/api";
 import { cartGet } from "@/lib/cart";
@@ -15,9 +15,28 @@ export default function Header() {
   const [cartN, setCartN] = useState(0);
   const [cats, setCats] = useState<{ name: string; n: number }[]>([]);
   const [menu, setMenu] = useState(false);
+  // Whether there is more category strip off each edge. Only used to fade it, so a missed
+  // measurement costs nothing but the cue - it is never a reason to hide a link.
+  const [edges, setEdges] = useState({ left: false, right: false });
   const router = useRouter();
   const pathname = usePathname();
   const timer = useRef<any>(null);
+  const strip = useRef<HTMLElement | null>(null);
+
+  const measure = useCallback(() => {
+    const el = strip.current;
+    if (!el) { return; }
+    const max = el.scrollWidth - el.clientWidth;
+    setEdges({ left: el.scrollLeft > 1, right: max > 1 && el.scrollLeft < max - 1 });
+  }, []);
+
+  // Re-measured when the category list lands: the strip is empty on the first paint (the header
+  // fetches its categories itself), so the first measurement would always say "nothing to scroll".
+  useEffect(() => {
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [measure, cats.length]);
 
   useEffect(() => { setCartN(cartGet().length); }, [pathname]);
   useEffect(() => {
@@ -51,14 +70,27 @@ export default function Header() {
           <span className="h-2.5 w-2.5 rounded-full bg-brand-600"></span>
           RFO<span className="text-brand-700">Store</span>
         </a>
-        <nav className="hidden md:flex gap-4 text-sm text-ink-600">
-          <a href="/" className={navLinkClass}>Shop</a>
-          {cats.slice(0, 6).map((c) => (
-            <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className={navLinkClass}>{c.name}</a>
-          ))}
-          <a href="/faq" className={navLinkClass}>FAQ</a>
-                    <a href="/assistant" className={navLinkClass}>Ask AI</a>
-        </nav>
+        {/* Every live category, not the first six: the strip scrolls sideways when it runs out of
+            room, and the two edge fades are the only cue that it does (no scrollbar, no arrows -
+            the links stay where a nav link is expected). Only the strip scrolls; Shop/FAQ/Ask AI
+            stay put at their ends. */}
+        <div className="relative hidden md:block min-w-0 flex-1">
+          <nav ref={strip} onScroll={measure} aria-label="Categories"
+            className="flex gap-4 text-sm text-ink-600 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <a href="/" className={cn("shrink-0", navLinkClass)}>Shop</a>
+            {cats.map((c) => (
+              <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className={cn("shrink-0", navLinkClass)}>{c.name}</a>
+            ))}
+            <a href="/faq" className={cn("shrink-0", navLinkClass)}>FAQ</a>
+            <a href="/assistant" className={cn("shrink-0", navLinkClass)}>Ask AI</a>
+          </nav>
+          {edges.left && (
+            <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-surface to-transparent" />
+          )}
+          {edges.right && (
+            <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface to-transparent" />
+          )}
+        </div>
         <div className="relative flex-1 min-w-0 max-w-xl mx-auto">
           <Input tone="sunken"
             placeholder="Search devices - e.g. galaxy s21"
@@ -99,7 +131,7 @@ export default function Header() {
       {menu && (
         <nav className="md:hidden bg-white ring-1 ring-line border-t border-line px-4 py-1 flex flex-col text-sm text-ink-600">
           <a href="/" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>Shop</a>
-          {cats.slice(0, 6).map((c) => (
+          {cats.map((c) => (
             <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>{c.name}</a>
           ))}
           <a href="/faq" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>FAQ</a>

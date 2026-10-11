@@ -2,11 +2,24 @@ import { apiInternal } from "@/lib/api";
 import { iconFor } from "@/lib/productIcons";
 import LoadMore from "./components/LoadMore";
 import DealOfMonth from "./components/DealOfMonth";
+import { catalogPath, Filters, parseFilters } from "./components/catalogFilters";
 import { Button, cn, Eyebrow, Heading, linkClass, ProductCard } from "./components/ui";
 
 export const revalidate = 30;
 
-export default async function Home() {
+/* The catalog's filters live in the query string, and this page is where that string is read: the
+   server parses it, asks the API for that page of results, and hands the applied filter set to the
+   catalog section (which writes the URL back on a chip click). Reading `searchParams` is what makes
+   the route request-rendered - a pasted link has to render the filtered view in the first paint, not
+   after a client-side correction - and the four other fetches on this page keep their own data
+   cache, so the only live call per request is the catalog page itself. */
+export default async function Home({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const filters = parseFilters(await searchParams);
+  let catalog: { items: any[]; applied: Filters; brands: any[] } =
+    { items: [], applied: filters, brands: [] };
+  try {
+    catalog = await apiInternal(catalogPath(filters, { limit: 8, withFilters: true }), 0);
+  } catch { void 0; }
   const items: any[] = await apiInternal("/store/catalog?limit=4&sort=new");
   const arrivals: any[] = items;
   /* Hero art: the category glyphs already shipped in public/icons, for the newest arrivals.
@@ -74,7 +87,8 @@ export default async function Home() {
 
       <section id="shop" className="max-w-6xl mx-auto px-4 pt-16 pb-20">
         <Heading level="h2">Our products</Heading>
-        <LoadMore initial={items.filter((_: any, k: number) => k >= 4)} categories={cats} />
+        <LoadMore initial={catalog.items ?? []} applied={catalog.applied ?? filters}
+          brands={catalog.brands ?? []} categories={cats} />
       </section>
     </main>
   );
