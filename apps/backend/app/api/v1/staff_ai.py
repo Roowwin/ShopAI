@@ -5,7 +5,7 @@ import re
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 
 from app.api.v1 import staff_ops
@@ -59,11 +59,29 @@ async def intake_draft(image: UploadFile = File(...),
     return draft
 
 
+ARGS_JSON_CEILING = 4000
+
+
 class ChatIn(BaseModel):
+    # ADR 0008 precondition 5: an execute turn's action/args were schema-valid at ANY size, and a
+    # machine client (the agent door) makes "not reachable from the UI" no longer true - so the
+    # bounds live on the schema, not in the endpoint. action is bounded at 40 chars (every
+    # dispatchable action name is far shorter); args are capped on their SERIALIZED JSON form -
+    # the same json.dumps a dispatch produces - because nesting, not key count, is what a machine
+    # client can grow without limit.
     message: str = Field(min_length=1, max_length=2000)
     execute: bool = False
-    action: str | None = None
+    action: str | None = Field(default=None, max_length=40)
     args: dict | None = None
+
+    @field_validator("args")
+    @classmethod
+    def _args_within_serialized_ceiling(cls, v: dict | None) -> dict | None:
+        if v is None:
+            return v
+        if len(json.dumps(v)) > ARGS_JSON_CEILING:
+            raise ValueError("args exceed the serialized-JSON ceiling of 4000 chars")
+        return v
 
 CHAT_DAILY_CAP = 100
 
