@@ -36,16 +36,16 @@ export default function ReturnsPage() {
     >
       <Section title="The two promises">
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl bg-slate-50 ring-1 ring-slate-200 p-4">
-            <p className="font-semibold text-slate-900">30-day returns</p>
-            <p className="mt-1 text-slate-600">
+          <div className="rounded-control bg-surface-sunken ring-1 ring-line p-4">
+            <p className="font-semibold text-ink-900">30-day returns</p>
+            <p className="mt-1 text-ink-600">
               Change your mind for any reason within 30 days of delivery and send the device back for a refund, as long as it is in
               the condition it arrived in.
             </p>
           </div>
-          <div className="rounded-xl bg-slate-50 ring-1 ring-slate-200 p-4">
-            <p className="font-semibold text-slate-900">12-month warranty</p>
-            <p className="mt-1 text-slate-600">
+          <div className="rounded-control bg-surface-sunken ring-1 ring-line p-4">
+            <p className="font-semibold text-ink-900">12-month warranty</p>
+            <p className="mt-1 text-ink-600">
               Every device is covered for 12 months against hardware faults that appear in normal use. Grading does not change the
               warranty: Grade A and Grade D get the same cover.
             </p>
@@ -66,7 +66,7 @@ export default function ReturnsPage() {
         </ul>
         <p>
           Start the claim by emailing{" "}
-          <a className="text-emerald-700 hover:underline" href="mailto:support@rfostore.com.au">support@rfostore.com.au</a> with your
+          <a className="text-brand-700 hover:underline" href="mailto:support@rfostore.com.au">support@rfostore.com.au</a> with your
           order number. Photos or a short video of the fault speed things up a lot.
         </p>
       </Section>
@@ -104,7 +104,7 @@ export default function ReturnsPage() {
           <li>Normal battery ageing after 12 months, or battery drain caused by apps and settings rather than a hardware fault.</li>
           <li>Theft or loss after delivery.</li>
           <li>Devices with the serial label or internal serial removed, altered or made unreadable.</li>
-          <li>Cosmetic wear that was accurately described by the grade you bought - see <a className="text-emerald-700 hover:underline" href="/grades">our grades</a> for what each grade allows.</li>
+          <li>Cosmetic wear that was accurately described by the grade you bought - see <a className="text-brand-700 hover:underline" href="/grades">our grades</a> for what each grade allows.</li>
         </ul>
         <p>
           None of this limits your rights under the Australian Consumer Law or the New Zealand Consumer Guarantees Act. Our
@@ -116,12 +116,12 @@ export default function ReturnsPage() {
         <div className="space-y-4">
           {STEPS.map((s) => (
             <div key={s.n} className="flex gap-3">
-              <span className="h-7 w-7 shrink-0 rounded-full bg-emerald-600 text-white text-sm font-semibold flex items-center justify-center">
+              <span className="h-7 w-7 shrink-0 rounded-full bg-brand-700 text-white text-sm font-semibold flex items-center justify-center">
                 {s.n}
               </span>
               <div>
-                <p className="font-medium text-slate-900">{s.title}</p>
-                <p className="text-slate-600 mt-0.5">{s.body}</p>
+                <p className="font-medium text-ink-900">{s.title}</p>
+                <p className="text-ink-600 mt-0.5">{s.body}</p>
               </div>
             </div>
           ))}
@@ -131,11 +131,11 @@ export default function ReturnsPage() {
       <Section title="Questions before you buy">
         <Note>
           Not sure whether something is covered? Ask us before you order - email support@rfostore.com.au or check the{" "}
-          <a className="underline" href="/faq">FAQ</a>, which covers grading, battery health and delivery times. We would rather
+          <a className="text-brand-700 underline" href="/faq">FAQ</a>, which covers grading, battery health and delivery times. We would rather
           answer a question up front than process a return later.
         </Note>
         <p>
-          Ready to shop? Browse the <a className="text-emerald-700 hover:underline" href="/">current stock</a> - every listing shows
+          Ready to shop? Browse the <a className="text-brand-700 hover:underline" href="/">current stock</a> - every listing shows
           its grade, battery health and how many units are on the shelf.
         </p>
       </Section>

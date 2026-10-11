@@ -1,3 +1,63 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Design tokens. Channel triples (not hex) so Tailwind can apply opacity modifiers -
+   see the `token()` helper in tailwind.config.ts. Values are the palette this app
+   already used, named by role: brand = emerald, accent = amber, ink = slate text,
+   grade.* = the A-D scale. */
+@layer base {
+  :root {
+    --brand-50: 236 253 245;
+    --brand-100: 209 250 229;
+    --brand-200: 167 243 208;
+    --brand-300: 110 231 183;
+    --brand-500: 16 185 129;
+    --brand-600: 5 150 105;
+    --brand-700: 4 120 87;
+    --brand-800: 6 95 70;
+    --brand-900: 6 78 59;
+    --brand-950: 2 44 34;
+
+    --accent-50: 255 251 235;
+    --accent-100: 254 243 199;
+    --accent-300: 252 211 77;
+    --accent-400: 251 191 36;
+    --accent-500: 245 158 11;
+    --accent-700: 180 83 9;
+
+    --ink-300: 203 213 225;
+    --ink-400: 148 163 184;
+    --ink-500: 100 116 139;
+    --ink-600: 71 85 105;
+    --ink-700: 51 65 85;
+    --ink-900: 15 23 42;
+
+    --surface: 255 255 255;
+    --surface-muted: 248 250 252;
+    --surface-sunken: 241 245 249;
+
+    /* The hairline boundaries below sit deliberately under the 3:1 non-text bar against white
+       (1.23:1 and 1.48:1). A recorded exception, not an oversight: raising them would put mid-grey
+       outlines on every surface in both apps. Values are unchanged - do not "correct" them. */
+    --line: 226 232 240;
+    --line-strong: 203 213 225;
+
+    --danger-50: 254 242 242;
+    --danger-200: 254 202 202;
+    --danger-600: 220 38 38;
+
+    --grade-a-solid: 5 150 105;
+    --grade-a-soft: 236 253 245;
+    --grade-a-ink: 4 120 87;
+    --grade-b-solid: 2 132 199;
+    --grade-b-soft: 240 249 255;
+    --grade-b-ink: 3 105 161;
+    --grade-c-solid: 245 158 11;
+    --grade-c-soft: 255 251 235;
+    --grade-c-ink: 180 83 9;
+    --grade-d-solid: 100 116 139;
+    --grade-d-soft: 241 245 249;
+    --grade-d-ink: 71 85 105;
+  }
+}

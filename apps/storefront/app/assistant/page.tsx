@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { API, aud } from "@/lib/api";
+import { Button, Card, Heading, Input } from "../components/ui";
 
-type Card = { title: string; brand: string; grade: string; price_cents: number; units_available: number; url: string };
-type Msg = { role: "you" | "ai"; text: string; cards?: Card[] };
+type Result = { title: string; brand: string; grade: string; price_cents: number; units_available: number; url: string };
+type Msg = { role: "you" | "ai"; text: string; cards?: Result[] };
 
 export default function AssistantPage() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -44,17 +45,17 @@ export default function AssistantPage() {
 
   return (
     <main className="max-w-2xl mx-auto pt-8 px-4">
-      <h1 className="text-xl font-semibold mb-4">Ask about our stock</h1>
-      {about && <p className="text-xs text-slate-500 mb-2">About: {about} <a className="underline" href={"/products/" + about}>view item</a></p>}
-      <div className="bg-white rounded-xl shadow p-6 space-y-3 min-h-[360px]">
-        {msgs.length === 0 && <p className="text-slate-400 text-sm">Try: &quot;What refurbished phones do you have under $300?&quot;</p>}
+      <Heading level="h1" className="mb-4">Ask about our stock</Heading>
+      {about && <p className="text-xs text-ink-500 mb-2">About: {about} <a className="text-brand-700 underline" href={"/products/" + about}>view item</a></p>}
+      <Card className="p-6 shadow space-y-3 min-h-[360px]">
+        {msgs.length === 0 && <p className="text-ink-400 text-sm">Try: &quot;What refurbished phones do you have under $300?&quot;</p>}
         {msgs.map((m, i) => (
-          <div key={i} className={"rounded-lg p-3 text-sm " + (m.role === "you" ? "bg-slate-100 ml-8" : "bg-sky-50")}>
+          <div key={i} className={"rounded-control p-3 text-sm " + (m.role === "you" ? "bg-surface-sunken ml-8" : "bg-brand-50")}>
             <b className="mr-1">{m.role === "you" ? "You" : "Assistant"}:</b>{m.text}
             {!!m.cards?.length && (
               <div className="mt-2 space-y-2">
                 {m.cards.map((c) => (
-                  <a key={c.title + c.grade} href={c.url} className="block border rounded p-2 hover:bg-white">
+                  <a key={c.title + c.grade} href={c.url} className="block rounded-control border border-line p-2 hover:bg-brand-50 transition">
                     {c.title} · Grade {c.grade} · from {aud(c.price_cents)} · {c.units_available} in stock
                   </a>
                 ))}
@@ -62,10 +63,10 @@ export default function AssistantPage() {
             )}
           </div>
         ))}
-      </div>
+      </Card>
       <div className="flex gap-2 mt-4">
-        <input className="border rounded px-3 py-2 flex-1" placeholder="what are you looking for?" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); send(); } }} value={input} onChange={(e) => setInput(e.target.value)} />
-        <button className="bg-slate-900 text-white rounded px-4 py-2 disabled:opacity-50" onClick={send} disabled={busy}>Send</button>
+        <Input className="flex-1" placeholder="what are you looking for?" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); send(); } }} value={input} onChange={(e) => setInput(e.target.value)} />
+        <Button onClick={send} disabled={busy}>Send</Button>
       </div>
     </main>
   );

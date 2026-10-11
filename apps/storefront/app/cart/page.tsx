@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { API, aud } from "@/lib/api";
 import { cartGet, cartRemove, cartTotal, cartClear, CartLine } from "@/lib/cart";
+import { Button, Card, Heading, Input } from "../components/ui";
 
 export default function CartPage() {
   const [lines, setLines] = useState<CartLine[]>([]);
@@ -42,11 +43,11 @@ export default function CartPage() {
   if (done) {
     return (
       <main className="max-w-lg mx-auto pt-16 px-4 text-center">
-        <div className="mx-auto h-14 w-14 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-2xl">&#10003;</div>
-        <h1 className="text-2xl font-semibold mt-3">Order placed</h1>
+        <div className="mx-auto h-14 w-14 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-2xl">&#10003;</div>
+        <Heading level="h1" className="mt-3">Order placed</Heading>
         <p className="mt-2">Total charged: <span className="font-semibold">{aud(done.total)}</span></p>
-        <p className="text-sm text-slate-500 mt-1 font-mono">Order {done.id}</p>
-        <a href="/" className="inline-block mt-6 rounded-xl bg-emerald-600 text-white px-5 py-2.5">Keep shopping</a>
+        <p className="text-sm text-ink-500 mt-1 font-mono">Order {done.id}</p>
+        <Button href="/" className="mt-6">Keep shopping</Button>
       </main>
     );
   }
@@ -54,42 +55,42 @@ export default function CartPage() {
   const total = cartTotal();
   return (
     <main className="max-w-2xl mx-auto pt-8 px-4 pb-12 space-y-5">
-      <h1 className="text-xl font-semibold">Your cart</h1>
-      <div className="rounded-2xl ring-1 ring-slate-200 bg-white p-5">
-        {lines.length === 0 && <p className="text-slate-500">Cart is empty - <a className="text-emerald-700" href="/">browse the shop</a>.</p>}
+      <Heading level="h1">Your cart</Heading>
+      <Card className="p-5">
+        {lines.length === 0 && <p className="text-ink-500">Cart is empty - <a className="text-brand-700" href="/">browse the shop</a>.</p>}
         {lines.map((l) => (
-          <div key={l.asset_id} className="flex items-center justify-between gap-3 border-b border-slate-100 py-3 last:border-0">
+          <div key={l.asset_id} className="flex items-center justify-between gap-3 border-b border-line py-3 last:border-0">
             <div className="min-w-0">
               <p className="font-medium truncate">{l.title}</p>
-              <p className="text-xs text-slate-400 mt-0.5">Grade {l.grade} - serial <span className="font-mono">***{l.serial_tail}</span></p>
+              <p className="text-xs text-ink-400 mt-0.5">Grade {l.grade} - serial <span className="font-mono">***{l.serial_tail}</span></p>
             </div>
             <div className="flex items-center gap-4 shrink-0">
               <span className="font-semibold">{aud(l.price_cents)}</span>
-              <button className="text-red-500 text-sm hover:underline" onClick={() => setLines(cartRemove(l.asset_id))}>remove</button>
+              <Button variant="danger" size="sm" onClick={() => setLines(cartRemove(l.asset_id))}>remove</Button>
             </div>
           </div>
         ))}
         {lines.length > 0 && <p className="text-right pt-3 font-semibold">Subtotal (excl. GST): {aud(total)}</p>}
-      </div>
+      </Card>
       {lines.length > 0 && (
-        <div className="rounded-2xl ring-1 ring-slate-200 bg-white p-5 space-y-3">
-          <h2 className="font-medium">Delivery (AU / NZ)</h2>
-          <select className="border rounded-xl px-3 py-2 bg-white" value={country} onChange={(e) => setCountry(e.target.value)}>
+        <Card className="p-5 space-y-3">
+          <Heading level="h2">Delivery (AU / NZ)</Heading>
+          <select className="rounded-control ring-1 ring-line bg-surface px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-700" value={country} onChange={(e) => setCountry(e.target.value)}>
             <option value="AU">Australia (GST 10%)</option>
             <option value="NZ">New Zealand (GST 15%)</option>
           </select>
-          <input className="border rounded-xl px-3 py-2 w-full" placeholder="full name" value={name} onChange={(e) => setName(e.target.value)} />
-          <input className="border rounded-xl px-3 py-2 w-full" placeholder="street address" value={line1} onChange={(e) => setLine1(e.target.value)} />
+          <Input placeholder="full name" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input placeholder="street address" value={line1} onChange={(e) => setLine1(e.target.value)} />
           <div className="flex gap-3">
-            <input className="border rounded-xl px-3 py-2 flex-1" placeholder="city" value={city} onChange={(e) => setCity(e.target.value)} />
-            <input className="border rounded-xl px-3 py-2 w-32" placeholder="postcode" value={postcode} onChange={(e) => setPostcode(e.target.value)} />
+            <Input className="flex-1" placeholder="city" value={city} onChange={(e) => setCity(e.target.value)} />
+            <div className="w-32"><Input placeholder="postcode" value={postcode} onChange={(e) => setPostcode(e.target.value)} /></div>
           </div>
-          <button className="w-full bg-amber-500 text-slate-900 rounded-xl px-6 py-3 font-semibold hover:bg-amber-400 disabled:opacity-50" onClick={checkout} disabled={busy}>
+          <Button variant="accent" className="w-full" onClick={checkout} disabled={busy}>
             {busy ? "Processing..." : "Buy now - unit reserved instantly"}
-          </button>
-        </div>
+          </Button>
+        </Card>
       )}
-      {err && <p className="text-red-600 text-sm">{err}</p>}
+      {err && <p className="text-danger-600 text-sm">{err}</p>}
     </main>
   );
 }

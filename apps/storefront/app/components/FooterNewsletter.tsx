@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { API } from "@/lib/api";
+import { Button, Input } from "./ui";
 
 export default function FooterNewsletter() {
   const [email, setEmail] = useState("");
@@ -33,19 +34,18 @@ export default function FooterNewsletter() {
   }
 
   return (
-    <div className="rounded-xl bg-slate-800/60 px-4 py-3">
+    <div className="rounded-control bg-ink-900/60 px-4 py-3">
       <p className="text-sm font-semibold text-white">Get the drop list</p>
-      <p className="text-xs text-slate-400 mt-1">Fresh stock alerts and deals - no spam.</p>
+      <p className="text-xs text-ink-400 mt-1">Fresh stock alerts and deals - no spam.</p>
       <form className="mt-2 flex flex-wrap gap-2" onSubmit={submit}>
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+        <Input tone="dark" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com" aria-label="Email address"
-          className="flex-1 min-w-[12rem] rounded-lg bg-slate-900 text-slate-100 placeholder-slate-500 px-3 py-2 text-sm ring-1 ring-slate-700 focus:ring-emerald-500 outline-none" />
-        <button type="submit" disabled={busy}
-          className="bg-emerald-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50">
+          className="flex-1 min-w-[12rem] text-sm" />
+        <Button type="submit" disabled={busy}>
           {busy ? "..." : "Subscribe"}
-        </button>
+        </Button>
       </form>
-      {msg && (<p className="text-xs text-emerald-300 mt-2">{msg}</p>)}
+      {msg && (<p className="text-xs text-brand-300 mt-2">{msg}</p>)}
     </div>
   );
 }
