@@ -218,6 +218,19 @@ def _is_fallback(decided_by: str | None) -> bool:
     return ai_svc.cloud_text_active() and (decided_by or "") == _fallback_model()
 
 
+def _autonomy_enabled() -> bool:
+    """ADR 0008 decision 6's env switch `AI_AUTONOMY` - the OUTER of the two switches.
+
+    Read at EXECUTION time, per request, from the process environment (compose passes it through;
+    changing it needs an api restart, which is the documented, deliberate cost). Absent means off:
+    the default is false, and only an explicit truthy spelling turns it on, so a typo can never arm
+    the rail. It gates the agent execute path and NOTHING else - the staff human-Confirm path never
+    consults it, and neither does the grants surface (an admin must be able to prepare and inspect
+    grants while autonomy is off, precisely so enabling can be a deliberate act).
+    """
+    return (os.environ.get("AI_AUTONOMY", "") or "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def _proposed_payload(pid: str | None, action: str, args: dict, resolved: dict, fallback: bool) -> dict:
     """The proposal response - ONE shape for every path that hands a proposal back.
 
@@ -461,20 +474,25 @@ async def _agent_execute(body: ChatIn, staff: dict, db, r) -> dict:
     2. the record exists, is an AGENT proposal, and its identity_id is THIS agent's - a proposal is
        identity-scoped, so one agent can never spend another's (decision 2);
     3. it is not already consumed (single-use);
-    4. an enabled grant exists for (agent, this agent, action). None -> the turn comes back as a
+    4. the ENV switch `AI_AUTONOMY` is on (decision 6's outer switch). Off -> the turn comes back as
+       a PROPOSAL, refusal-free: the switch is a pause on this rail, not a statement about the
+       request, and it deliberately leaves the record unconsumed so flipping it on later lets the
+       same proposal run. Nothing above this line can degrade instead of refusing, because a turn
+       naming a record the server cannot show back has no proposal to be given;
+    5. an enabled grant exists for (agent, this agent, action). None -> the turn comes back as a
        PROPOSAL: absent a grant the Confirm line is exactly what it was (decision 1), and the agent
        loses nothing but the execution - the record is left unconsumed for whoever can act on it;
-    5. the deciding model was not the fallback (decision 7), read from the record, not from this
+    6. the deciding model was not the fallback (decision 7), read from the record, not from this
        process;
-    6. the cap is reserved atomically; over-cap -> the turn comes back as a PROPOSAL, never a
+    7. the cap is reserved atomically; over-cap -> the turn comes back as a PROPOSAL, never a
        refusal and never a silent drop (decision 4);
-    7. the proposal is consumed ATOMICALLY (so two concurrent turns cannot both execute it), the
+    8. the proposal is consumed ATOMICALLY (so two concurrent turns cannot both execute it), the
        action runs from the stored args and ids, and a failure that provably wrote nothing refunds
        the reserved unit.
 
-    Staff identities do not come through here at all: a human Confirm is untouched, and a staff
-    grant is not creatable by this job (the table admits the type, nothing writes it), so the staff
-    branch below still gates on roles alone.
+    Staff identities do not come through here at all: a human Confirm is untouched by every switch
+    in this function, and a staff grant is not creatable by this job (the table admits the type,
+    nothing writes it), so the staff branch below still gates on roles alone.
     """
     if body.action is not None or body.args is not None:
         raise HTTPException(status_code=422, detail=(
@@ -495,6 +513,12 @@ async def _agent_execute(body: ChatIn, staff: dict, db, r) -> dict:
     resolved = rec.get("resolved") or {}
     if action not in TOOL_ROLES:
         raise HTTPException(status_code=403, detail="proposal names no dispatchable action")
+
+    # Decision 6's outer switch, ahead of the grant: both switches must be on, and either one alone
+    # returns the rail to propose-only. Read here (not cached) so a restart is the only lever.
+    if not _autonomy_enabled():
+        return _proposed_payload(body.proposal_id, action, args, resolved,
+                                 _is_fallback(rec.get("decided_by")))
 
     grant = await staff_ops.enabled_agent_grant(db, staff["identity_id"], action)
     if grant is None:

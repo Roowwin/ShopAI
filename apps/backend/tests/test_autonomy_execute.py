@@ -96,6 +96,19 @@ def _cloud_configured(monkeypatch):
     monkeypatch.setenv("AI_CLOUD_TEXT_MODEL", "pytest-cloud-text")
 
 
+@pytest.fixture(autouse=True)
+def _autonomy_switch_on(monkeypatch):
+    """Run this file with decision 6's OUTER switch on, so the gate under test is the gate.
+
+    Both switches must hold for an execution (env + per-grant `enabled`), and this file is about
+    what happens when they do: `_grant` writes an enabled row and this sets the env. The switch's
+    own behaviour - off, absent, misspelled - belongs to the surface that administers it and is
+    pinned in tests/test_autonomy_grants.py, which also proves that a switched-off turn leaves the
+    proposal UNSPENT rather than merely refusing it.
+    """
+    monkeypatch.setenv("AI_AUTONOMY", "true")
+
+
 @pytest.fixture
 def fake_model(monkeypatch):
     """Install a model that always decides `action` with `args`, recording where it "ran".
@@ -118,8 +131,14 @@ async def _agent(client, admin, name: str) -> tuple[int, dict]:
 
 
 async def _grant(agent_id: int, action: str, daily_cap: int, action_class: str = "outward") -> int:
-    """The fixture grant. Written straight to the table: no endpoint can create one (that is a
-    later job), which is exactly why this file has to."""
+    """The fixture grant, written straight to the table ON PURPOSE.
+
+    This file tests the execute gate, so its authorisation is built the shortest way that produces an
+    enabled row and the surface that creates one is kept out of the fixture - a broken endpoint would
+    otherwise fail these tests for a reason that has nothing to do with the gate. The surface's own
+    behaviour (admin walls, the derived class, create-disabled, revoke) is
+    tests/test_autonomy_grants.py, and that file builds its grants through the API.
+    """
     eng = get_engine()
     async with eng.begin() as c:
         gid = (await c.execute(text(
