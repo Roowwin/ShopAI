@@ -1,5 +1,6 @@
 import { apiInternal, aud } from "@/lib/api";
-import UnitPicker from "./UnitPicker";
+import GradePanel from "./GradePanel";
+import ProductArt from "../../components/ProductArt";
 import { notFound } from "next/navigation";
 
 export const revalidate = 0;
@@ -25,14 +26,18 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       </nav>
       <div className="grid gap-6 md:grid-cols-2">
         <div>
-          {/* IMAGE SLOT: replace this block with <img src="/media/..." className="..." /> when photos are ready */}
-          <div className="aspect-[4/3] rounded-2xl bg-gradient-to-br from-slate-200 to-slate-300 flex flex-col items-center justify-center text-slate-500">
-            <div className="text-center">
-              <p className="text-4xl font-bold text-slate-400">{(p.brand || "?").slice(0, 2).toUpperCase()}</p>
-              <p className="text-xs mt-2">Product photo coming soon</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">{p.brand} {p.model}</p>
-            </div>
-          </div>
+          {/* IMAGE SLOT: the product photo when the CMS has one, else the category-glyph icon shipped for
+              this slug, else the "photo coming soon" tile. Real photos replace this with /media/... later. */}
+          <ProductArt slug={slug} imageUrl={p.image_url} alt={p.title}
+            className="w-full aspect-[4/3] rounded-2xl object-cover ring-1 ring-slate-200 bg-slate-100"
+            fallback={
+            <div className="aspect-[4/3] rounded-2xl bg-gradient-to-br from-slate-200 to-slate-300 flex flex-col items-center justify-center text-slate-500">
+              <div className="text-center">
+                <p className="text-4xl font-bold text-slate-400">{(p.brand || "?").slice(0, 2).toUpperCase()}</p>
+                <p className="text-xs mt-2">Product photo coming soon</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">{p.brand} {p.model}</p>
+              </div>
+            </div>} />
           <div className="grid grid-cols-3 gap-2 mt-3 text-[11px] text-slate-500">
             <div className="rounded-lg bg-white ring-1 ring-slate-200 px-2 py-1.5 text-center">Serialised</div>
             <div className="rounded-lg bg-white ring-1 ring-slate-200 px-2 py-1.5 text-center">Graded A-D</div>
@@ -60,7 +65,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           )}
           <p className="text-sm text-slate-600 mt-3">{p.description}</p>
           <div className="mt-5">
-            <UnitPicker units={p.units} title={p.title} slug={slug} />
+            <GradePanel units={p.units} title={p.title} />
           </div>
           <div className="mt-4 rounded-2xl bg-slate-900 text-white p-4 flex items-center justify-between gap-3">
             <div>

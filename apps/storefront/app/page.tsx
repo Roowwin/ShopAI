@@ -1,6 +1,7 @@
 import { apiInternal, aud } from "@/lib/api";
 import LoadMore from "./components/LoadMore";
 import DealOfMonth from "./components/DealOfMonth";
+import ProductArt from "./components/ProductArt";
 
 export const revalidate = 30;
 
@@ -33,10 +34,11 @@ export default async function Home() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
           {arrivals.map((i) => (
             <a key={i.slug} href={"/products/" + i.slug} className="rounded-xl ring-1 ring-slate-200 bg-white overflow-hidden hover:ring-emerald-300 transition">
-              {i.image_url ? (<img src={i.image_url} alt={i.title} className="w-full aspect-[4/3] object-cover" />) : (
-              <div className="aspect-[4/3] bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-                <span className="text-lg font-bold text-slate-400">{(i.brand || "?").slice(0, 2).toUpperCase()}</span></div>
-              )}
+              <ProductArt slug={i.slug} imageUrl={i.image_url} alt={i.title} className="w-full aspect-[4/3] object-cover"
+                fallback={
+                <div className="aspect-[4/3] bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                  <span className="text-lg font-bold text-slate-400">{(i.brand || "?").slice(0, 2).toUpperCase()}</span></div>
+                } />
               <div className="p-3"><p className="font-medium truncate text-sm">{i.title}</p>
                 <p className="text-sm font-semibold mt-1">{i.price_from_cents !== null ? aud(i.price_from_cents) : "-"}</p></div>
             </a>

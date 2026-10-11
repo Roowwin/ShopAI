@@ -1,70 +1,11 @@
 import type { ReactNode } from "react";
 import ContentPage, { Note, Section } from "../components/ContentPage";
+import { GRADES } from "@/lib/grades";
 
 export const metadata = {
   title: "Our grades A-D - RFO Store",
   description: "What grade A, B, C and D mean for cosmetic condition, battery health and price on refurbished devices.",
 };
-
-type Grade = {
-  letter: string;
-  label: string;
-  tone: string;
-  battery: string;
-  looks: string[];
-  best: string;
-};
-
-const GRADES: Grade[] = [
-  {
-    letter: "A",
-    label: "Like new",
-    tone: "bg-emerald-600",
-    battery: "Battery health 90% or better",
-    looks: [
-      "No visible marks when you hold it at arm's length",
-      "Screen free of scratches, chips and shadowing",
-      "Frame and back clean, at most faint marks under direct light",
-    ],
-    best: "Buyers who want the newest-feeling device and the longest battery life.",
-  },
-  {
-    letter: "B",
-    label: "Excellent",
-    tone: "bg-emerald-500",
-    battery: "Battery health 85% or better",
-    looks: [
-      "Light micro-scratches on the frame or back cover",
-      "Screen clean and unmarked when the display is on",
-      "No dents, no cracks, no bent chassis",
-    ],
-    best: "Most customers. Nearly new in the hand, a clear step down in price from Grade A.",
-  },
-  {
-    letter: "C",
-    label: "Good",
-    tone: "bg-amber-500",
-    battery: "Battery health 80% or better",
-    looks: [
-      "Visible scuffs, scratches or small dents on the frame",
-      "Screen may show faint marks that are not visible while it is on",
-      "All wear is cosmetic - the device is fully functional",
-    ],
-    best: "Value hunters who will use a case anyway and would rather save the difference.",
-  },
-  {
-    letter: "D",
-    label: "Fair",
-    tone: "bg-slate-500",
-    battery: "Battery health 80% or better",
-    looks: [
-      "Obvious cosmetic wear: scuffed edges, deeper scratches, small dents",
-      "Possible small blemish in a screen corner, or a replaced screen or battery",
-      "Any replaced part is a genuine-quality part, and it is noted on the condition report",
-    ],
-    best: "The lowest price we can offer on a fully working device - great for a spare, a first phone or a test unit.",
-  },
-];
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -104,7 +45,7 @@ export default function GradesPage() {
           </ul>
           <p className="mt-3 text-sm text-slate-600">
             <span className="font-medium text-slate-900">Best for: </span>
-            {g.best}
+            {g.useCase}
           </p>
         </section>
       ))}

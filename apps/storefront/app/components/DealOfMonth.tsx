@@ -1,4 +1,5 @@
 import { aud } from "@/lib/api";
+import ProductArt from "./ProductArt";
 
 type Deal = {
   title?: string | null;
@@ -16,13 +17,12 @@ export default function DealOfMonth({ deal }: { deal?: Deal | null }) {
       <h2 className="text-xl font-semibold">Deal of the month</h2>
       <a href={"/products/" + deal.product_slug}
         className="mt-4 flex flex-col md:flex-row rounded-xl ring-1 ring-emerald-200 bg-white overflow-hidden hover:ring-emerald-300 transition">
-        {deal.image_url ? (
-          <img src={deal.image_url} alt={title} className="md:w-1/2 w-full aspect-[4/3] object-cover" />
-        ) : (
+        <ProductArt slug={deal.product_slug} imageUrl={deal.image_url} alt={title} className="md:w-1/2 w-full aspect-[4/3] object-cover"
+          fallback={
           <div className="md:w-1/2 w-full aspect-[4/3] bg-gradient-to-br from-emerald-50 to-emerald-100 flex items-center justify-center">
             <span className="text-2xl font-bold text-emerald-600">{title.slice(0, 2).toUpperCase()}</span>
           </div>
-        )}
+          } />
         <div className="p-5 md:w-1/2 flex flex-col justify-center">
           <span className="self-start bg-amber-400 text-slate-900 text-[11px] uppercase tracking-widest font-semibold rounded-full px-3 py-1">
             {deal.badge || "Deal of the Month"}
