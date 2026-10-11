@@ -159,3 +159,73 @@ async def _staff_cleanup():
     async with eng.begin() as c:
         await c.execute(text("DELETE FROM refresh_tokens WHERE identity_id IN (SELECT id FROM staff_users WHERE email LIKE 'pytest-%')"))
         await c.execute(text("DELETE FROM staff_users WHERE email LIKE 'pytest-%'"))
+
+
+async def test_newsletter_subscribe_dedupe_and_admin_list(client):
+    """Public signup is idempotent and non-disclosing; the admin list is role-gated.
+
+    Hermetic: creates its own subscriber row and its own staff users and removes all
+    three in a finally, so it rests on no hand-seeded data.
+    """
+    eng = get_engine()
+    email = "pytest-news-" + uuid.uuid4().hex + "@test.rfo"
+    admin_email = "pytest-" + uuid.uuid4().hex + "@test.rfo"
+    sales_email = "pytest-" + uuid.uuid4().hex + "@test.rfo"
+
+    async def _rows() -> int:
+        async with eng.begin() as c:
+            return (await c.execute(text("SELECT count(*) FROM newsletter_subscribers WHERE email = :e"),
+                                    {"e": email})).scalar_one()
+
+    try:
+        # first signup
+        r = await client.post("/store/newsletter/subscribe", json={"email": email})
+        assert r.status_code == 200, r.text
+        first = r.json()
+        assert first == {"status": "subscribed"}, first
+        assert await _rows() == 1
+
+        # repeat signup: 200 with an identical body - no "already subscribed" tell - and still one row
+        r = await client.post("/store/newsletter/subscribe", json={"email": email})
+        assert r.status_code == 200, r.text
+        assert r.json() == first, "duplicate signup must be indistinguishable from a first signup"
+        assert await _rows() == 1, "dedupe via UNIQUE(email): exactly one row"
+
+        # normalisation: padded / upper-case lands on the same row
+        r = await client.post("/store/newsletter/subscribe", json={"email": "  " + email.upper() + "  "})
+        assert r.status_code == 200, r.text
+        assert await _rows() == 1, "upper-case/padded address must normalise onto the stored row"
+
+        # invalid addresses: 4xx, never a 500
+        for bad in ("not-an-email", "a@b", ""):
+            r = await client.post("/store/newsletter/subscribe", json={"email": bad})
+            assert r.status_code == 422, (bad, r.text)
+
+        # admin list: auth required ...
+        r = await client.get("/staff/newsletter")
+        assert r.status_code == 401, r.text
+
+        # ... and an admin/manager role
+        _, pw = await bootstrap(sales_email, "sales")
+        r = await client.post("/staff/auth/login", json={"email": sales_email, "password": pw})
+        assert r.status_code == 200, r.text
+        r = await client.get("/staff/newsletter", headers=_h(r.json()["access_token"]))
+        assert r.status_code == 403, r.text
+
+        # ... and lists + counts for an admin
+        _, pw = await bootstrap(admin_email, "admin")
+        r = await client.post("/staff/auth/login", json={"email": admin_email, "password": pw})
+        assert r.status_code == 200, r.text
+        r = await client.get("/staff/newsletter", headers=_h(r.json()["access_token"]))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["total"] >= 1
+        mine = [s for s in body["subscribers"] if s["email"] == email]
+        assert len(mine) == 1 and mine[0]["created_at"], body
+    finally:
+        async with eng.begin() as c:
+            await c.execute(text("DELETE FROM newsletter_subscribers WHERE email = :e"), {"e": email})
+            await c.execute(text("DELETE FROM refresh_tokens WHERE identity_id IN (SELECT id FROM staff_users WHERE email IN (:a, :s))"),
+                            {"a": admin_email, "s": sales_email})
+            await c.execute(text("DELETE FROM staff_users WHERE email IN (:a, :s)"),
+                            {"a": admin_email, "s": sales_email})

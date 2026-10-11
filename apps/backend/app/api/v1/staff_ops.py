@@ -361,3 +361,16 @@ async def cms_edit_product(pid: int, body: dict, staff: dict = Depends(require_r
     await audit(db, "staff", entity="cms", action="product_updated", entity_id=pid, actor_id=staff["id"], after={k: str(body[k])[:60] for k in body})
     await db.commit()
     return {"ok": True}
+
+
+# ------------- Newsletter: public signups, admin read-only list -------------
+@router.get("/newsletter")
+async def newsletter_list(limit: int = Query(100, le=500), offset: int = 0,
+                          staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+    total = (await db.execute(text("SELECT count(*) FROM newsletter_subscribers"))).scalar_one()
+    rows = (await db.execute(text("""
+        SELECT email, created_at FROM newsletter_subscribers
+        ORDER BY created_at DESC, id DESC LIMIT :lim OFFSET :off
+    """), {"lim": limit, "off": offset})).mappings().all()
+    return {"total": int(total),
+            "subscribers": [{"email": r["email"], "created_at": r["created_at"].isoformat()} for r in rows]}

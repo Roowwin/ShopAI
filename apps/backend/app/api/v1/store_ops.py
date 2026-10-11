@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import re
 import uuid as uuidlib
 from datetime import datetime, timedelta, timezone
 
@@ -20,6 +21,10 @@ from app.services.audit import audit
 router = APIRouter(prefix="/store", tags=["store-ops"])
 
 TAX = {"AU": ("AU_GST", 1000), "NZ": ("NZ_GST", 1500)}
+
+# same shape as store.py's register validator - kept local so the two public
+# routers stay independently readable.
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _tax_cents(subtotal: int, country: str) -> int:
@@ -269,3 +274,22 @@ async def simulate_payment(public_id: str, db=Depends(get_db)):
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
     return {"status": "paid", "order": order.status}
+
+
+class NewsletterIn(BaseModel):
+    email: str = Field(min_length=5, max_length=254)
+
+
+@router.post("/newsletter/subscribe")
+async def newsletter_subscribe(body: NewsletterIn, db=Depends(get_db)):
+    email = body.email.strip().lower()
+    if not _EMAIL.match(email):
+        raise HTTPException(status_code=422, detail="invalid email")
+    # Idempotent by design: the UNIQUE(email) constraint absorbs a repeat signup via
+    # ON CONFLICT DO NOTHING, so a duplicate is a plain success - same status, same body
+    # as a first-time signup. The response never reveals whether the address was new
+    # (that would turn this into a "is this person subscribed" oracle) and never 500s.
+    await db.execute(text("INSERT INTO newsletter_subscribers (email) VALUES (:e) ON CONFLICT (email) DO NOTHING"),
+                     {"e": email})
+    await db.commit()
+    return {"status": "subscribed"}
