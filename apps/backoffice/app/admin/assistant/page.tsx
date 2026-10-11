@@ -121,9 +121,13 @@ export default function AssistantPage() {
   async function confirm(idx: number) {
     if (busy) { return; }
     const m = msgs[idx];
-    if (!m || !m.proposal || m.executed) { return; }
-    setMsgs((arr) => [...arr, { role: "you", text: "[Confirm] " + m.proposal.action }]);
-    await turn(m.proposal.message, { execute: true, action: m.proposal.action, args: m.proposal.args, silent: true });
+    if (!m) { return; }
+    /* `p` is hoisted out of the closure below on purpose: TypeScript discards property narrowing
+       inside a callback, so reading `m.proposal` there was TS18048 even though it is guarded. */
+    const p = m.proposal;
+    if (!p || m.executed) { return; }
+    setMsgs((arr) => [...arr, { role: "you", text: "[Confirm] " + p.action }]);
+    await turn(p.message, { execute: true, action: p.action, args: p.args, silent: true });
     setMsgs((arr) => {
       const last = arr[arr.length - 1];
       if (last && last.results) { return arr.map((x, k) => (k === idx ? { ...x, executed: true } : x)); }
