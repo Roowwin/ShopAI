@@ -1,63 +1,39 @@
-# PROJECT_CONTEXT.md - RFO Platform (handover v4 - close of factory-pilot session)
+# PROJECT_CONTEXT.md - RFO Platform (handover v5 - job 2 closed: deal-of-month)
 
 ## START HERE (read fully, then docs/state.md, then docs/factory-pilot.md + ADRs; evidence-first)
-1. Branch phase11-ai at 1041cc5 (merge factory/job-20261011-101451-1281), PUSHED.
+1. Branch phase11-ai, current with origin. Pilot merge 1041cc5; job-2 (deal-of-month) merged after 2 rounds (round-2 commit bf51a47 + merge); all pushed.
 2. LIVE & VERIFIED:
-   A. Phases 0-10 (tag v1.0.0-golive-ready) + Phase 11 AI co-pilot (/admin/assistant): chat v2 w/
-      memory (6 turns, redacted, TTLs), tools activate_lot/create_lot/scan_in/test/grade/price/
-      list/move + read-only asset_details (cost admin/manager only); proposal -> Confirm -> audited;
-      owner-class unlimited chats, staff CHAT_DAILY_CAP.
-   B. Brains: Ollama cloud text gpt-oss:120b via services/ai.py (think flags, local qwen2.5:7b
-      fallback = READ-ONLY, vision gemma3:4b).
-   C. CMS: 0008 site_settings + product image_url/featured; staff_ops CMS endpoints audited;
-      /admin/cms editor; public /store/{home-content,promotions,categories}.
-   D. Storefront: header live search/category nav/cart badge; category pages; home = CMS hero +
-      promo + new arrivals + best sellers; product page w/ UnitPicker; cart; NEW content pages
-      /faq /contact /grades /returns (ContentPage.tsx layout) + footer links + header FAQ.
-   E. FACTORY: pipeline PROVEN on pilot (docs/factory-pilot.md): next -> builder (ollama launch
-      claude, deepseek-v4.1-flash:cloud; fallback gpt-oss:120b) -> manual reviews (claude -p/
-      sonnet path unoperational, no Anthropic login; ccr bridge unused plan B) -> decision ->
-      rework -> round-2 APPROVE -> merge. factory.ps1 fixed (round-aware decision/approve,
-      reviewer fallback, flag fix). Gate policy: 29 deterministic tests (deselect 2 lot-dependent
-      assistant tests); worktree test runs share the ROOT postgres. Protocols: ff-sync worktree
-      before referencing committed files; Copy-Item .env into new worktrees; CLOSE builder session
-      before approve; job committed on branch before approve; gates verified in PS only.
-3. NEXT: backlog job 2 = deal-of-month CMS pin; then wishlist/newsletter/reviews/blog-cms one at a
-   time; hygiene jobs: assistant tests hermetic/mock, scan_in lot audit, compose .bak cleanup.
-4. KNOWN DEBTS: go-live fact-check of content-page business copy (support email/hours/warranty/
-   freight/GST/thresholds/serial-mask) BEFORE real customers; phantom assets 5155/5156 scrap;
-   admin@rfo.local rotation; media upload; storefront tsc baseline diagnostics; Ollama cloud
-   context limit undisclosed; /api/tags probe pending; no secrets in git (verified today again).
+   A. Phases 0-10 (tag v1.0.0-golive-ready) + Phase 11 AI co-pilot + CMS + storefront (see docs/factory-pilot.md and state.md 11b-11e lines for detail).
+   B. FACTORY: TWO jobs approved+merged. Pilot job-20261011-101451-1281 (content pages /faq /contact /grades /returns + footer/nav). Job 2 job-20261011-122535-6360 (deal-of-month CMS pin: staff_ops home PUT + public home-content serializer + backoffice CMS input + storefront DealOfMonth.tsx card) - went through a REAL rework: round-1 CHANGES (stockless product published null-price card) -> ESCALATE -> rework -> INNER JOIN fix proven sufficient via 0006 chk_listed_has_price -> hermetic pytest with finally-resores - all states (unset/blank-slug/bad-slug/stockless) absent, payload integrity asserted; regression-proof recorded (test fails on reverted code).
+   C. Gate policy (authoritative, in docs/factory-pilot.md): FOUR deselects (2 LLM-flaky assistant tests + 2 hand-seeded count-assert tests); post-6360 counts: 28 passed 4 deselected; ALWAYS docker compose build api before gate runs (api image bakes code, no bind-mount). Hermetic fixture pattern exists in-suite (test_guest_checkout_to_paid) - rewrite drift tests to it: backlog.
+   D. Builder runtime: ollama launch claude in worktree (deepseek-v4.1-flash:cloud default; gpt-oss:120b fallback). Builder SELF-COMMITS before reporting. Feedback substance goes INLINE in the builder prompt (feedback.md = trail only). Reviews = manual (architect/security/performance verdict files; claude -p path unoperational; ccr unused plan B).
+   E. Worktree protocols: ff-sync before referencing committed files; Copy-Item .env into new worktrees; CLOSE builder session before approve; job committed on branch before approve; worktree pytest shares ROOT postgres.
+3. NEXT: backlog REVISED - job 3 = newsletter (auth-free: subscribe endpoint + dedupe + admin view + footer form; fits factory size). Wishlist MOVED after customer-auth design (wishlist needs customer identity; guest-only checkout today - design doc first, then factory). Then reviews/blog-cms. Also: rewrite 2 drift tests hermetic; admin CMS slug-feedback hint (nice-to-have).
+4. KNOWN DEBTS: go-live fact-check of content-page business copy before real customers; phantom assets 5155/5156 scrap; admin@rfo.local rotation; media real-upload; storefront tsc baseline diagnostics; Ollama cloud context limit undisclosed; /api/tags probe pending; no secrets in git (re-verified).
 
-## STANDING RULES (carry forward from v3 verbatim) + NEW:
-- $var: inside double-quoted PS strings = drive-qualified syntax -> use ${var}: or single quotes/here-strings. (earned today)
-- Any content carrying quotes or & goes through a SINGLE-QUOTE here-string (@'...'@), never inline "..." literals. (earned today)
-- git: use --no-pager habitually; single long here-string statements paste safely, multi-command mega-batches mangle -> per-file blocks + checkpoint prints.
-- Worktrees lack ALL ignored files (.env, node_modules); worktree test runs hit the SHARED root postgres.
+## STANDING RULES (full, carried from v3 + today)
+- PS 5.1: [IO.File]::WriteAllText + UTF8Encoding($false), LF/no-BOM; NEVER Set-Content/Out-File; never name PS vars $home/$args/$error/$host. 2-arg WriteAllText = UTF8 no-BOM by .NET default.
+- $var: inside double-quoted strings = drive-qualified syntax -> ${var}: or here-strings. Content carrying quotes/& -> SINGLE-QUOTE here-strings (@'...'@), never inline "...".
+- cmd/native args strip embedded double quotes (3x burned): single quotes / Read-Host / here-strinig-into-FILES, never console JSON.
+- Small per-file pastes + checkpoint prints; big multi-command pastes mangle (evidence: junk file from split paste). Parser aborts whole batch on parse error.
+- Long outputs: git --no-pager. Verify backend edits: docker compose run --rm api python -c "import app.main; print('IMPORT OK')". After api/worker recreate: restart nginx. Raw .NET IO uses process CWD (Join-Path (Get-Location)).
+- SQLAlchemy text() + asyncpg: NO :param::TYPE casts inside text() - branch in Python.
+- Never re-run root phase*.ps1 installers. Role/identity from JWT+DB only. Nothing executes without human Confirm; memory = context, never authority; fallback local model executes READ-ONLY. Privacy: ai.* view data + aggregates only; Ollama Cloud = data leaves premises.
+- Evidence-first: agent chat = testimony; gates verified in PS terminal; two-terminal discipline (agent=work, PS=proof).
 
 ## COMMANDS
-- up/down.ps1 | factory job gate: docker compose run --rm api pytest -q --deselect
-  "tests/test_assistant.py::test_assistant_proposes_without_writing" --deselect "tests/test_assistant.py::test_assistant_executes_scan_in"
 - factory: .\factory.ps1 -Action next -Title '...' | review | decision | approve | rework -JobId -Note '...'
-- builder: cd factory\worktrees\<id>; ollama launch claude --model deepseek-v4.1-flash:cloud (or gpt-oss:120b)
-- rebuild backend: build api worker; up -d api worker; restart nginx | migrations: compose --profile tools run --rm migrate alembic upgrade head (0001..0008)
-- storefront restart = full npm build (2-4 min poll loop) | model switch: .env AI_CLOUD_TEXT_MODEL
-- PS-safe pytest capture: $out = (docker compose run --rm api pytest -q) | Out-String; [IO.File]::WriteAllText("last-pytest.txt", ($out -replace "`r`n","`n"))  (2-arg WriteAllText = UTF8 no-BOM by .NET default)
+- JOB GATE: docker compose build api && docker compose run --rm api pytest -q --deselect "tests/test_assistant.py::test_assistant_proposes_without_writing" --deselect "tests/test_assistant.py::test_assistant_executes_scan_in" --deselect "tests/test_storefront_api.py::test_catalog_from_seed_stock" --deselect "tests/test_storefront_api.py::test_search"
+- builder: cd factory\worktrees\<id>; ollama launch claude (banner: model + CWD check) -> smoke -> build prompt
+- up/down.ps1 | rebuild backend: build api worker; up -d api worker; restart nginx | migrations: compose --profile tools run --rm migrate alembic upgrade head
+- storefront restart = full npm build (2-4 min) | model switch: .env AI_CLOUD_TEXT_MODEL
+- PS-safe capture: [IO.File]::WriteAllText("last-pytest.txt", (($cmd out) -replace "`r`n","`n"))
 
 ## REGRESSION DRILL (5 min)
-Step 0 NEW: /faq /contact /grades /returns render real copy; footer 4 links; header FAQ.
-Then verbatim v3 drill: chips -> proposal -> Confirm (Executed OK + audit row) -> asset_details by
-serial AND id -> clear previous messages -> whats my role -> role-claim refused -> storefront hero
-reflects CMS edit -> category chips filter -> image URL -> card render.
+Step 0: four content pages render + footer links + header FAQ. Then: deal set in /admin/cms -> card above New arrivals w/ $279.00 -> cleared -> gone. Then: chips -> proposal -> Confirm (audit row) -> asset_details serial AND id -> clear messages -> role verified + role-claim refused -> CMS hero edit -> category chips -> image URL -> card render.
 
-## JOB-2 SPEC DRAFT (fill Deliverable/Acceptance after -Action next -Title)
-deal-of-month: CMS-pinned Deal of the Month slot on home. Extend staff_ops CMS home endpoint + /
-admin/cms form (admin/manager, audited) with a single pinned-deal record (title, product ref, badge
-copy; likely site_settings row). Home renders a distinctive card above New Arrivals linking the
-existing /products/[slug] page with price + image_url. Empty/unset state renders NO block.
-Acceptance: CMS edit reflects on home after rebuild; unset hides block; pytest green; green theme.
+## JOB-3 SPEC DRAFT (fill Deliverable/Acceptance after -Action next)
+newsletter: store public POST /store/newsletter/subscribe (email validate + dedupe, audited table); backoffice /admin view of subscribers; storefront footer email form + success state. No auth; no PII beyond email; rate-limit reuse of nginx zones. Acceptance: dedupe works, admin sees list, gate 28/4 green, prod builds green.
 
 ## KEY PATHS
-v3 list still valid + NEW: apps/storefront/app/components/ContentPage.tsx; apps/storefront/app/
-{faq,contact,grades,returns}/page.tsx; docs/factory-pilot.md; factory/rounds/<id>-round-N/{architect,
-security,performance,decision,feedback}.md. No secrets included. - End -
+v4 list valid + NEW: apps/storefront/app/components/DealOfMonth.tsx; factory/rounds/job-20261011-122535-6360-round-{1,2}/. No secrets included. - End -
