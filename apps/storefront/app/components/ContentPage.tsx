@@ -13,16 +13,16 @@ export default function ContentPage({ title, intro, children }: { title: string;
 
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <Card className="p-5">
+    <Card className="p-6">
       <Heading level="h2">{title}</Heading>
-      <div className="mt-2 space-y-2 text-body text-ink-600">{children}</div>
+      <div className="mt-3 space-y-2 text-body text-ink-600">{children}</div>
     </Card>
   );
 }
 
 export function Note({ children }: { children: ReactNode }) {
   return (
-    <Card radius="control" tone="brand" className="px-4 py-3 text-body">
+    <Card tone="brand" className="px-5 py-4 text-body">
       {children}
     </Card>
   );

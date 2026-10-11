@@ -60,6 +60,9 @@ const config: Config = {
           muted: token("--surface-muted"),
           sunken: token("--surface-sunken"),
           pressed: token("--surface-pressed"),
+          // the warm neutral ground: `page` is the document, `page-alt` a deeper quiet band
+          page: token("--surface-page"),
+          "page-alt": token("--surface-page-alt"),
         },
         // hairlines
         line: {
@@ -81,23 +84,27 @@ const config: Config = {
         control: "0.75rem", // tiles, buttons, inputs
       },
       fontFamily: {
-        // --font-sans is set by next/font on <html>. The inner fallback keeps the stack valid
-        // if the variable is ever absent, instead of making the declaration invalid.
+        // --font-sans / --font-display are set by next/font on <html> (layout.tsx). Both are
+        // self-hosted at build time by next/font/google, so neither adds a runtime request.
+        // The inner fallback keeps the stack valid if a variable is ever absent.
         sans: ["var(--font-sans, system-ui)", "sans-serif"],
+        // Space Grotesk: headings and the display step only, never body copy.
+        display: ["var(--font-display, system-ui)", "sans-serif"],
       },
       /* The type scale. Each heading step carries its own weight, leading and tracking, so a
          page writes `text-h2` and never hand-rolls `text-lg font-semibold`. Display is the one
          deliberately large step (hero, product price) and gets the tightest tracking of the set;
          tracking loosens as the size drops, which is what keeps a big line from looking airy and
          a small one from looking cramped. `lead` is the reading size for page intros, `body` the
-         size inside cards and long copy.
+         size inside cards and long copy. The hero steps 32px -> 44px (display -> display-lg).
 
-         Colour rhythm, applied by the primitives: headings inherit (so the hero's h1 stays white
-         on the dark band, and an h2 sitting on a card is ink-900 from the body), body copy is
-         ink-600, meta is ink-500, the eyebrow kicker is ink-400. */
+         Colour rhythm, applied by the primitives: headings inherit (so an h2 sitting on a card
+         is ink-900 from the body), body copy is ink-600, meta is ink-500, the eyebrow kicker is
+         ink-400. */
       fontSize: {
         eyebrow: ["0.6875rem", { lineHeight: "1rem", letterSpacing: "0.1em" }],
-        display: ["2.25rem", { lineHeight: "1.1", letterSpacing: "-0.025em", fontWeight: "600" }],
+        display: ["2rem", { lineHeight: "1.08", letterSpacing: "-0.02em", fontWeight: "600" }],
+        "display-lg": ["2.75rem", { lineHeight: "1.05", letterSpacing: "-0.02em", fontWeight: "600" }],
         h1: ["1.5rem", { lineHeight: "1.25", letterSpacing: "-0.02em", fontWeight: "600" }],
         h2: ["1.125rem", { lineHeight: "1.35", letterSpacing: "-0.012em", fontWeight: "600" }],
         h3: ["0.875rem", { lineHeight: "1.4", letterSpacing: "-0.006em", fontWeight: "600" }],

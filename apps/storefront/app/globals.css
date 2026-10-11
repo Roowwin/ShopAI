@@ -19,6 +19,9 @@
     --brand-900: 6 78 59;
     --brand-950: 2 44 34;
 
+    /* Amber. Kept in the palette but no longer used in the UI: round 2 demoted emerald to the
+       single accent, so the two sale chips that used to be amber are now neutral dark and the
+       colour carries no meaning anywhere. Retained deliberately for a future semantic use. */
     --accent-50: 255 251 235;
     --accent-100: 254 243 199;
     --accent-300: 252 211 77;
@@ -40,6 +43,13 @@
        rather than a reuse of --line: the two happen to share a value today, and pairing
        them would mean a later tweak to a hairline silently restyled every input press. */
     --surface-pressed: 226 232 240;
+
+    /* The ground. Round 2 makes the page a WARM neutral (stone) so white cards read as
+       cards, and keeps the interactive fills above cool slate - warm ground, cool hairlines.
+       `page` is the document background, `page-alt` a slightly deeper band for the quiet
+       bars (the header tagline strip). Emerald is no longer any page's background. */
+    --surface-page: 250 250 249;      /* stone-50 */
+    --surface-page-alt: 245 245 244;  /* stone-100 */
 
     /* The hairline boundaries below sit deliberately under the 3:1 non-text bar against white
        (1.23:1 and 1.48:1). A recorded exception, not an oversight: raising them would put mid-grey

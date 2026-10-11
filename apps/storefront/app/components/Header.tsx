@@ -45,8 +45,8 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50">
-      <div className="bg-brand-700 text-white text-xs px-6 py-1.5 text-center">Renewed tech. Zero waste. - Certified refurbished, delivered AU &amp; NZ</div>
-      <div className="bg-white text-ink-900 px-4 md:px-6 py-3 flex items-center gap-2 md:gap-4 ring-1 ring-line">
+      <div className="bg-surface-page-alt text-ink-600 border-b border-line text-xs px-6 py-2 text-center tracking-wide">Renewed tech. Zero waste. - Certified refurbished, delivered AU &amp; NZ</div>
+      <div className="bg-surface text-ink-900 px-4 md:px-6 py-3 flex items-center gap-2 md:gap-4 shadow-sm">
         <a href="/" className="flex items-center gap-1.5 font-semibold tracking-wide shrink-0">
           <span className="h-2.5 w-2.5 rounded-full bg-brand-600"></span>
           RFO<span className="text-brand-700">Store</span>
@@ -68,13 +68,13 @@ export default function Header() {
           {open && items.length > 0 && (
             <div className="absolute left-0 right-0 mt-1 bg-white text-ink-900 rounded-control shadow-lg ring-1 ring-line overflow-hidden">
               {items.slice(0, 5).map((s) => (
-                <button key={s.slug} className="w-full text-left px-4 py-2.5 text-sm transition-colors duration-fast ease-out hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 motion-reduce:transition-none"
+                <button key={s.slug} className="w-full text-left px-4 py-2.5 text-sm transition-colors duration-fast ease-out hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 motion-reduce:transition-none"
                   onMouseDown={() => router.push("/products/" + s.slug)}>
                   <span className="font-medium">{s.title}</span>
                   <span className="text-xs text-ink-500 ml-2">{s.units_available} available{s.price_from_cents !== null ? " from " + aud(s.price_from_cents) : ""}</span>
                 </button>
               ))}
-              <button className="w-full text-left px-4 py-2 text-xs bg-surface-sunken text-brand-700 transition-colors duration-fast ease-out hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 motion-reduce:transition-none"
+              <button className="w-full text-left px-4 py-2 text-xs bg-surface-sunken text-brand-700 transition-colors duration-fast ease-out hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 motion-reduce:transition-none"
                 onMouseDown={() => router.push("/search?q=" + encodeURIComponent(q.trim()))}>See all results</button>
             </div>
           )}

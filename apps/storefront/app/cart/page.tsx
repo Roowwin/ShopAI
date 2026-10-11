@@ -85,7 +85,7 @@ export default function CartPage() {
             <Input className="flex-1" placeholder="city" value={city} onChange={(e) => setCity(e.target.value)} />
             <div className="w-32"><Input placeholder="postcode" value={postcode} onChange={(e) => setPostcode(e.target.value)} /></div>
           </div>
-          <Button variant="accent" className="w-full" onClick={checkout} disabled={busy}>
+          <Button variant="primary" className="w-full" onClick={checkout} disabled={busy}>
             {busy ? "Processing..." : "Buy now - unit reserved instantly"}
           </Button>
         </Card>

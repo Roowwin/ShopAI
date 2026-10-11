@@ -1,15 +1,20 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Space_Grotesk } from "next/font/google";
 import Header from "./components/Header";
 import FooterNewsletter from "./components/FooterNewsletter";
 import { apiInternal } from "@/lib/api";
 
-/* Self-hosted at build time (no runtime third-party request, no layout shift). Exposed as
-   --font-sans, which tailwind.config.ts maps to `sans`, so Tailwind's preflight applies it to
-   the document. `display: "swap"` keeps text visible while it loads. */
-const inter = Inter({ subsets: ["latin"], weight: ["400", "600"], variable: "--font-sans", display: "swap" });
+/* Both faces are self-hosted at build time by next/font/google (no runtime third-party request,
+   no layout shift) and exposed as CSS variables that tailwind.config.ts maps to `sans`/`display`.
+
+   Inter carries all body copy. Space Grotesk is the display face - headings and the hero only -
+   and is loaded at the one weight the type scale asks for, so the display treatment is a real
+   design decision rather than a second copy of the body font. `display: "swap"` keeps text
+   visible while either loads. */
+const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-sans", display: "swap" });
+const grotesk = Space_Grotesk({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-display", display: "swap" });
 
 /* Where absolute URLs (og:image) resolve against. Override with NEXT_PUBLIC_SITE_URL in a real
    deployment; the default matches the local stack (.env DOMAIN_STORE). */
@@ -38,10 +43,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     if (p.length) { promo = p[0].name + (p[0].kind === "percent" ? " - " + p[0].value + "% off" : ""); }
   } catch { void 0; }
   return (
-    <html lang="en-AU" className={inter.variable}>
-      <body className="bg-surface-muted text-ink-900 min-h-screen flex flex-col">
+    <html lang="en-AU" className={inter.variable + " " + grotesk.variable}>
+      <body className="bg-surface-page text-ink-900 min-h-screen flex flex-col">
         <Header />
-        {promo && (<div className="bg-brand-700 text-white text-xs px-6 py-1.5 text-center">{promo}</div>)}
+        {promo && (<div className="bg-ink-900 text-white text-xs px-6 py-2 text-center tracking-wide">{promo}</div>)}
         <div className="flex-1">{children}</div>
         <footer className="bg-ink-900 text-ink-300 mt-12">
           <div className="max-w-6xl mx-auto px-6 py-8 grid gap-6 md:grid-cols-3 text-sm">

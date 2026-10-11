@@ -53,20 +53,20 @@ function StockPill({ stock }: { stock: Stock }) {
 export default function ProductCard({ href, title, brand, category, slug, imageUrl, priceCents, stock, meta, variant = "text" }: Props) {
   if (variant === "full") {
     return (
-      <Card radius="control" interactive href={href} className="group overflow-hidden">
+      <Card interactive href={href} className="group overflow-hidden">
         <div className="relative">
           <ProductArt slug={slug} imageUrl={imageUrl} alt={title} className="w-full aspect-[4/3] object-cover"
             fallback={<Initials brand={brand} large />} />
-          {!imageUrl && <Badge colorClass="bg-brand-700 text-white" className="absolute top-2 right-2">Eco choice</Badge>}
+          {!imageUrl && <Badge colorClass="bg-brand-700 text-white" className="absolute top-3 right-3">Eco choice</Badge>}
         </div>
-        <div className="p-3">
+        <div className="p-5">
           <Eyebrow>{brand} - {category}</Eyebrow>
-          <p className="font-medium mt-1 truncate">{title}</p>
-          <div className="mt-2 flex items-center justify-between">
+          <p className="font-medium mt-2 truncate">{title}</p>
+          <div className="mt-3 flex items-center justify-between">
             <span className="font-semibold text-sm">{price(priceCents)}</span>
             {stock && <StockPill stock={stock} />}
           </div>
-          <p className="mt-2 text-xs text-brand-700 opacity-0 transition-opacity duration-base ease-out group-hover:opacity-100 motion-reduce:transition-none">View product</p>
+          <p className="mt-3 text-xs text-brand-700 opacity-0 transition-opacity duration-base ease-out group-hover:opacity-100 motion-reduce:transition-none">View product</p>
         </div>
       </Card>
     );
@@ -74,12 +74,12 @@ export default function ProductCard({ href, title, brand, category, slug, imageU
 
   if (variant === "compact") {
     return (
-      <Card radius="control" interactive href={href} className="overflow-hidden">
+      <Card interactive href={href} className="overflow-hidden">
         <ProductArt slug={slug} imageUrl={imageUrl} alt={title} className="w-full aspect-[4/3] object-cover"
           fallback={<Initials brand={brand} />} />
-        <div className="p-3">
+        <div className="p-5">
           <p className="font-medium truncate text-sm">{title}</p>
-          <p className="text-sm font-semibold mt-1">{price(priceCents)}</p>
+          <p className="text-sm font-semibold mt-2">{price(priceCents)}</p>
           {meta && <p className="text-xs text-ink-500 mt-1">{meta}</p>}
         </div>
       </Card>
@@ -87,10 +87,10 @@ export default function ProductCard({ href, title, brand, category, slug, imageU
   }
 
   return (
-    <Card radius="control" interactive href={href} className="p-4">
+    <Card interactive href={href} className="p-5">
       <Eyebrow>{brand}</Eyebrow>
-      <p className="font-medium mt-1 truncate">{title}</p>
-      <div className="mt-2 flex items-center justify-between">
+      <p className="font-medium mt-2 truncate">{title}</p>
+      <div className="mt-3 flex items-center justify-between">
         <span className="font-semibold text-sm">{price(priceCents)}</span>
         {stock ? <StockPill stock={stock} /> : meta ? <span className="text-xs text-ink-500">{meta}</span> : null}
       </div>

@@ -35,14 +35,14 @@ export default function LoadMore({ initial, categories }: { initial: any[]; cate
   return (
     <div>
       {categories && categories.length > 1 && (
-        <div className="flex flex-wrap gap-2 mt-4">
+        <div className="flex flex-wrap gap-2 mt-6">
           <Button variant={cat === null ? "primary" : "secondary"} size="sm" onClick={() => pick(null)}>All</Button>
           {categories.map((c) => (
             <Button key={c.name} variant={cat === c.name ? "primary" : "secondary"} size="sm" onClick={() => pick(c.name)}>{c.name} ({c.n})</Button>
           ))}
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 mt-8">
         {items.map((i) => (
           <ProductCard key={i.slug} variant="full" href={"/products/" + i.slug} title={i.title}
             brand={i.brand} category={i.category} slug={i.slug} imageUrl={i.image_url}
@@ -51,7 +51,7 @@ export default function LoadMore({ initial, categories }: { initial: any[]; cate
         {items.length === 0 && <EmptyState className="col-span-full">Nothing listed in this category yet.</EmptyState>}
       </div>
       {more && (
-        <div className="text-center mt-6">
+        <div className="text-center mt-10">
           <Button variant="secondary" onClick={() => void fetchPage(false, cat)} disabled={busy}>{busy ? "Loading..." : "Load more"}</Button>
         </div>
       )}
