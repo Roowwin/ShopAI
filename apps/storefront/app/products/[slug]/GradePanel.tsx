@@ -4,6 +4,7 @@ import { useState } from "react";
 import { aud } from "@/lib/api";
 import { cartAdd, cartGet } from "@/lib/cart";
 import { GRADES } from "@/lib/grades";
+import { Badge, Card, EmptyState, Heading } from "../../components/ui";
 
 type Unit = { id: number; grade: string; sale_price_cents: number; serial_tail: string };
 type Row = {
@@ -27,7 +28,7 @@ export default function GradePanel({ units, title }: { units: Unit[]; title: str
   const [inCart, setInCart] = useState<number[]>(() => cartGet().map((c) => c.asset_id));
 
   if (units.length === 0) {
-    return (<p className="text-sm text-slate-500">No certified units available right now - check back soon.</p>);
+    return (<EmptyState>No certified units available right now - check back soon.</EmptyState>);
   }
 
   const rows: Row[] = [];
@@ -45,23 +46,23 @@ export default function GradePanel({ units, title }: { units: Unit[]; title: str
   }
 
   return (
-    <div className="rounded-2xl ring-1 ring-slate-200 bg-white p-4">
-      <h3 className="text-sm font-semibold">Choose your grade</h3>
-      <p className="text-xs text-slate-400 mt-0.5">
+    <Card className="p-4">
+      <Heading level="h3">Choose your grade</Heading>
+      <p className="text-xs text-ink-400 mt-0.5">
         Every unit is serialised and graded by hand. Pick a grade and we reserve the lowest-priced
         unit in it - the exact serial appears in your cart.
       </p>
       <div className="mt-3 space-y-2">
         {rows.map((r) => (
-          <div key={r.letter} className="border border-slate-200 rounded-xl px-3 py-2.5">
+          <div key={r.letter} className="border border-line rounded-control px-3 py-2.5">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 min-w-0">
-                <span className={"text-xs font-semibold rounded-full px-2 py-0.5 " + r.pill}>Grade {r.letter}</span>
-                <span className="text-xs text-slate-500 truncate">{r.label}</span>
-                <span className="text-xs text-slate-400 shrink-0">- {r.count} available</span>
+                <Badge colorClass={r.pill}>Grade {r.letter}</Badge>
+                <span className="text-xs text-ink-500 truncate">{r.label}</span>
+                <span className="text-xs text-ink-400 shrink-0">- {r.count} available</span>
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                <span className="text-xs text-slate-400">from</span>
+                <span className="text-xs text-ink-400">from</span>
                 <span className="font-semibold text-sm">{aud(r.cheapest.sale_price_cents)}</span>
                 {inCart.includes(r.cheapest.id) ? (
                   <a href="/cart" className="text-xs rounded-lg bg-indigo-50 text-indigo-700 px-3 py-1.5">In cart - view</a>
@@ -70,15 +71,15 @@ export default function GradePanel({ units, title }: { units: Unit[]; title: str
                 )}
               </div>
             </div>
-            <p className="mt-2 text-xs text-slate-600">
-              <span className="text-slate-400">Most common use case: </span>{r.useCase}
+            <p className="mt-2 text-xs text-ink-600">
+              <span className="text-ink-400">Most common use case: </span>{r.useCase}
             </p>
-            <p className="mt-1 text-xs text-slate-600">
-              <span className="text-slate-400">Spec: </span>{r.spec}
+            <p className="mt-1 text-xs text-ink-600">
+              <span className="text-ink-400">Spec: </span>{r.spec}
             </p>
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

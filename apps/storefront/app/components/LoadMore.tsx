@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { API, aud } from "@/lib/api";
 import ProductArt from "./ProductArt";
+import { Badge, Card, EmptyState, Eyebrow } from "./ui";
 
 type Cat = { name: string; n: number };
 
@@ -44,7 +45,7 @@ export default function LoadMore({ initial, categories }: { initial: any[]; cate
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-5">
         {items.map((i) => (
-          <a key={i.slug} href={"/products/" + i.slug} className="group rounded-xl ring-1 ring-slate-200 bg-white overflow-hidden hover:ring-emerald-300 hover:-translate-y-0.5 transition">
+          <Card key={i.slug} radius="control" interactive href={"/products/" + i.slug} className="group overflow-hidden">
             <div className="relative">
               <ProductArt slug={i.slug} imageUrl={i.image_url} alt={i.title} className="w-full aspect-[4/3] object-cover"
                 fallback={
@@ -52,21 +53,21 @@ export default function LoadMore({ initial, categories }: { initial: any[]; cate
                   <span className="text-xl font-bold text-slate-400">{(i.brand || "?").slice(0, 2).toUpperCase()}</span>
                 </div>} />
               {!i.image_url && (
-                <span className="absolute top-2 right-2 text-[10px] rounded-full bg-emerald-600 text-white px-2 py-0.5">Eco choice</span>
+                <Badge colorClass="bg-brand-600 text-white" className="absolute top-2 right-2">Eco choice</Badge>
               )}
             </div>
             <div className="p-3">
-              <p className="text-[11px] uppercase tracking-wider text-slate-400">{i.brand} - {i.category}</p>
+              <Eyebrow>{i.brand} - {i.category}</Eyebrow>
               <p className="font-medium mt-1 truncate">{i.title}</p>
               <div className="mt-2 flex items-center justify-between">
                 <span className="font-semibold text-sm">{i.price_from_cents !== null ? aud(i.price_from_cents) : "-"}</span>
-                <span className={"text-xs rounded-full px-2 py-0.5 " + (i.units_available > 0 ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500")}>{i.units_available} in stock</span>
+                <Badge colorClass={i.units_available > 0 ? "bg-brand-50 text-brand-700" : "bg-surface-sunken text-ink-500"}>{i.units_available} in stock</Badge>
               </div>
-              <p className="text-xs text-emerald-700 mt-2.5 opacity-0 group-hover:opacity-100 transition">View product</p>
+              <p className="text-xs text-brand-700 mt-2.5 opacity-0 group-hover:opacity-100 transition">View product</p>
             </div>
-          </a>
+          </Card>
         ))}
-        {items.length === 0 && <p className="text-slate-500 col-span-full">Nothing listed in this category yet.</p>}
+        {items.length === 0 && <EmptyState className="col-span-full">Nothing listed in this category yet.</EmptyState>}
       </div>
       {more && (
         <div className="text-center mt-6">

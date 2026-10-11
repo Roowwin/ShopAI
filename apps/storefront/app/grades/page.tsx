@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import ContentPage, { Note, Section } from "../components/ContentPage";
+import { Badge, Card, Heading } from "../components/ui";
 import { GRADES } from "@/lib/grades";
 
 export const metadata = {
@@ -10,8 +11,8 @@ export const metadata = {
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex gap-3">
-      <span className="w-28 shrink-0 text-slate-500">{label}</span>
-      <span className="flex-1 text-slate-700">{children}</span>
+      <span className="w-28 shrink-0 text-ink-500">{label}</span>
+      <span className="flex-1 text-ink-700">{children}</span>
     </div>
   );
 }
@@ -30,24 +31,24 @@ export default function GradesPage() {
       </Section>
 
       {GRADES.map((g) => (
-        <section key={g.letter} className="rounded-2xl ring-1 ring-slate-200 bg-white p-5">
+        <Card key={g.letter} className="p-5">
           <div className="flex items-center gap-3">
-            <span className={"h-9 w-9 rounded-xl text-white font-bold flex items-center justify-center " + g.tone}>{g.letter}</span>
+            <Badge shape="tile" colorClass={g.tone + " text-white"}>{g.letter}</Badge>
             <div>
-              <h2 className="font-semibold">Grade {g.letter} - {g.label}</h2>
-              <p className="text-xs text-slate-500">{g.battery}</p>
+              <Heading level="h2">Grade {g.letter} - {g.label}</Heading>
+              <p className="text-xs text-ink-500">{g.battery}</p>
             </div>
           </div>
-          <ul className="mt-3 space-y-1.5 text-sm text-slate-700 leading-relaxed list-disc pl-5">
+          <ul className="mt-3 space-y-1.5 text-sm text-ink-700 leading-relaxed list-disc pl-5">
             {g.looks.map((l) => (
               <li key={l}>{l}</li>
             ))}
           </ul>
-          <p className="mt-3 text-sm text-slate-600">
-            <span className="font-medium text-slate-900">Best for: </span>
+          <p className="mt-3 text-sm text-ink-600">
+            <span className="font-medium text-ink-900">Best for: </span>
             {g.useCase}
           </p>
-        </section>
+        </Card>
       ))}
 
       <Section title="What every grade includes">
@@ -78,8 +79,8 @@ export default function GradesPage() {
         </Note>
         <p>
           Want to see what is on the shelf in a particular grade right now? Browse the{" "}
-          <a className="text-emerald-700 hover:underline" href="/">shop</a> or check the{" "}
-          <a className="text-emerald-700 hover:underline" href="/faq">FAQ</a> for how ordering works.
+          <a className="text-brand-700 hover:underline" href="/">shop</a> or check the{" "}
+          <a className="text-brand-700 hover:underline" href="/faq">FAQ</a> for how ordering works.
         </p>
       </Section>
     </ContentPage>

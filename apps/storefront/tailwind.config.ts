@@ -35,6 +35,7 @@ const config: Config = {
           300: token("--accent-300"),
           400: token("--accent-400"),
           500: token("--accent-500"),
+          700: token("--accent-700"),
           DEFAULT: token("--accent-400"),
         },
         // text
