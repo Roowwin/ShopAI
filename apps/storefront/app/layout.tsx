@@ -14,7 +14,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   } catch { void 0; }
   return (
     <html lang="en-AU">
-      <body className="bg-[#F8F9FA] text-slate-900 min-h-screen flex flex-col">
+      <body className="bg-surface-muted text-ink-900 min-h-screen flex flex-col">
         <Header />
         {promo && (<div className="bg-emerald-600 text-white text-xs px-6 py-1.5 text-center">{promo}</div>)}
         <div className="flex-1">{children}</div>

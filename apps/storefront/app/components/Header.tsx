@@ -51,10 +51,7 @@ export default function Header() {
         </a>
         <nav className="hidden md:flex gap-4 text-sm text-slate-600">
           <a href="/" className="hover:text-emerald-700">Shop</a>
-{cats.slice(0, 6).map((c) => (
-            <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className="hover:text-emerald-700">{c.name}</a>
-          ))}
-{cats.slice(0, 6).map((c) => (
+          {cats.slice(0, 6).map((c) => (
             <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className="hover:text-emerald-700">{c.name}</a>
           ))}
           <a href="/faq" className="hover:text-emerald-700">FAQ</a>
