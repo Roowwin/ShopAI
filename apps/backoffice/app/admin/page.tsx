@@ -33,13 +33,14 @@ type Overview = {
   needs_attention: { kind: string; count: number; label: string; items?: { id: number; title: string }[] }[];
 };
 
-/* Every count table on this page is rendered from the payload's OWN keys - never a list re-typed
-   here. The API zero-fills each grouped count from the DB's CHECK constraints, and that guarantee
-   is only real if the UI iterates what the API sent: a table driven by a local list would drop a
-   value the DB admits later without a word. (Round 1 did exactly that - it listed `cancelled` for
-   lots while the API seeds only intake/active/completed, so that row was drawn from a key the
-   payload never contained.) Python's dict order carries through JSON and JS objects, so the API's
-   lifecycle order is the display order, with any unexpected value appended rather than dropped. */
+/* Every count breakdown on this page is rendered from the payload's OWN keys - never a list
+   re-typed here. The API zero-fills each grouped count from the DB's CHECK constraints, and that
+   guarantee is only real if the UI iterates what the API sent: a breakdown driven by a local list
+   would drop a value the DB admits later without a word. (Round 1 did exactly that - it listed
+   `cancelled` for lots while the API seeds only intake/active/completed, so that row was drawn
+   from a key the payload never contained.) Python's dict order carries through JSON and JS
+   objects, so the API's lifecycle order is the display order, with any unexpected value appended
+   rather than dropped. */
 function Breakdown({ title, label, keyLabel, valueLabel, rows, renderKey }: {
   title: string;
   label: string;

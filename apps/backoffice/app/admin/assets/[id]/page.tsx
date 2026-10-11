@@ -2,10 +2,10 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Badge, Card, Heading, Stat, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
+import { Badge, Card, Heading, Stat, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
 import { aud, when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
-import { gradeTone, statusTone } from "@/lib/ui";
+import { gradeTone, linkClass, statusTone } from "@/lib/ui";
 import AuditFeed from "@/app/components/dashboard/AuditFeed";
 
 /* One unit's whole history: where it came from, where it has been, what it is worth and who it
@@ -28,6 +28,16 @@ type Reservation = { id: number; public_id: string; status: string; expires_at: 
 type AuditEntry = { at: string; actor_type: string; actor_id: number | null; entity: string;
                     action: string; entity_id: number | null };
 type Detail = { asset: Asset; lot: Lot; movements: Movement[]; reservations: Reservation[]; audit: AuditEntry[] };
+
+/* The API caps each sub-list it hands back - movements at 50, reservations at 50, the audit slice
+   at 20 - and the payload carries no total to compare a list against. Each note below therefore
+   fires when a list arrives at its cap, which is the only case in which it may have been cut
+   short: a shorter list is complete by construction. A silent cut is the thing the customer
+   page's own note already exists to prevent, and this page draws three lists of exactly that
+   kind. */
+const MOVEMENT_CAP = 50;
+const RESERVATION_CAP = 50;
+const AUDIT_CAP = 20;
 
 export default function AssetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -56,7 +66,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ id: stri
 
   return (
     <main className="max-w-5xl mx-auto p-4 space-y-4 min-h-screen">
-      <a href="/admin/assets" className="text-sm text-brand-700 hover:underline">&larr; Assets workbench</a>
+      <a href="/admin/assets" className={cn("text-sm", linkClass)}>&larr; Assets workbench</a>
       <Heading level="h1">
         Asset <span className="font-mono text-base">{a?.serial_number ?? "#" + id}</span>
       </Heading>
@@ -119,6 +129,9 @@ export default function AssetDetailPage({ params }: { params: Promise<{ id: stri
                 )}
               </TBody>
             </Table>
+            {data.movements.length >= MOVEMENT_CAP && (
+              <p className="pt-2 text-xs text-ink-500">Showing the 50 most recent movements.</p>
+            )}
           </Card>
 
           <Card className="p-4">
@@ -139,9 +152,17 @@ export default function AssetDetailPage({ params }: { params: Promise<{ id: stri
                 )}
               </TBody>
             </Table>
+            {data.reservations.length >= RESERVATION_CAP && (
+              <p className="pt-2 text-xs text-ink-500">Showing the 50 most recent reservations.</p>
+            )}
           </Card>
 
-          <AuditFeed entries={data.audit} />
+          <div>
+            <AuditFeed entries={data.audit} />
+            {data.audit.length >= AUDIT_CAP && (
+              <p className="pt-2 text-xs text-ink-500">Showing the 20 most recent activity entries.</p>
+            )}
+          </div>
         </>
       )}
     </main>
