@@ -39,7 +39,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 <p className="text-[10px] text-ink-400 mt-0.5">{p.brand} {p.model}</p>
               </div>
             </div>} />
-          <div className="grid grid-cols-3 gap-2 mt-3 text-[11px] text-ink-500">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3 text-[11px] text-ink-500">
             <div className="rounded-control bg-surface ring-1 ring-line px-2 py-1.5 text-center">Serialised</div>
             <div className="rounded-control bg-surface ring-1 ring-line px-2 py-1.5 text-center">Graded A-D</div>
             <div className="rounded-control bg-surface ring-1 ring-line px-2 py-1.5 text-center">Warehouse-tracked</div>

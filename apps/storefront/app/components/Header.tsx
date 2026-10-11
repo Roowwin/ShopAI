@@ -14,6 +14,7 @@ export default function Header() {
   const [open, setOpen] = useState(false);
   const [cartN, setCartN] = useState(0);
   const [cats, setCats] = useState<{ name: string; n: number }[]>([]);
+  const [menu, setMenu] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const timer = useRef<any>(null);
@@ -45,7 +46,7 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50">
       <div className="bg-brand-700 text-white text-xs px-6 py-1.5 text-center">Renewed tech. Zero waste. - Certified refurbished, delivered AU &amp; NZ</div>
-      <div className="bg-white text-ink-900 px-4 md:px-6 py-3 flex items-center gap-4 ring-1 ring-line">
+      <div className="bg-white text-ink-900 px-4 md:px-6 py-3 flex items-center gap-2 md:gap-4 ring-1 ring-line">
         <a href="/" className="flex items-center gap-1.5 font-semibold tracking-wide shrink-0">
           <span className="h-2.5 w-2.5 rounded-full bg-brand-600"></span>
           RFO<span className="text-brand-700">Store</span>
@@ -58,7 +59,7 @@ export default function Header() {
           <a href="/faq" className="hover:text-brand-700">FAQ</a>
                     <a href="/assistant" className="hover:text-brand-700">Ask AI</a>
         </nav>
-        <div className="relative flex-1 max-w-xl mx-auto">
+        <div className="relative flex-1 min-w-0 max-w-xl mx-auto">
           <Input tone="sunken"
             placeholder="Search devices - e.g. galaxy s21"
             value={q} onChange={(e) => onChange(e.target.value)}
@@ -81,7 +82,30 @@ export default function Header() {
         <Button href="/cart" className="relative shrink-0">
           Cart{cartN > 0 && (<span className="absolute -top-2 -right-2 bg-ink-900 text-brand-300 text-[10px] font-bold rounded-full h-5 w-5 flex items-center justify-center">{cartN}</span>)}
         </Button>
+        <button
+          type="button"
+          onClick={() => setMenu((v) => !v)}
+          aria-label={menu ? "Close menu" : "Open menu"}
+          aria-expanded={menu}
+          className="md:hidden shrink-0 h-11 w-11 flex items-center justify-center rounded-control text-ink-600 hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            {menu
+              ? (<><path d="M5 5l10 10" /><path d="M15 5L5 15" /></>)
+              : (<><path d="M3 6h14" /><path d="M3 10h14" /><path d="M3 14h14" /></>)}
+          </svg>
+        </button>
       </div>
+      {/* The category nav is hidden below md, and there was no way to reach it on a phone. */}
+      {menu && (
+        <nav className="md:hidden bg-white ring-1 ring-line border-t border-line px-4 py-1 flex flex-col text-sm text-ink-600">
+          <a href="/" className="py-3 hover:text-brand-700" onClick={() => setMenu(false)}>Shop</a>
+          {cats.slice(0, 6).map((c) => (
+            <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className="py-3 hover:text-brand-700" onClick={() => setMenu(false)}>{c.name}</a>
+          ))}
+          <a href="/faq" className="py-3 hover:text-brand-700" onClick={() => setMenu(false)}>FAQ</a>
+          <a href="/assistant" className="py-3 hover:text-brand-700" onClick={() => setMenu(false)}>Ask AI</a>
+        </nav>
+      )}
     </header>
   );
 }
