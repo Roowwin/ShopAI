@@ -1,4 +1,4 @@
-# ADR 0006: authorized-agent rail (Hermes-class agents)
+# ADR 0006: Confirm stays human-only (no write without a human Confirm)
 
 ## Context
 The staff AI co-pilot performs inventory ops behind a human Confirm (proposal -> TOOL_ROLES check -> audited). The two-zone model is proven live: staff tokens are refused on store endpoints, customer tokens on staff write doors (7/7, job-8 walls). AI-engine isolation (ai.* views, shell-triple privilege wall) bounds the assistant's DB reach. External agent harnesses exist and can be launched (ollama launch hermes). Unauthenticated reuse of staff credentials for agents would be a backdoor (standing rule), and append-only audit/ledgers make every action permanent.
@@ -22,7 +22,8 @@ The staff AI co-pilot performs inventory ops behind a human Confirm (proposal ->
 ## Status
 ACCEPTED (owner-authored; recorded as binding in `docs/state.md`).
 
-**Decision 4 is superseded for granted (identity, action) pairs by ADR 0008 (scoped autonomous execution).**
+**On acceptance of ADR 0008 (scoped autonomous execution, currently PROPOSED), decision 4 is superseded for granted
+(identity, action) pairs.** Until that acceptance this ADR stands exactly as written.
 Every other decision here stands, and the human Confirm remains the default and the fallback for anything not
 granted - an ungranted rail behaves exactly as this ADR describes.
 

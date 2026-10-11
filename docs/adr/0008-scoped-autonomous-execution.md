@@ -65,7 +65,12 @@ be more permissive than the door that executes it - that is a precondition of th
 - The role allow-list and the in-body `_require_role` guards still gate every execution; a grant cannot widen them.
 - Caps, audit and the append-only ledger.
 - Agent tokens remain valid **only** on the assistant surface (ADR 0006 decision 7, ADR 0007).
-- ADR 0006 decisions 1, 2, 3, 5, 6, 7 and 8 are untouched, as is all of ADR 0007.
+- ADR 0006 decisions 1, 2, 3, 5, 6, 7 and 8 are untouched. **ADR 0007 is untouched except where it restates this
+  invariant**: its Status clause ("ADR 0006 gates EVERY proposal-to-execute path in this rail without exception")
+  and its decision 4 are narrowed for granted pairs in exactly the same way as ADR 0006 decision 4 - an
+  **ungranted** rail is still fully gated by the human Confirm. Everything else in ADR 0007 (the agent identity
+  class, credentials, the shared door, caps, the audit marker, the rehearsal extension) stands unchanged, and ADR
+  0008 decision 5 depends on its `actor_type='agent'` migration.
 
 ## Rehearsal evidence required before enabling
 `scripts/rehearse_day.py` must score, deterministically (driven by action-scoped execute so the model is out of
