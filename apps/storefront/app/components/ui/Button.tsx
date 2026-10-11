@@ -49,9 +49,11 @@ type Props = {
   type?: "button" | "submit";
   disabled?: boolean;
   onClick?: () => void;
+  /** A toggle button (a filter chip): announces its selected state. Omitted on plain buttons. */
+  pressed?: boolean;
 };
 
-export default function Button({ children, variant = "primary", size = "md", className, href, as, type = "button", disabled, onClick }: Props) {
+export default function Button({ children, variant = "primary", size = "md", className, href, as, type = "button", disabled, onClick, pressed }: Props) {
   const cls = cn(BASE, VARIANTS[variant], SIZES[size], className);
   const Tag = (as ?? (href ? "a" : "button")) as "button" | "a" | "span";
   if (Tag === "a") {
@@ -60,5 +62,5 @@ export default function Button({ children, variant = "primary", size = "md", cla
   if (Tag === "span") {
     return <span className={cls}>{children}</span>;
   }
-  return <button type={type} className={cls} disabled={disabled} onClick={onClick}>{children}</button>;
+  return <button type={type} className={cls} disabled={disabled} aria-pressed={pressed} onClick={onClick}>{children}</button>;
 }

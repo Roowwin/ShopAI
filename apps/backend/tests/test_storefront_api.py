@@ -11,7 +11,10 @@ def _h(tok: str) -> dict:
 
 
 async def test_catalog_from_seed_stock(client):
-    r = await client.get("/store/catalog")
+    # The whole catalog, not the default page of 24: catalog v2 seeded ~50 more products, and this
+    # assertion is about the seeded stock being LISTED ("galaxy-s21 is buyable, iphone-13 is not"),
+    # not about where a title happens to fall in the first page of the order.
+    r = await client.get("/store/catalog", params={"limit": 100})
     assert r.status_code == 200, r.text
     items = {i["slug"]: i for i in r.json()}
     assert "galaxy-s21" in items

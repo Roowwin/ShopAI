@@ -1,9 +1,27 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 
 from app.core.db import get_db
 
 router = APIRouter(prefix="/store", tags=["store-catalog"])
+
+# ---------------------------------------------------------------------------
+# The catalog list, and the filters the storefront's chip rows are built from.
+#
+# The two placeholders keep every optional filter out of the query TEXT: with none set they expand
+# to empty strings, so the statement is byte-for-byte the one this endpoint has always run (there is
+# a test that says so). Every value that reaches the database is a bound parameter - no ::TYPE cast
+# in text() anywhere, which is also what asyncpg's prepared-statement path needs.
+#
+# The unit-level filters (grade, price band) hang off the LEFT JOIN's ON clause rather than the
+# WHERE, deliberately: the joined set is then exactly "the shopper's units", so units_available and
+# price_from_cents describe the stock the filter selected ("3 in stock" for grade A means three
+# grade-A units, not three units of a product that happens to have one) and HAVING count(a.id) > 0
+# keeps only products that really have one. Category and brand are facts of the PRODUCT, so they
+# stay in the WHERE.
+# ---------------------------------------------------------------------------
 
 CATALOG_SELECT = """SELECT p.id, p.public_id::text AS public_id, p.slug, p.title, p.model,
        b.name AS brand, c.name AS category, p.specs, p.image_url, p.featured,
@@ -13,31 +31,121 @@ FROM products p
 JOIN brands b ON b.id = p.brand_id
 JOIN categories c ON c.id = p.category_id
 LEFT JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
-                  AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
+                  AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')%UNIT%
 WHERE p.status = 'active' %CAT%
 GROUP BY p.id, p.public_id, p.slug, p.title, p.model, b.name, c.name, p.specs, p.image_url, p.featured
 HAVING count(a.id) > 0
 ORDER BY p.featured DESC, p.title
 LIMIT :lim OFFSET :off"""
 
+CATALOG_SORTS = {
+    "featured": "ORDER BY p.featured DESC, p.title",
+    "new": "ORDER BY p.created_at DESC",
+    "price_asc": "ORDER BY min(a.sale_price_cents), p.title",
+    "price_desc": "ORDER BY min(a.sale_price_cents) DESC, p.title",
+    "name": "ORDER BY p.title",
+}
+
+GRADES = ("A", "B", "C", "D")
+BRAND_SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,79}\Z")
+MAX_CENTS = 100_000_000     # $1,000,000 - a ceiling for the parameter, not a business rule
+
+# The brands a shopper can filter by, and how many products each actually has on the shelf. Live
+# from the same tables as the list, so a chip can never offer a brand with nothing behind it.
+CATALOG_BRANDS = """
+SELECT b.slug, b.name, count(DISTINCT p.id) AS n
+FROM brands b
+JOIN products p ON p.brand_id = b.id AND p.status = 'active'
+JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
+             AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
+GROUP BY b.slug, b.name
+HAVING count(DISTINCT a.id) > 0
+ORDER BY b.name"""
+
+
+async def _brand_facets(db) -> list:
+    rows = (await db.execute(text(CATALOG_BRANDS))).mappings().all()
+    return [{"slug": r["slug"], "name": r["name"], "n": int(r["n"])} for r in rows]
+
+
+def _catalog_sql(category: str | None, brand: str | None, grade: str | None,
+                 min_cents: int | None, max_cents: int | None, sort: str | None) -> str:
+    """The statement for one catalog page. Every filter is a bound parameter; none is ever text.
+
+    Unfiltered this returns CATALOG_SELECT with both placeholders expanded to nothing - the
+    statement this endpoint has always run, byte for byte. That is what the placeholders exist for:
+    a filter may change which rows come back, never the shape of the query.
+    """
+    where = []
+    if category:
+        where.append("AND (c.name = :cat OR c.slug = :cat)")
+    if brand:
+        where.append("AND b.slug = :brand")
+    unit = ""
+    if grade:
+        unit += " AND a.grade = :grade"
+    if min_cents is not None:
+        unit += " AND a.sale_price_cents >= :min_cents"
+    if max_cents is not None:
+        unit += " AND a.sale_price_cents <= :max_cents"
+    return (CATALOG_SELECT.replace("%CAT%", " ".join(where)).replace("%UNIT%", unit)
+            .replace(CATALOG_SORTS["featured"], CATALOG_SORTS.get(sort, CATALOG_SORTS["featured"])))
+
 
 @router.get("/catalog")
 async def catalog(limit: int = Query(24, le=100), offset: int = 0,
-                  category: str | None = None, sort: str | None = None, db=Depends(get_db)):
-    cat_clause = "AND c.name = :cat" if category else ""
-    sql_txt = CATALOG_SELECT.replace("%CAT%", cat_clause)
-    params = {"lim": limit, "off": offset}
+                  category: str | None = None, sort: str | None = None,
+                  brand: str | None = None, grade: str | None = None,
+                  min_cents: int | None = Query(None, ge=0, le=MAX_CENTS),
+                  max_cents: int | None = Query(None, ge=0, le=MAX_CENTS),
+                  with_filters: bool = False, db=Depends(get_db)):
+    """Listed stock, optionally filtered by category, brand, unit grade and price band.
+
+    The response is the same bare array it has always been unless `with_filters=1` asks for the
+    envelope - the backoffice reads this endpoint as an array, and an unfiltered request has to stay
+    byte-identical for it. With the envelope the caller also gets `applied` (the filter set as the
+    SERVER resolved it, so a UI can show what is really in force rather than what it hoped) and
+    `brands` (the chip row's live options).
+    """
+    category = (category or "").strip() or None
+    brand = (brand or "").strip().lower() or None
+    grade = (grade or "").strip().upper() or None
+    if grade is not None and grade not in GRADES:
+        raise HTTPException(status_code=422, detail="grade must be one of " + ", ".join(GRADES))
+    if brand is not None and not BRAND_SLUG.fullmatch(brand):
+        raise HTTPException(status_code=422, detail="brand must be a brand slug")
+    if min_cents is not None and max_cents is not None and min_cents > max_cents:
+        raise HTTPException(status_code=422, detail="min_cents must not be greater than max_cents")
+
+    params: dict = {"lim": limit, "off": offset}
     if category:
+        # The URL state writes the slug ("laptops"); this parameter has always taken the display
+        # name ("Laptops"). Both name the same row, so a pasted URL works either way, and every
+        # category's name is its slug capitalised, so nothing else can match.
         params["cat"] = category
-    if sort == "new":
-        sql_txt = sql_txt.replace("ORDER BY p.featured DESC, p.title", "ORDER BY p.created_at DESC")
-    sql = text(sql_txt)
-    rows = (await db.execute(sql, params)).mappings().all()
-    return [{"id": r["id"], "public_id": r["public_id"], "slug": r["slug"], "title": r["title"],
-             "model": r["model"], "brand": r["brand"], "category": r["category"], "specs": r["specs"],
-             "image_url": r["image_url"], "featured": bool(r["featured"]),
-             "units_available": int(r["units_available"]), "price_from_cents": int(r["price_from_cents"])}
-            for r in rows]
+    if brand:
+        params["brand"] = brand
+    if grade:
+        params["grade"] = grade
+    if min_cents is not None:
+        params["min_cents"] = min_cents
+    if max_cents is not None:
+        params["max_cents"] = max_cents
+
+    applied_sort = sort if sort in CATALOG_SORTS else "featured"
+    sql_txt = _catalog_sql(category, brand, grade, min_cents, max_cents, applied_sort)
+    rows = (await db.execute(text(sql_txt), params)).mappings().all()
+    items = [{"id": r["id"], "public_id": r["public_id"], "slug": r["slug"], "title": r["title"],
+              "model": r["model"], "brand": r["brand"], "category": r["category"], "specs": r["specs"],
+              "image_url": r["image_url"], "featured": bool(r["featured"]),
+              "units_available": int(r["units_available"]), "price_from_cents": int(r["price_from_cents"])}
+             for r in rows]
+    if not with_filters:
+        return items
+    return {"items": items,
+            "applied": {"category": category, "brand": brand, "grade": grade,
+                        "min_cents": min_cents, "max_cents": max_cents, "sort": applied_sort},
+            "brands": await _brand_facets(db)}
 
 @router.get("/catalog/{slug}")
 async def catalog_item(slug: str, db=Depends(get_db)):
