@@ -8,11 +8,11 @@ type Size = "sm" | "md" | "lg";
    the ones that used to be px-3 py-1.5 (≈28px). */
 const BASE =
   "inline-flex items-center justify-center gap-2 min-h-[44px] rounded-control font-semibold transition " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 " +
   "disabled:opacity-50 disabled:pointer-events-none";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-brand-600 text-white hover:bg-brand-500",
+  primary: "bg-brand-700 text-white hover:bg-brand-800",
   accent: "bg-accent-400 text-ink-900 hover:bg-accent-300",
   secondary: "bg-surface text-brand-700 ring-1 ring-line hover:bg-brand-50",
   ghost: "text-brand-700 hover:bg-brand-50",

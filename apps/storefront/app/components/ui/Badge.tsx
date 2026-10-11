@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { cn } from "./cn";
 
 /* One component, two deliberate shapes. The grade badge is a square identity tile on /grades
-   and an inline pill in the product page rows - that difference is intentional and named here
+   and a small pill in the product page rows - that difference is intentional and named here
    rather than left as drift. */
 type Props = {
   children: ReactNode;

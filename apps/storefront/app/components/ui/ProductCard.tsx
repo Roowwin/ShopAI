@@ -57,7 +57,7 @@ export default function ProductCard({ href, title, brand, category, slug, imageU
         <div className="relative">
           <ProductArt slug={slug} imageUrl={imageUrl} alt={title} className="w-full aspect-[4/3] object-cover"
             fallback={<Initials brand={brand} large />} />
-          {!imageUrl && <Badge colorClass="bg-brand-600 text-white" className="absolute top-2 right-2">Eco choice</Badge>}
+          {!imageUrl && <Badge colorClass="bg-brand-700 text-white" className="absolute top-2 right-2">Eco choice</Badge>}
         </div>
         <div className="p-3">
           <Eyebrow>{brand} - {category}</Eyebrow>

@@ -41,7 +41,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang="en-AU" className={inter.variable}>
       <body className="bg-surface-muted text-ink-900 min-h-screen flex flex-col">
         <Header />
-        {promo && (<div className="bg-brand-600 text-white text-xs px-6 py-1.5 text-center">{promo}</div>)}
+        {promo && (<div className="bg-brand-700 text-white text-xs px-6 py-1.5 text-center">{promo}</div>)}
         <div className="flex-1">{children}</div>
         <footer className="bg-ink-900 text-ink-300 mt-12">
           <div className="max-w-6xl mx-auto px-6 py-8 grid gap-6 md:grid-cols-3 text-sm">

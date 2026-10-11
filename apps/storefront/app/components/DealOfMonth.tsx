@@ -20,7 +20,7 @@ export default function DealOfMonth({ deal }: { deal?: Deal | null }) {
         <ProductArt slug={deal.product_slug} imageUrl={deal.image_url} alt={title} className="md:w-1/2 w-full aspect-[4/3] object-cover"
           fallback={
           <div className="md:w-1/2 w-full aspect-[4/3] bg-gradient-to-br from-brand-50 to-brand-100 flex items-center justify-center">
-            <span className="text-2xl font-bold text-brand-600">{title.slice(0, 2).toUpperCase()}</span>
+            <span className="text-2xl font-bold text-brand-700">{title.slice(0, 2).toUpperCase()}</span>
           </div>
           } />
         <div className="p-5 md:w-1/2 flex flex-col justify-center">

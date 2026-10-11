@@ -87,7 +87,7 @@ export default function Header() {
           onClick={() => setMenu((v) => !v)}
           aria-label={menu ? "Close menu" : "Open menu"}
           aria-expanded={menu}
-          className="md:hidden shrink-0 h-11 w-11 flex items-center justify-center rounded-control text-ink-600 hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+          className="md:hidden shrink-0 h-11 w-11 flex items-center justify-center rounded-control text-ink-600 hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             {menu
               ? (<><path d="M5 5l10 10" /><path d="M15 5L5 15" /></>)

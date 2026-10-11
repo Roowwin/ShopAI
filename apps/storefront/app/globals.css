@@ -37,6 +37,9 @@
     --surface-muted: 248 250 252;
     --surface-sunken: 241 245 249;
 
+    /* The hairline boundaries below sit deliberately under the 3:1 non-text bar against white
+       (1.23:1 and 1.48:1). A recorded exception, not an oversight: raising them would put mid-grey
+       outlines on every surface in both apps. Values are unchanged - do not "correct" them. */
     --line: 226 232 240;
     --line-strong: 203 213 225;
 

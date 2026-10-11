@@ -75,7 +75,7 @@ export default function CartPage() {
       {lines.length > 0 && (
         <Card className="p-5 space-y-3">
           <Heading level="h2">Delivery (AU / NZ)</Heading>
-          <select className="rounded-control ring-1 ring-line bg-surface px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" value={country} onChange={(e) => setCountry(e.target.value)}>
+          <select className="rounded-control ring-1 ring-line bg-surface px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-700" value={country} onChange={(e) => setCountry(e.target.value)}>
             <option value="AU">Australia (GST 10%)</option>
             <option value="NZ">New Zealand (GST 15%)</option>
           </select>
