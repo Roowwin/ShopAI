@@ -33,3 +33,9 @@ Open audit items:
 - scan_in execute-path lot-existence validation question; DB truth of LOT-2026-0002 unpinned.
 - /api/tags model probe pending (ids seen via launch banners: deepseek-v4.1-flash:cloud, gemma4:31b-cloud).
 - Compose project name baked in yml -> worktree test runs share the ROOT postgres volume.
+
+Post-pilot policy updates (job 2 = deal-of-month):
+- Official gate: FOUR deselects - assistant pair (LLM-stochastic) + test_catalog_from_seed_stock/test_search (hand-seeded stock counts, drift with real orders). Post-6360 full count: 28 passed 4 deselected.
+- ALWAYS run docker compose build api before gate runs - the api image bakes code (no bind-mount); gate numbers on a stale image are meaningless.
+- Hermetic fixture pattern already exists in-suite (test_guest_checkout_to_paid builds own lot/asset); rewrite the two drift tests to it - backlog.
+- Builder self-commit protocol verified (round-1 8bc7549, round-2 bf51a47, Co-Authored-By Claude). Feedback delivery: put substance INLINE in the builder prompt; feedback.md is for the trail, not the transport.
