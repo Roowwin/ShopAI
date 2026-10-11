@@ -1,0 +1,3 @@
+# feedback
+
+home_content publishes deal_of_month only when product active AND at least one listed asset in an active lot; today a stockless product publishes a card with null price (LEFT JOIN). Add one hermetic pytest for the stockless case (own fixture, no hand-seeded lots). Unset/blank/bad-slug behavior unchanged. Gate must print 28 passed 4 deselected; storefront prod build green; commit as deal-of-month round 2.
