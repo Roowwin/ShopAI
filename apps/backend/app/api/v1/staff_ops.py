@@ -1,7 +1,9 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
 from app.api.v1.deps import require_roles
@@ -374,3 +376,60 @@ async def newsletter_list(limit: int = Query(100, le=500), offset: int = 0,
     """), {"lim": limit, "off": offset})).mappings().all()
     return {"total": int(total),
             "subscribers": [{"email": r["email"], "created_at": r["created_at"].isoformat()} for r in rows]}
+
+
+# ------------- Catalog: create a product (used by the demo seeder) -------------
+def _slugify(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")[:160]
+
+
+class ProductIn(BaseModel):
+    brand_slug: str = Field(min_length=1, max_length=80)
+    category_slug: str = Field(min_length=1, max_length=80)
+    model: str = Field(min_length=1, max_length=140)
+    title: str = Field(min_length=1, max_length=160)
+    slug: str | None = Field(default=None, max_length=160)
+    description: str = Field(default="", max_length=4000)
+    specs: dict = Field(default_factory=dict)
+
+
+def _product_json(row) -> dict:
+    return {"id": row["id"], "public_id": row["public_id"], "brand_id": row["brand_id"],
+            "category_id": row["category_id"], "model": row["model"], "title": row["title"],
+            "slug": row["slug"], "description": row["description"], "specs": row["specs"],
+            "status": row["status"], "created_at": row["created_at"].isoformat()}
+
+
+@router.post("/products", status_code=201)
+async def create_product(body: ProductIn, staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+    brand_id = (await db.execute(text("SELECT id FROM brands WHERE slug = :s"),
+                                {"s": body.brand_slug})).scalar_one_or_none()
+    if brand_id is None:
+        raise HTTPException(status_code=422, detail="unknown brand slug")
+    category_id = (await db.execute(text("SELECT id FROM categories WHERE slug = :s"),
+                                    {"s": body.category_slug})).scalar_one_or_none()
+    if category_id is None:
+        raise HTTPException(status_code=422, detail="unknown category slug")
+    slug = (body.slug or "").strip() or _slugify(body.title)
+    if not slug:
+        raise HTTPException(status_code=422, detail="slug required (not derivable from title)")
+    try:
+        # status 'active': a product only reaches the storefront once it has listed stock in an
+        # active lot (the catalog query requires it), so going live here cannot publish an
+        # empty product - it just lets the intake flow that follows surface it.
+        row = (await db.execute(text("""
+            INSERT INTO products (brand_id, category_id, model, title, slug, description, specs, status)
+            VALUES (:b, :c, :m, :t, :s, :d, CAST(:sp AS jsonb), 'active')
+            RETURNING id, public_id::text AS public_id, brand_id, category_id, model, title, slug,
+                      description, specs, status, created_at
+        """), {"b": brand_id, "c": category_id, "m": body.model, "t": body.title, "s": slug,
+               "d": body.description, "sp": json.dumps(body.specs)})).mappings().one()
+        await audit(db, "staff", entity="product", entity_id=row["id"], action="product_create",
+                    actor_id=staff["id"], after={"slug": slug, "title": body.title})
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="slug already exists")
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    return _product_json(row)
