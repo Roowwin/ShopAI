@@ -1,4 +1,5 @@
 import { apiInternal, aud } from "@/lib/api";
+import { iconFor } from "@/lib/productIcons";
 import LoadMore from "./components/LoadMore";
 import DealOfMonth from "./components/DealOfMonth";
 import ProductArt from "./components/ProductArt";
@@ -9,6 +10,9 @@ export const revalidate = 30;
 export default async function Home() {
   const items: any[] = await apiInternal("/store/catalog?limit=4&sort=new");
   const arrivals: any[] = items;
+  /* Hero art: the category glyphs already shipped in public/icons, for the newest arrivals.
+     No product photos exist, so this degrades to text-only when nothing matches. */
+  const heroArt = arrivals.map((i) => iconFor(i.slug)).filter((s): s is string => Boolean(s)).slice(0, 3);
   let best: any[] = [];
   try { best = await apiInternal("/store/best-sellers", 60); } catch { void 0; }
   let cats: any[] = [];
@@ -23,11 +27,23 @@ export default async function Home() {
   } catch { void 0; }
   return (
     <main>
-      <section className="bg-gradient-to-r from-brand-700 via-brand-800 to-brand-950 text-white px-8 py-12">
-        <p className="text-eyebrow uppercase text-brand-200">RFO Store</p>
-        <Heading level="display" className="mt-2">{promo ?? hero.hero_title}</Heading>
-        <p className="text-brand-100 mt-2 max-w-xl">{promo ? "Sale prices below - " + hero.hero_sub : hero.hero_sub}</p>
-        <Button variant="accent" href="#shop" className="mt-5">{hero.cta_label}</Button>
+      <section className="bg-gradient-to-r from-brand-700 via-brand-800 to-brand-950 text-white px-4 md:px-8 py-12">
+        <div className="max-w-6xl mx-auto flex items-center gap-8">
+          <div className="flex-1">
+            <p className="text-eyebrow uppercase text-brand-200">RFO Store</p>
+            <Heading level="display" className="mt-2">{promo ?? hero.hero_title}</Heading>
+            <p className="text-brand-100 mt-2 max-w-xl">{promo ? "Sale prices below - " + hero.hero_sub : hero.hero_sub}</p>
+            <Button variant="accent" href="#shop" className="mt-5">{hero.cta_label}</Button>
+          </div>
+          {heroArt.length > 0 && (
+            <div className="hidden md:flex flex-1 items-center justify-center gap-4">
+              {heroArt.map((src) => (
+                <img key={src} src={src} alt="" aria-hidden="true"
+                  className="w-40 lg:w-48 aspect-[4/3] object-cover rounded-card ring-1 ring-white/20 shadow-lg" />
+              ))}
+            </div>
+          )}
+        </div>
       </section>
       <DealOfMonth deal={hero.deal_of_month} />
       <section className="max-w-6xl mx-auto px-4 pt-10">

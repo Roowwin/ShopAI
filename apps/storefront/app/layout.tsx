@@ -1,10 +1,35 @@
 import "./globals.css";
 import type { ReactNode } from "react";
+import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import Header from "./components/Header";
 import FooterNewsletter from "./components/FooterNewsletter";
 import { apiInternal } from "@/lib/api";
 
-export const metadata = { title: "RFO Store", description: "Certified refurbished, delivered across AU & NZ" };
+/* Self-hosted at build time (no runtime third-party request, no layout shift). Exposed as
+   --font-sans, which tailwind.config.ts maps to `sans`, so Tailwind's preflight applies it to
+   the document. `display: "swap"` keeps text visible while it loads. */
+const inter = Inter({ subsets: ["latin"], weight: ["400", "600"], variable: "--font-sans", display: "swap" });
+
+/* Where absolute URLs (og:image) resolve against. Override with NEXT_PUBLIC_SITE_URL in a real
+   deployment; the default matches the local stack (.env DOMAIN_STORE). */
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://shop.rfo.localhost";
+
+export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
+  title: "RFO Store",
+  description: "Certified refurbished, delivered across AU & NZ",
+  openGraph: {
+    title: "RFO Store",
+    description: "Certified refurbished, delivered across AU & NZ",
+    siteName: "RFO Store",
+    type: "website",
+    locale: "en_AU",
+  },
+  twitter: { card: "summary_large_image" },
+};
+
+export const viewport: Viewport = { themeColor: "#059669" };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   let promo: string | null = null;
@@ -13,7 +38,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     if (p.length) { promo = p[0].name + (p[0].kind === "percent" ? " - " + p[0].value + "% off" : ""); }
   } catch { void 0; }
   return (
-    <html lang="en-AU">
+    <html lang="en-AU" className={inter.variable}>
       <body className="bg-surface-muted text-ink-900 min-h-screen flex flex-col">
         <Header />
         {promo && (<div className="bg-brand-600 text-white text-xs px-6 py-1.5 text-center">{promo}</div>)}

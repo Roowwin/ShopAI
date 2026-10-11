@@ -79,6 +79,11 @@ const config: Config = {
         card: "1rem", // content panels
         control: "0.75rem", // tiles, buttons, inputs
       },
+      fontFamily: {
+        // --font-sans is set by next/font on <html>. The inner fallback keeps the stack valid
+        // if the variable is ever absent, instead of making the declaration invalid.
+        sans: ["var(--font-sans, system-ui)", "sans-serif"],
+      },
       fontSize: {
         eyebrow: ["0.6875rem", { lineHeight: "1rem", letterSpacing: "0.1em" }],
       },
