@@ -2,7 +2,7 @@ import { apiInternal } from "@/lib/api";
 import { iconFor } from "@/lib/productIcons";
 import LoadMore from "./components/LoadMore";
 import DealOfMonth from "./components/DealOfMonth";
-import { Button, Heading, ProductCard } from "./components/ui";
+import { Button, cn, Heading, linkClass, ProductCard } from "./components/ui";
 
 export const revalidate = 30;
 
@@ -31,7 +31,7 @@ export default async function Home() {
           <div className="flex-1">
             <p className="text-eyebrow uppercase text-brand-200">RFO Store</p>
             <Heading level="display" className="mt-2">{promo ?? hero.hero_title}</Heading>
-            <p className="text-brand-100 mt-2 max-w-xl">{promo ? "Sale prices below - " + hero.hero_sub : hero.hero_sub}</p>
+            <p className="text-lead text-brand-100 mt-2 max-w-xl">{promo ? "Sale prices below - " + hero.hero_sub : hero.hero_sub}</p>
             <Button variant="accent" href="#shop" className="mt-5">{hero.cta_label}</Button>
           </div>
           {heroArt.length > 0 && (
@@ -46,7 +46,7 @@ export default async function Home() {
       </section>
       <DealOfMonth deal={hero.deal_of_month} />
       <section className="max-w-6xl mx-auto px-4 pt-10">
-        <div className="flex items-end justify-between"><Heading level="h2">New arrivals</Heading><a href="/" className="text-xs text-brand-700">View all</a></div>
+        <div className="flex items-end justify-between"><Heading level="h2">New arrivals</Heading><a href="/" className={cn("text-xs", linkClass)}>View all</a></div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
           {arrivals.map((i) => (
             <ProductCard key={i.slug} variant="compact" href={"/products/" + i.slug} title={i.title}

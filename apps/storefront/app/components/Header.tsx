@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { API, aud } from "@/lib/api";
 import { cartGet } from "@/lib/cart";
-import { Button, Input } from "./ui";
+import { Button, cn, Input, navLinkClass } from "./ui";
 
 type SItem = { slug: string; title: string; units_available: number; price_from_cents: number | null };
 
@@ -52,12 +52,12 @@ export default function Header() {
           RFO<span className="text-brand-700">Store</span>
         </a>
         <nav className="hidden md:flex gap-4 text-sm text-ink-600">
-          <a href="/" className="hover:text-brand-700">Shop</a>
+          <a href="/" className={navLinkClass}>Shop</a>
           {cats.slice(0, 6).map((c) => (
-            <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className="hover:text-brand-700">{c.name}</a>
+            <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className={navLinkClass}>{c.name}</a>
           ))}
-          <a href="/faq" className="hover:text-brand-700">FAQ</a>
-                    <a href="/assistant" className="hover:text-brand-700">Ask AI</a>
+          <a href="/faq" className={navLinkClass}>FAQ</a>
+                    <a href="/assistant" className={navLinkClass}>Ask AI</a>
         </nav>
         <div className="relative flex-1 min-w-0 max-w-xl mx-auto">
           <Input tone="sunken"
@@ -68,13 +68,13 @@ export default function Header() {
           {open && items.length > 0 && (
             <div className="absolute left-0 right-0 mt-1 bg-white text-ink-900 rounded-control shadow-lg ring-1 ring-line overflow-hidden">
               {items.slice(0, 5).map((s) => (
-                <button key={s.slug} className="w-full text-left px-4 py-2.5 hover:bg-brand-50 text-sm"
+                <button key={s.slug} className="w-full text-left px-4 py-2.5 text-sm transition-colors duration-fast ease-out hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 motion-reduce:transition-none"
                   onMouseDown={() => router.push("/products/" + s.slug)}>
                   <span className="font-medium">{s.title}</span>
                   <span className="text-xs text-ink-500 ml-2">{s.units_available} available{s.price_from_cents !== null ? " from " + aud(s.price_from_cents) : ""}</span>
                 </button>
               ))}
-              <button className="w-full text-left px-4 py-2 text-xs bg-surface-sunken text-brand-700"
+              <button className="w-full text-left px-4 py-2 text-xs bg-surface-sunken text-brand-700 transition-colors duration-fast ease-out hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 motion-reduce:transition-none"
                 onMouseDown={() => router.push("/search?q=" + encodeURIComponent(q.trim()))}>See all results</button>
             </div>
           )}
@@ -87,7 +87,7 @@ export default function Header() {
           onClick={() => setMenu((v) => !v)}
           aria-label={menu ? "Close menu" : "Open menu"}
           aria-expanded={menu}
-          className="md:hidden shrink-0 h-11 w-11 flex items-center justify-center rounded-control text-ink-600 hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700">
+          className="md:hidden shrink-0 h-11 w-11 flex items-center justify-center rounded-control text-ink-600 transition-colors duration-fast ease-out hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 motion-reduce:transition-none">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             {menu
               ? (<><path d="M5 5l10 10" /><path d="M15 5L5 15" /></>)
@@ -98,12 +98,12 @@ export default function Header() {
       {/* The category nav is hidden below md, and there was no way to reach it on a phone. */}
       {menu && (
         <nav className="md:hidden bg-white ring-1 ring-line border-t border-line px-4 py-1 flex flex-col text-sm text-ink-600">
-          <a href="/" className="py-3 hover:text-brand-700" onClick={() => setMenu(false)}>Shop</a>
+          <a href="/" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>Shop</a>
           {cats.slice(0, 6).map((c) => (
-            <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className="py-3 hover:text-brand-700" onClick={() => setMenu(false)}>{c.name}</a>
+            <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>{c.name}</a>
           ))}
-          <a href="/faq" className="py-3 hover:text-brand-700" onClick={() => setMenu(false)}>FAQ</a>
-          <a href="/assistant" className="py-3 hover:text-brand-700" onClick={() => setMenu(false)}>Ask AI</a>
+          <a href="/faq" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>FAQ</a>
+          <a href="/assistant" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>Ask AI</a>
         </nav>
       )}
     </header>

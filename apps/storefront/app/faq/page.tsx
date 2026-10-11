@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import ContentPage, { Note, Section } from "../components/ContentPage";
+import { linkClass } from "../components/ui";
 
 export const metadata = {
   title: "FAQ - RFO Store",
@@ -85,7 +86,7 @@ export default function FaqPage() {
           <p>
             Every unit is graded A, B, C or D on cosmetic condition, and every grade is fully tested and fully functional. Grade A is
             the closest to new; Grade D is the most budget-friendly with visible wear. See{" "}
-            <a className="text-brand-700 hover:underline" href="/grades">our grades explained</a> for cosmetic details and battery
+            <a className={linkClass} href="/grades">our grades explained</a> for cosmetic details and battery
             health per grade.
           </p>
         </QA>
@@ -120,7 +121,7 @@ export default function FaqPage() {
           <p>
             A 12-month RFO warranty on every device, covering hardware faults that come up in normal use. If something fails we
             repair it, replace it with an equivalent unit, or refund you. Full terms are on the{" "}
-            <a className="text-brand-700 hover:underline" href="/returns">returns and warranty page</a>.
+            <a className={linkClass} href="/returns">returns and warranty page</a>.
           </p>
         </QA>
         <QA q="What if I change my mind?">
@@ -138,7 +139,7 @@ export default function FaqPage() {
         <QA q="How do I make a claim?">
           <p>
             Email{" "}
-            <a className="text-brand-700 hover:underline" href="mailto:support@rfostore.com.au">support@rfostore.com.au</a> with
+            <a className={linkClass} href="mailto:support@rfostore.com.au">support@rfostore.com.au</a> with
             your order number and what is happening. We reply within one business day with the next step, and we cover return
             freight on all warranty claims.
           </p>
@@ -149,11 +150,11 @@ export default function FaqPage() {
         <Note>
           Our support team answers email Monday to Friday, 9am-5pm AEST, and Saturday 10am-2pm. Send order questions, warranty
           claims or photo requests to support@rfostore.com.au, or use{" "}
-          <a className="text-brand-700 underline" href="/contact">contact us</a> for hours and response times.
+          <a className={linkClass} href="/contact">contact us</a> for hours and response times.
         </Note>
         <p>
-          Looking for a device instead? Browse the <a className="text-brand-700 hover:underline" href="/">shop</a> or ask the{" "}
-          <a className="text-brand-700 hover:underline" href="/assistant">AI assistant</a> what we have in stock right now.
+          Looking for a device instead? Browse the <a className={linkClass} href="/">shop</a> or ask the{" "}
+          <a className={linkClass} href="/assistant">AI assistant</a> what we have in stock right now.
         </p>
       </Section>
     </ContentPage>

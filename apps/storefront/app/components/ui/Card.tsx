@@ -26,12 +26,23 @@ const TONE: Record<"default" | "brand", string> = {
   brand: "bg-brand-50 ring-brand-100 text-brand-900",
 };
 
+/* An interactive card is a link: it lifts and warms its ring on hover, settles back down on
+   press, and takes the same emerald focus ring as a button so tabbing to a product tile is
+   visible. `ring-2` on focus wins over the base `ring-1` by stylesheet order, the same way the
+   Button variants already rely on. Motion tokens throughout; reduced motion keeps the colour
+   cue and drops the lift. */
+const INTERACTIVE =
+  "hover:ring-brand-300 hover:-translate-y-0.5 active:translate-y-0 " +
+  "transition duration-base ease-out " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 " +
+  "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:translate-y-0";
+
 export default function Card({ children, radius = "card", tone = "default", interactive = false, href, className }: Props) {
   const cls = cn(
     "ring-1",
     TONE[tone],
     RADIUS[radius],
-    interactive && "hover:ring-brand-300 hover:-translate-y-0.5 transition",
+    interactive && INTERACTIVE,
     className,
   );
   if (href) return <a href={href} className={cls}>{children}</a>;

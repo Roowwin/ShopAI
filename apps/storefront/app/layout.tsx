@@ -50,13 +50,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               <p className="text-xs text-ink-400 mt-1">Certified refurbished electronics. Every device renewed, graded and tracked - e-waste kept out of landfill.</p>
             </div>
             <div className="text-xs space-y-1">
-              <a href="/" className="block hover:text-brand-300">Shop</a>
-              <a href="/search" className="block hover:text-brand-300">Search</a>
-              <a href="/assistant" className="block hover:text-brand-300">Ask the AI</a>
-              <a href="/faq" className="block hover:text-brand-300">FAQ</a>
-              <a href="/contact" className="block hover:text-brand-300">Contact</a>
-              <a href="/grades" className="block hover:text-brand-300">Our grades A-D</a>
-              <a href="/returns" className="block hover:text-brand-300">Returns &amp; warranty</a>
+              <a href="/" className="block transition-colors duration-fast ease-out hover:text-brand-300 motion-reduce:transition-none">Shop</a>
+              <a href="/search" className="block transition-colors duration-fast ease-out hover:text-brand-300 motion-reduce:transition-none">Search</a>
+              <a href="/assistant" className="block transition-colors duration-fast ease-out hover:text-brand-300 motion-reduce:transition-none">Ask the AI</a>
+              <a href="/faq" className="block transition-colors duration-fast ease-out hover:text-brand-300 motion-reduce:transition-none">FAQ</a>
+              <a href="/contact" className="block transition-colors duration-fast ease-out hover:text-brand-300 motion-reduce:transition-none">Contact</a>
+              <a href="/grades" className="block transition-colors duration-fast ease-out hover:text-brand-300 motion-reduce:transition-none">Our grades A-D</a>
+              <a href="/returns" className="block transition-colors duration-fast ease-out hover:text-brand-300 motion-reduce:transition-none">Returns &amp; warranty</a>
             </div>
             <div className="text-xs text-ink-400">
               <p>Prices in AUD incl. applicable GST (AU 10% / NZ 15%).</p>

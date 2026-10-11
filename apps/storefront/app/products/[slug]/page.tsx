@@ -1,7 +1,7 @@
 import { apiInternal, aud } from "@/lib/api";
 import GradePanel from "./GradePanel";
 import ProductArt from "../../components/ProductArt";
-import { Badge, Button, Eyebrow, Heading, ProductCard } from "../../components/ui";
+import { Badge, Button, Eyebrow, Heading, linkClass, navLinkClass, ProductCard } from "../../components/ui";
 import { notFound } from "next/navigation";
 
 export const revalidate = 0;
@@ -21,8 +21,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   return (
     <main className="max-w-6xl mx-auto px-4 pt-5 pb-12">
       <nav className="text-xs text-ink-400 mb-4">
-        <a href="/" className="hover:text-brand-700">Home</a> <span>/</span>
-        <a href={"/search?q=" + encodeURIComponent(p.category)} className="hover:text-brand-700">{p.category}</a> <span>/</span>
+        <a href="/" className={navLinkClass}>Home</a> <span>/</span>
+        <a href={"/search?q=" + encodeURIComponent(p.category)} className={navLinkClass}>{p.category}</a> <span>/</span>
         <span className="text-ink-600">{p.title}</span>
       </nav>
       <div className="grid gap-6 md:grid-cols-2">
@@ -64,7 +64,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           {promo && (
             <p className="text-xs text-accent-700 mt-1">Sale event: {promo}</p>
           )}
-          <p className="text-sm text-ink-600 mt-3">{p.description}</p>
+          <p className="text-body text-ink-600 mt-3">{p.description}</p>
           <div className="mt-5">
             <GradePanel units={p.units} title={p.title} />
           </div>
@@ -80,8 +80,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
       <section className="mt-10">
         <Heading level="h2" className="border-b border-line pb-2">Description</Heading>
-        <p className="text-sm text-ink-600 mt-3 whitespace-pre-wrap">{p.description}</p>
-        <p className="text-xs text-ink-400 mt-3">Category: <a href={"/search?q=" + encodeURIComponent(p.category)} className="text-brand-700">{p.category}</a> - Brand: <a href={"/search?q=" + encodeURIComponent(p.brand)} className="text-brand-700">{p.brand}</a></p>
+        <p className="text-body text-ink-600 mt-3 whitespace-pre-wrap">{p.description}</p>
+        <p className="text-xs text-ink-400 mt-3">Category: <a href={"/search?q=" + encodeURIComponent(p.category)} className={linkClass}>{p.category}</a> - Brand: <a href={"/search?q=" + encodeURIComponent(p.brand)} className={linkClass}>{p.brand}</a></p>
       </section>
 
       {others.length > 0 && (

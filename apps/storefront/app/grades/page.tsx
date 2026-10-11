@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import ContentPage, { Note, Section } from "../components/ContentPage";
-import { Badge, Card, Heading } from "../components/ui";
+import { Badge, Card, Heading, linkClass } from "../components/ui";
 import { GRADES } from "@/lib/grades";
 
 export const metadata = {
@@ -75,12 +75,12 @@ export default function GradesPage() {
         <Note>
           Grades describe cosmetics honestly and conservatively: we would rather a device arrive looking better than described than
           the other way around. If a unit does not match its grade, it is covered by the 30-day return policy and the 12-month
-          warranty - see <a className="text-brand-700 underline" href="/returns">returns &amp; warranty</a>.
+          warranty - see <a className={linkClass} href="/returns">returns &amp; warranty</a>.
         </Note>
         <p>
           Want to see what is on the shelf in a particular grade right now? Browse the{" "}
-          <a className="text-brand-700 hover:underline" href="/">shop</a> or check the{" "}
-          <a className="text-brand-700 hover:underline" href="/faq">FAQ</a> for how ordering works.
+          <a className={linkClass} href="/">shop</a> or check the{" "}
+          <a className={linkClass} href="/faq">FAQ</a> for how ordering works.
         </p>
       </Section>
     </ContentPage>

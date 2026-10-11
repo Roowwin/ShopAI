@@ -1,4 +1,5 @@
 import ContentPage, { Note, Section } from "../components/ContentPage";
+import { linkClass } from "../components/ui";
 
 export const metadata = {
   title: "Contact us - RFO Store",
@@ -77,9 +78,9 @@ export default function ContactPage() {
 
       <Section title="Before you write">
         <Note>
-          Many questions are already answered instantly in our <a className="text-brand-700 underline" href="/faq">FAQ</a>, including dispatch
+          Many questions are already answered instantly in our <a className={linkClass} href="/faq">FAQ</a>, including dispatch
           times, grade meanings and what is covered by the 12-month warranty. For stock questions, the{" "}
-          <a className="text-brand-700 underline" href="/assistant">AI assistant</a> can check live availability and prices for you right away.
+          <a className={linkClass} href="/assistant">AI assistant</a> can check live availability and prices for you right away.
         </Note>
       </Section>
     </ContentPage>

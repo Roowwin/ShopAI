@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { API, aud } from "@/lib/api";
-import { Button, Card, Heading, Input } from "../components/ui";
+import { Button, Card, Heading, Input, linkClass } from "../components/ui";
 
 type Result = { title: string; brand: string; grade: string; price_cents: number; units_available: number; url: string };
 type Msg = { role: "you" | "ai"; text: string; cards?: Result[] };
@@ -46,7 +46,7 @@ export default function AssistantPage() {
   return (
     <main className="max-w-2xl mx-auto pt-8 px-4">
       <Heading level="h1" className="mb-4">Ask about our stock</Heading>
-      {about && <p className="text-xs text-ink-500 mb-2">About: {about} <a className="text-brand-700 underline" href={"/products/" + about}>view item</a></p>}
+      {about && <p className="text-xs text-ink-500 mb-2">About: {about} <a className={linkClass} href={"/products/" + about}>view item</a></p>}
       <Card className="p-6 shadow space-y-3 min-h-[360px]">
         {msgs.length === 0 && <p className="text-ink-400 text-sm">Try: &quot;What refurbished phones do you have under $300?&quot;</p>}
         {msgs.map((m, i) => (
@@ -55,7 +55,7 @@ export default function AssistantPage() {
             {!!m.cards?.length && (
               <div className="mt-2 space-y-2">
                 {m.cards.map((c) => (
-                  <a key={c.title + c.grade} href={c.url} className="block rounded-control border border-line p-2 hover:bg-brand-50 transition">
+                  <a key={c.title + c.grade} href={c.url} className="block rounded-control border border-line p-2 transition-colors duration-fast ease-out hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 motion-reduce:transition-none">
                     {c.title} · Grade {c.grade} · from {aud(c.price_cents)} · {c.units_available} in stock
                   </a>
                 ))}

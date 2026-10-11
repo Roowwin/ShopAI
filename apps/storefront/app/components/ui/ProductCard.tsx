@@ -66,7 +66,7 @@ export default function ProductCard({ href, title, brand, category, slug, imageU
             <span className="font-semibold text-sm">{price(priceCents)}</span>
             {stock && <StockPill stock={stock} />}
           </div>
-          <p className="text-xs text-brand-700 mt-2.5 opacity-0 group-hover:opacity-100 transition">View product</p>
+          <p className="mt-2 text-xs text-brand-700 opacity-0 transition-opacity duration-base ease-out group-hover:opacity-100 motion-reduce:transition-none">View product</p>
         </div>
       </Card>
     );
