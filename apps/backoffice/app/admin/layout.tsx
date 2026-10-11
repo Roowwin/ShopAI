@@ -4,12 +4,16 @@ import { usePathname, useRouter } from "next/navigation";
 import { logout } from "@/lib/api";
 import { Button } from "@/app/components/ui";
 
-/* Every entry here must have a page behind it. Orders / Customers / Audit are intentionally
-   absent: those pages do not exist yet, and linking them would ship three 404s. */
+/* Every entry here must have a page behind it - a link with no page is a 404 in the chrome.
+   Orders, Customers and Audit were deliberately withheld until the ops pages existed; they land
+   in the same commit as those pages, so the nav never advertised a route that was not there. */
 const LINKS = [
   { href: "/admin", label: "Home" },
   { href: "/admin/intake", label: "Intake" },
   { href: "/admin/assets", label: "Assets" },
+  { href: "/admin/orders", label: "Orders" },
+  { href: "/admin/customers", label: "Customers" },
+  { href: "/admin/audit", label: "Audit" },
   { href: "/admin/assistant", label: "Assistant" },
   { href: "/admin/ai/listings", label: "AI Listings" },
   { href: "/admin/cms", label: "CMS" },

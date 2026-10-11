@@ -64,7 +64,13 @@ export default function AssetsPage() {
           <TBody>
             {assets.map((a) => (
               <TR key={a.id} className={"cursor-pointer " + (sel?.id === a.id ? "bg-brand-50" : "hover:bg-surface-muted")} onClick={() => setSel(a)}>
-                <TD className="font-mono">{a.serial_number}</TD>
+                {/* The serial is the way into the detail page; the click is stopped from
+                    bubbling so following it does not also select the row underneath. Everything
+                    else on the row still opens the workbench panel below. */}
+                <TD className="font-mono">
+                  <a href={"/admin/assets/" + a.id} onClick={(e) => e.stopPropagation()}
+                     className="text-brand-700 hover:underline">{a.serial_number}</a>
+                </TD>
                 <TD><Badge colorClass={statusTone(a.status)}>{a.status}</Badge></TD>
                 <TD>{a.grade ? <Badge colorClass={gradeTone(a.grade)}>{a.grade}</Badge> : null}</TD>
                 <TD className="font-mono">{a.lot_number}</TD>
