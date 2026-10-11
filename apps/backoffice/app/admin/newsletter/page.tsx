@@ -64,7 +64,7 @@ export default function NewsletterPage() {
               </TR>
             ))}
             {loaded && subs.length === 0 && !msg && (
-              <TR><TD colSpan={2} className="text-ink-400">No subscribers yet.</TD></TR>
+              <TR><TD colSpan={2} className="text-ink-500">No subscribers yet.</TD></TR>
             )}
           </TBody>
         </Table>

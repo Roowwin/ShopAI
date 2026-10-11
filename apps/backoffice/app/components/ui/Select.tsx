@@ -5,7 +5,7 @@ import { cn } from "./cn";
    text-sm's 20px line box). Admin-only: the storefront has no drop-downs.
 
    No `w-full` in the base, unlike Input. A select is used both as a full-width form field (AI
-   listings) and as an intrinsic-width filter (workbench status, CMS offer kind), and with no
+   listings) and as an intrinsic-width picker (workbench status, CMS offer kind), and with no
    tailwind-merge a base width would beat the caller's by stylesheet order. Width is layout, so
    the caller passes it: `<Select className="w-full">` for the full-width case - see cn.ts. */
 type Props = ComponentPropsWithoutRef<"select">;

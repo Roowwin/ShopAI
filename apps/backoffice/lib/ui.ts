@@ -21,7 +21,7 @@ export type AssetStatus =
 export type Grade = "A" | "B" | "C" | "D";
 
 /* The status keys mirror the API's own strings, underscore and all, so `statusTone(a.status)`
-   needs no translation table. */
+   needs no translation map. */
 const STATUS_TONE: Record<AssetStatus, string> = {
   received: "bg-status-received-soft text-status-received-ink",
   tested: "bg-status-tested-soft text-status-tested-ink",
@@ -57,7 +57,7 @@ export function gradeTone(grade: string | null | undefined): string {
 }
 
 /* The uppercase kicker - the SINGLE definition of the eyebrow, used by Table's header row and
-   by Stat's label. It is a class and not the storefront's Eyebrow component because a table
+   by Stat's label. It is a class and not the storefront's Eyebrow component because a Table
    header row is a `<tr>` and cannot contain the `<p>` that Eyebrow renders; see the note in
    app/components/ui/index.ts.
 

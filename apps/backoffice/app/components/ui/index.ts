@@ -11,7 +11,7 @@
    Table, Stat and Select are admin-only primitives the storefront has no call for.
 
    NOT copied from the storefront: Eyebrow, EmptyState, ProductCard. The backoffice needs the
-   kicker as a CLASS rather than a component - a table header row is a `<tr>` and cannot contain
+   kicker as a CLASS rather than a component - a Table header row is a `<tr>` and cannot contain
    the `<p>` that the storefront's Eyebrow renders - so it is defined once as `kickerClass` in
    lib/ui.ts and used by both Table's head row and Stat's label; there are no product tiles; and
    no empty-state component is in scope. */

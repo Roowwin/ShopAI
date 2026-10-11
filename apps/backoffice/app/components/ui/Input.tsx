@@ -2,8 +2,8 @@ import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "./cn";
 
 /* light = white fill, the default for form rows; sunken = slate fill, for a field that sits on
-   a white bar and needs the contrast; dark = a field on a dark surface. All three carry a
-   focus ring, which the pre-design-system inputs did not. */
+   a white bar and needs the contrast; dark = a field on a dark surface. All three carry a focus
+   highlight, which the pre-design-system inputs did not. */
 const TONES: Record<"light" | "sunken" | "dark", string> = {
   light: "bg-surface text-ink-900 ring-1 ring-line placeholder:text-ink-400",
   sunken: "bg-surface-sunken text-ink-900 ring-1 ring-line placeholder:text-ink-400",

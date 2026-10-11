@@ -122,10 +122,10 @@ export default function CmsPage() {
                     {p.active ? "Active" : "Off"}
                   </Button>
                 </TD>
-                <TD className="text-xs text-ink-400">id {p.id}</TD>
+                <TD className="text-xs text-ink-500">id {p.id}</TD>
               </TR>
             ))}
-            {promos.length === 0 && (<TR><TD colSpan={5} className="text-ink-400">No offers yet - add one below.</TD></TR>)}
+            {promos.length === 0 && (<TR><TD colSpan={5} className="text-ink-500">No offers yet - add one below.</TD></TR>)}
           </TBody>
         </Table>
         <div className="flex flex-wrap gap-2 mt-3 items-center">
@@ -154,7 +154,7 @@ export default function CmsPage() {
               <TR key={p.id}>
                 <TD>
                   <a className="text-brand-700" href={"/products/" + p.slug}>{p.title}</a>
-                  <p className="text-xs text-ink-400">{p.category}</p>
+                  <p className="text-xs text-ink-500">{p.category}</p>
                 </TD>
                 <TD>{p.listed_units}</TD>
                 <TD><div className="w-64">
@@ -167,7 +167,7 @@ export default function CmsPage() {
                 <TD><Button variant="secondary" size="sm" onClick={() => void saveProduct(prods[i])}>Save</Button></TD>
               </TR>
             ))}
-            {prods.length === 0 && (<TR><TD colSpan={5} className="text-ink-400">No products.</TD></TR>)}
+            {prods.length === 0 && (<TR><TD colSpan={5} className="text-ink-500">No products.</TD></TR>)}
           </TBody>
         </Table>
       </Card>

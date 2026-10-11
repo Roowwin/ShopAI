@@ -48,7 +48,7 @@ export default function ListingsPage() {
         <Card className="p-6 space-y-2">
           <p className="font-medium">{draft.title}</p>
           <p className="text-sm text-ink-700 whitespace-pre-line">{draft.description}</p>
-          <p className="text-xs text-ink-400">{(draft.keywords ?? []).join(" | ")}</p>
+          <p className="text-xs text-ink-500">{(draft.keywords ?? []).join(" | ")}</p>
           <Button onClick={approve} disabled={busy}>Approve &amp; publish</Button>
         </Card>
       )}

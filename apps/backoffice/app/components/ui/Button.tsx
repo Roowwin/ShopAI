@@ -35,7 +35,7 @@ const SIZES: Record<Size, string> = {
   sm: "text-xs px-3",
   md: "text-sm px-4",
   lg: "text-sm px-5",
-  /* `inline` = an action inside a table cell that must line up with the cell's own text (px-0,
+  /* `inline` = an action inside a Table cell that must line up with the cell's own text (px-0,
      no offset), still at the one 36px control height. */
   inline: "text-sm px-0",
 };
