@@ -1,0 +1,1 @@
+# performance review round 1#n#nVERDICT: PASS#n- 56 products + 9 categories: catalog queries ride the established indexes; nothing new measured or needed.#n
