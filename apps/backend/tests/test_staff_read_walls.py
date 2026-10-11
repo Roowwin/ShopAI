@@ -43,6 +43,11 @@ STAFF_READS = (
     ("/staff/ai/briefing", {}),
     ("/staff/ai/activity", {}),
     ("/staff/ai/suggestions", {}),
+    # /staff/overview lives HERE and only here. It returns an OBJECT, and test_staff_read_walls_
+    # hold_for_every_read's admin leg below asserts `r.json() == []` - written for the
+    # list-returning reads. Adding it to READ_WALLS would fail on a CORRECT response, so the
+    # "no credential -> 401" sweep is the wall this route can honour.
+    ("/staff/overview", {}),
 )
 
 
