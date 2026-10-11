@@ -39,10 +39,16 @@ ALTER TABLE refresh_tokens ADD CONSTRAINT refresh_tokens_identity_type_check
 # The identity row itself. token_hash is a SHA-256 of the plaintext, the same treatment
 # refresh_tokens takes; the plaintext is never stored. scopes is reserved for the autonomy job
 # (ADR 0008) and defaults to empty - nothing in this job reads it.
+#
+# staff_id is ON DELETE CASCADE on purpose. An agent identity is a credential BOUND to a sponsor
+# and get_agent joins the two, so a sponsorless row can never authenticate; without the cascade
+# every delete of a staff user would instead fail on the foreign key - including the test suite's
+# own `DELETE FROM staff_users WHERE email LIKE 'pytest-%'`, which turned into a suite-wide
+# landmine the moment this table existed.
 CREATE_AGENT_TOKENS = """
 CREATE TABLE IF NOT EXISTS agent_tokens (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  staff_id BIGINT NOT NULL REFERENCES staff_users(id),
+  staff_id BIGINT NOT NULL REFERENCES staff_users(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   scopes TEXT[] NOT NULL DEFAULT '{}',

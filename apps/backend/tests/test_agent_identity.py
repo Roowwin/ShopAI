@@ -69,6 +69,25 @@ async def _chat(client, tok: str):
     return await client.post("/staff/agents/chat", json={"message": "hello"}, headers=_h(tok))
 
 
+async def _a_graded_serial() -> str:
+    """A real, resolvable serial: the execute probe must name something a slipped gate could
+    actually publish, or "zero deltas" would be vacuous."""
+    eng = get_engine()
+    async with eng.connect() as c:
+        return (await c.execute(text(
+            "SELECT serial_number FROM assets WHERE status = 'graded' ORDER BY id LIMIT 1"))).scalar_one()
+
+
+async def _publish_deltas() -> tuple[int, int]:
+    """(units on the storefront, audit rows recording a publish) - what a slipped execute moves."""
+    eng = get_engine()
+    async with eng.connect() as c:
+        listed = (await c.execute(text("SELECT count(*) FROM assets WHERE status = 'listed'"))).scalar_one()
+        published = (await c.execute(text(
+            "SELECT count(*) FROM audit_log WHERE action IN ('list', 'price')"))).scalar_one()
+    return listed, published
+
+
 # ---------------------------------------------------------------- the wall
 
 async def test_agent_token_is_401_on_every_staff_read(client):
@@ -91,14 +110,21 @@ async def test_agent_token_is_401_on_every_staff_read(client):
 async def test_agent_token_is_401_on_the_store_wall_and_the_staff_chat_door(client):
     """Rejected on the customer zone, and on the staff chat door it must NOT be able to use.
 
-    /store/me is the customer's own door (typ="store"); the last probe is the staff assistant at its
-    existing path, which stays closed to agents - the agent's door is its own route.
+    /store/me is the customer's own door (typ="customer"); the last probe is the staff assistant at
+    its existing path, which stays closed to agents - the agent's door is its own route.
     """
     admin = await _staff(client, "admin")
     _, tok = await _mint(client, admin)
     r = await client.get("/store/me", headers=_h(tok))
     assert r.status_code == 401, r.text
     r = await client.post("/staff/ai/chat", json={"message": "hello"}, headers=_h(tok))
+    assert r.status_code == 401, r.text
+
+
+async def test_a_staff_token_is_401_on_the_agent_mirror(client):
+    """The mirror is the AGENT door, so a real staff credential is not accepted there either."""
+    admin = await _staff(client, "admin")
+    r = await client.post("/staff/agents/chat", json={"message": "hello"}, headers=admin)
     assert r.status_code == 401, r.text
 
 
@@ -111,6 +137,49 @@ async def test_agent_token_authenticates_on_the_assistant_surface(client):
     assert r.json().get("type") in ("answer", "proposed"), r.json()
     # and it really is an agent identity behind that call, not a staff session
     assert int(security.decode_access(tok, "agent")["sub"]) == aid
+
+
+async def test_agent_execute_is_refused_and_moves_nothing(client):
+    """The blocking finding, pinned: an agent token cannot drive an execute turn.
+
+    This is the one that matters. The chat door dispatches into staff_ops as plain function calls
+    (the route's Depends never evaluates), agent_tokens.staff_id is the CREATING ADMIN's id, and
+    every TOOL_ROLES tuple contains admin - so if the mirror delegated the sponsor's role, this
+    exact request would publish a real unit on the storefront with no human, no grant and no cap,
+    audited as the admin's own action. It must 403 with the storefront and the ledger unmoved.
+    """
+    admin = await _staff(client, "admin")
+    _, tok = await _mint(client, admin)
+    serial = await _a_graded_serial()
+    before = await _publish_deltas()
+
+    r = await client.post("/staff/agents/chat", headers=_h(tok), json={
+        "message": "list " + serial, "execute": True, "action": "list",
+        "args": {"serial_number": serial}})
+    assert r.status_code == 403, r.text
+    assert await _publish_deltas() == before
+
+    eng = get_engine()
+    async with eng.connect() as c:
+        status = (await c.execute(text("SELECT status FROM assets WHERE serial_number = :s"),
+                                  {"s": serial})).scalar_one()
+    assert status == "graded", (serial, status)
+
+
+async def test_agent_propose_still_works(client):
+    """The other half of that finding: closing execute must not close propose.
+
+    The phrasing is the one scripts/rehearse_day.py drives its staff proposals with ("grade serial
+    {serial} as B"), so this is the same request shape a rehearsal scores as a proposal.
+    """
+    admin = await _staff(client, "admin")
+    _, tok = await _mint(client, admin)
+    serial = await _a_graded_serial()
+    r = await client.post("/staff/agents/chat", headers=_h(tok),
+                          json={"message": "grade serial " + serial + " as B"})
+    assert r.status_code == 200, r.text
+    assert r.json().get("type") == "proposed", r.json()
+    assert r.json().get("action") == "grade", r.json()
 
 
 # ---------------------------------------------------------------- the token lifecycle

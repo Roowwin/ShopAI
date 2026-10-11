@@ -2,9 +2,16 @@
 
 An agent is a third identity class: an admin mints a rotatable, revocable, expiring token bound to a
 staff sponsor, and the agent speaks the assistant with it. Nothing here grants autonomy. The agent's
-turn goes through the same chat handler a staff token reaches, so it can propose and it can execute
-only what a human confirms; the grant-scoped authorisation branch, the caps and the audit marker are
-ADR 0008's Preconditions and are deliberately NOT built here.
+turn reaches the same chat handler a staff token reaches and produces the same proposals, but the
+door is PROPOSE-ONLY: an execute turn is refused, and the delegated role is one no TOOL_ROLES tuple
+admits, so an agent cannot perform a write at all. A human still confirms and performs. The
+grant-scoped authorisation branch that would change that, the caps and the audit marker are ADR
+0008's Preconditions and are deliberately NOT built here.
+
+That refusal is not belt-and-braces: `staff_ai.chat` dispatches into `staff_ops` as PLAIN FUNCTION
+calls, so the routes' `Depends(require_roles(...))` never evaluates, and `agent_tokens.staff_id` is
+the creating admin's own id. Delegating the sponsor's role would have handed every agent the admin
+allow-list - including `list` and `price`, which publish a device on the live storefront.
 
 Token handling: the plaintext leaves this module exactly once, in the response to create/rotate. The
 row keeps a SHA-256 of it - the same treatment refresh_tokens takes - and every read here is written
@@ -75,18 +82,37 @@ async def create_agent(body: AgentIn, staff: dict = Depends(require_roles("admin
             "scopes": [], "token_shown_once": True}
 
 
+# The agent's delegated role. A role NO TOOL_ROLES tuple admits, and that is the point: every tuple
+# contains "admin", agent_tokens.staff_id is the CREATING ADMIN's id, and the chat door dispatches
+# into staff_ops as plain function calls (so a route-level Depends never runs). Delegating the
+# sponsor's own role would therefore let an agent token execute `list` or `price` - publishing a
+# device on the live storefront at a price - with no human, no grant and no cap.
+AGENT_ROLE = "agent"
+
+
 @router.post("/chat")
 async def agent_chat(body: staff_ai.ChatIn, agent: dict = Depends(get_agent), db=Depends(get_db),
                      ai_db=Depends(get_ai_db)):
     """The agent's door into the assistant - the assistant surface, and the only one (ADR 0007 d.7).
 
-    The agent speaks as its bound staff sponsor, through the SAME chat handler a staff token reaches:
-    same TOOL_ROLES gate, same propose/execute split, so a write still needs the human Confirm. The
-    grant-scoped branch of ADR 0008 decision 9 - the one that would let an agent past TOOL_ROLES -
-    is not here and must not be added until that ADR's Preconditions are met.
+    PROPOSE-ONLY. An agent turn reaches the same chat handler a staff token reaches, sees the same
+    snapshot and produces the same proposal, but it cannot execute: `execute` is refused outright
+    below, and the delegated role is AGENT_ROLE, which no TOOL_ROLES tuple admits and which the
+    staff_ops handlers re-check in their own bodies. So an agent can suggest `list` or `price` and
+    still not be the thing that performs it - the human Confirm remains the only way a write lands,
+    and the grant-scoped branch of ADR 0008 decision 9 (the one that WOULD let an agent past these
+    gates) is not built here and must not be until that ADR's Preconditions are met.
+
+    Note for the autonomy job: the handler keys its Redis memory, daily cap and `_FALLBACK_PROPOSAL`
+    on the SPONSOR's staff id, so an agent, its sponsor and any second agent of that sponsor share
+    one bucket - and the sponsor being an admin does not exempt the agent, because `privileged` is
+    read from the delegated role. Under propose-only that is not a write risk; splitting the bucket
+    per identity is the autonomy job's.
     """
+    if body.execute:
+        raise HTTPException(status_code=403, detail="agent identities are propose-only")
     return await staff_ai.chat(body=body, staff={"id": agent["staff_id"], "email": agent["email"],
-                                                "role": agent["role"]}, db=db, ai_db=ai_db)
+                                                "role": AGENT_ROLE}, db=db, ai_db=ai_db)
 
 
 @router.post("/{agent_id}/rotate")

@@ -187,9 +187,15 @@ export default function AgentsPage() {
                       <TD className="font-medium">{a.name}</TD>
                       <TD>
                         <Badge colorClass={STATE_TONE[state]}>{state}</Badge>
+                        {/* The revocation time belongs with the state, not under the Expires
+                            header: this identity keeps its original expiry date when it is
+                            revoked, and the two are different facts. */}
+                        {a.revoked_at && (
+                          <span className="ml-2 text-xs text-ink-500">revoked {when(a.revoked_at)}</span>
+                        )}
                       </TD>
                       <TD className="text-ink-500">{when(a.created_at)}</TD>
-                      <TD className="text-ink-500">{when(a.revoked_at ?? a.expires_at)}</TD>
+                      <TD className="text-ink-500">{when(a.expires_at)}</TD>
                       <TD>
                         <span className="flex items-center gap-3">
                           <Button size="inline" variant="ghost" disabled={busy || state === "revoked"} onClick={() => rotate(a.id)}>
