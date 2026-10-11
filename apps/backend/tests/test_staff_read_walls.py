@@ -38,7 +38,7 @@ STAFF_READS = (
     ("/staff/cms/promotions", {}),
     ("/staff/cms/products", {}),
     ("/staff/newsletter", {}),
-    ("/staff/assistant/whoami", {}),
+    ("/staff/ai/whoami", {}),
     ("/staff/ai/status", {}),
     ("/staff/ai/briefing", {}),
     ("/staff/ai/activity", {}),
