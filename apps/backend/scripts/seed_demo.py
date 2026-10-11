@@ -101,14 +101,19 @@ class Api:
         self.http = httpx.Client(base_url=base_url, timeout=30.0)
         self.token: str | None = None
 
-    def _headers(self) -> dict:
-        return {"Authorization": "Bearer " + self.token} if self.token else {}
+    def _headers(self, path: str) -> dict:
+        # Two-zone API: the store endpoints answer "401 invalid token" for a staff bearer, so the
+        # Authorization header rides only on /staff calls. Guest calls - checkout, pay,
+        # simulate-payment, register - stay headerless, which is the house semantics.
+        if self.token and path.startswith("/staff"):
+            return {"Authorization": "Bearer " + self.token}
+        return {}
 
     def get(self, path: str, **kw) -> httpx.Response:
-        return self.http.get(path, headers=self._headers(), **kw)
+        return self.http.get(path, headers=self._headers(path), **kw)
 
     def post(self, path: str, body=None, **kw) -> httpx.Response:
-        return self.http.post(path, headers=self._headers(), json=body, **kw)
+        return self.http.post(path, headers=self._headers(path), json=body, **kw)
 
     def need(self, r: httpx.Response, code: int) -> httpx.Response:
         if r.status_code != code:
