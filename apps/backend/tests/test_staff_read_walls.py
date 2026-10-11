@@ -48,6 +48,10 @@ STAFF_READS = (
     # list-returning reads. Adding it to READ_WALLS would fail on a CORRECT response, so the
     # "no credential -> 401" sweep is the wall this route can honour.
     ("/staff/overview", {}),
+    # Same reason as /staff/overview: the agent listing returns an object, so only the
+    # "no credential -> 401" leg applies. It is admin-only, and an AGENT token is 401 here too -
+    # see tests/test_agent_identity.py, which sweeps this tuple with an agent bearer.
+    ("/staff/agents", {}),
 )
 
 

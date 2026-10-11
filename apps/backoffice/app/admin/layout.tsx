@@ -15,6 +15,7 @@ const LINKS = [
   { href: "/admin/cms", label: "CMS" },
   { href: "/admin/newsletter", label: "Newsletter" },
   { href: "/admin/security", label: "Security" },
+  { href: "/admin/agents", label: "Agents" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
