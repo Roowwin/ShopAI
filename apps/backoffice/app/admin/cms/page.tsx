@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { Button, Card, Heading, Input, Select, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
 import { requireRole, useMe } from "@/lib/session";
 
 type Deal = { title: string; product_slug: string; badge: string };
@@ -70,100 +71,106 @@ export default function CmsPage() {
   if (checked && !allowed) {
     return (
       <main className="max-w-6xl mx-auto p-4 min-h-screen">
-        <div className="bg-slate-950 text-white rounded-2xl px-5 py-3 mb-4 flex items-center gap-3">
-          <b>Website CMS</b>
+        <div className="bg-ink-900 text-white rounded-card px-5 py-3 mb-4 flex items-center gap-3">
+          <Heading level="h1">Website CMS</Heading>
         </div>
-        <div className="rounded-xl bg-amber-100 text-amber-800 px-3 py-2 text-sm">admin or manager role required</div>
+        <div className="rounded-control bg-accent-100 text-accent-700 px-3 py-2 text-sm">admin or manager role required</div>
       </main>
     );
   }
 
   return (
     <main className="max-w-6xl mx-auto p-4 min-h-screen">
-      <div className="bg-slate-950 text-white rounded-2xl px-5 py-3 mb-4 flex items-center gap-3">
-        <b>Website CMS</b>
-        <span className="text-xs text-slate-400">hero content - offers - featured products (live on the storefront)</span>
+      <div className="bg-ink-900 text-white rounded-card px-5 py-3 mb-4 flex items-center gap-3">
+        <Heading level="h1">Website CMS</Heading>
+        <span className="text-xs text-ink-400">hero content - offers - featured products (live on the storefront)</span>
       </div>
-      {msg && (<div className="rounded-xl bg-emerald-100 text-emerald-800 px-3 py-2 mb-3 text-sm">{msg}</div>)}
+      {msg && (<div className="rounded-control bg-brand-100 text-brand-900 px-3 py-2 mb-3 text-sm">{msg}</div>)}
 
-      <section className="rounded-2xl ring-1 ring-slate-200 bg-white p-4 mb-4">
-        <h2 className="text-sm font-semibold mb-2">Homepage hero</h2>
-        <input className="border rounded-xl px-3 py-2 w-full mb-2" placeholder="hero title" value={hero.hero_title}
+      <Card className="p-4 mb-4">
+        <Heading level="h3" as="h2" className="mb-2">Homepage hero</Heading>
+        <Input className="mb-2" placeholder="hero title" value={hero.hero_title}
           onChange={(e) => setHero({ ...hero, hero_title: e.target.value })} />
-        <input className="border rounded-xl px-3 py-2 w-full mb-2" placeholder="hero subtitle" value={hero.hero_sub}
+        <Input className="mb-2" placeholder="hero subtitle" value={hero.hero_sub}
           onChange={(e) => setHero({ ...hero, hero_sub: e.target.value })} />
-        <input className="border rounded-xl px-3 py-2 w-full mb-2" placeholder="deal of the month product slug (blank = off)"
+        <Input className="mb-2" placeholder="deal of the month product slug (blank = off)"
           value={hero.deal_of_month?.product_slug ?? ""}
           onChange={(e) => setDealSlug(e.target.value)} />
         <div className="flex gap-2">
-          <input className="border rounded-xl px-3 py-2 flex-1" placeholder="button label (e.g. Shop devices)" value={hero.cta_label}
+          <Input className="flex-1" placeholder="button label (e.g. Shop devices)" value={hero.cta_label}
             onChange={(e) => setHero({ ...hero, cta_label: e.target.value })} />
-          <button className="bg-emerald-600 text-white rounded-xl px-5 hover:bg-emerald-500" onClick={() => void saveHero()}>Save</button>
+          <Button onClick={() => void saveHero()}>Save</Button>
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-2xl ring-1 ring-slate-200 bg-white p-4 mb-4">
-        <h2 className="text-sm font-semibold mb-2">Offers</h2>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase tracking-wider text-slate-400">
-              <th className="py-1">Name</th><th>Tier</th><th>Value</th><th>Status</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
+      <Card className="p-4 mb-4">
+        <Heading level="h3" as="h2" className="mb-2">Offers</Heading>
+        <Table label="Offers">
+          <THead>
+            <TH>Name</TH><TH>Tier</TH><TH>Value</TH><TH>Status</TH><TH></TH>
+          </THead>
+          <TBody>
             {promos.map((p) => (
-              <tr key={p.id} className="border-t border-slate-100">
-                <td className="py-2">{p.name}</td>
-                <td>{p.kind}</td>
-                <td>{p.value}{p.kind === "percent" ? "%" : ""}</td>
-                <td>
-                  <button className={p.active ? "text-emerald-700 font-semibold" : "text-slate-400"} onClick={() => void togglePromo(p)}>{p.active ? "Active" : "Off"}</button>
-                </td>
-                <td className="text-xs text-slate-400">id {p.id}</td>
-              </tr>
+              <TR key={p.id}>
+                <TD>{p.name}</TD>
+                <TD>{p.kind}</TD>
+                <TD>{p.value}{p.kind === "percent" ? "%" : ""}</TD>
+                <TD>
+                  {/* size="inline" keeps the toggle's text on the cell's own text grid; ghost =
+                      the active (brand) state, muted = the quiet off state. */}
+                  <Button size="inline" variant={p.active ? "ghost" : "muted"} onClick={() => void togglePromo(p)}>
+                    {p.active ? "Active" : "Off"}
+                  </Button>
+                </TD>
+                <TD className="text-xs text-ink-500">id {p.id}</TD>
+              </TR>
             ))}
-            {promos.length === 0 && (<tr><td colSpan={5} className="text-slate-400 py-2">No offers yet - add one below.</td></tr>)}
-          </tbody>
-        </table>
+            {promos.length === 0 && (<TR><TD colSpan={5} className="text-ink-500">No offers yet - add one below.</TD></TR>)}
+          </TBody>
+        </Table>
         <div className="flex flex-wrap gap-2 mt-3 items-center">
-          <input className="border rounded-xl px-3 py-2" placeholder="offer name" value={np.name} onChange={(e) => setNp({ ...np, name: e.target.value })} />
-          <select className="border rounded-xl px-3 py-2 bg-white" value={np.kind} onChange={(e) => setNp({ ...np, kind: e.target.value })}>
+          <div className="w-48">
+            <Input placeholder="offer name" value={np.name} onChange={(e) => setNp({ ...np, name: e.target.value })} />
+          </div>
+          <Select value={np.kind} onChange={(e) => setNp({ ...np, kind: e.target.value })}>
             <option value="percent">percent</option>
             <option value="fixed">fixed</option>
-          </select>
-          <input className="border rounded-xl px-3 py-2 w-24" type="number" value={np.value} onChange={(e) => setNp({ ...np, value: Number(e.target.value) })} />
-          <button className="bg-slate-900 text-white rounded-xl px-4 hover:bg-slate-800" onClick={() => void addPromo()}>Add offer</button>
+          </Select>
+          <div className="w-24">
+            <Input type="number" value={np.value} onChange={(e) => setNp({ ...np, value: Number(e.target.value) })} />
+          </div>
+          <Button onClick={() => void addPromo()}>Add offer</Button>
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-2xl ring-1 ring-slate-200 bg-white p-4">
-        <h2 className="text-sm font-semibold mb-2">Products - image URL and featured</h2>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase tracking-wider text-slate-400">
-              <th className="py-1">Product</th><th>Units</th><th>Image URL</th><th>Featured</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
+      <Card className="p-4">
+        <Heading level="h3" as="h2" className="mb-2">Products - image URL and featured</Heading>
+        <Table label="Products">
+          <THead>
+            <TH>Product</TH><TH>Units</TH><TH>Image URL</TH><TH>Featured</TH><TH></TH>
+          </THead>
+          <TBody>
             {prods.map((p, i) => (
-              <tr key={p.id} className="border-t border-slate-100">
-                <td className="py-2 pr-2">
-                  <a className="text-emerald-700" href={"/products/" + p.slug}>{p.title}</a>
-                  <p className="text-xs text-slate-400">{p.category}</p>
-                </td>
-                <td>{p.listed_units}</td>
-                <td><input className="border rounded-lg px-2 py-1 w-64" placeholder="https://... image URL"
-                  value={p.image_url ?? ""}
-                  onChange={(e) => setProds((arr) => arr.map((x, k) => (k === i ? { ...x, image_url: e.target.value } : x)))} /></td>
-                <td><input type="checkbox" checked={p.featured}
-                  onChange={(e) => setProds((arr) => arr.map((x, k) => (k === i ? { ...x, featured: e.target.checked } : x)))} /></td>
-                <td><button className="text-xs border rounded-lg px-3 py-1.5 hover:bg-slate-50" onClick={() => void saveProduct(prods[i])}>Save</button></td>
-              </tr>
+              <TR key={p.id}>
+                <TD>
+                  <a className="text-brand-700" href={"/products/" + p.slug}>{p.title}</a>
+                  <p className="text-xs text-ink-500">{p.category}</p>
+                </TD>
+                <TD>{p.listed_units}</TD>
+                <TD><div className="w-64">
+                  <Input placeholder="https://... image URL"
+                    value={p.image_url ?? ""}
+                    onChange={(e) => setProds((arr) => arr.map((x, k) => (k === i ? { ...x, image_url: e.target.value } : x)))} />
+                </div></TD>
+                <TD><input type="checkbox" checked={p.featured}
+                  onChange={(e) => setProds((arr) => arr.map((x, k) => (k === i ? { ...x, featured: e.target.checked } : x)))} /></TD>
+                <TD><Button variant="secondary" size="sm" onClick={() => void saveProduct(prods[i])}>Save</Button></TD>
+              </TR>
             ))}
-            {prods.length === 0 && (<tr><td colSpan={5} className="text-slate-400 py-2">No products.</td></tr>)}
-          </tbody>
-        </table>
-      </section>
+            {prods.length === 0 && (<TR><TD colSpan={5} className="text-ink-500">No products.</TD></TR>)}
+          </TBody>
+        </Table>
+      </Card>
     </main>
   );
 }

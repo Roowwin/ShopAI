@@ -1,3 +1,93 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Design tokens. Channel triples (not hex) so Tailwind can apply opacity modifiers -
+   see the `token()` helper in tailwind.config.ts. Values are the palette this app
+   already used, named by role: brand = emerald, accent = amber, ink = slate text,
+   grade.* = the A-D scale, status.* = the asset lifecycle (admin-only). */
+@layer base {
+  :root {
+    --brand-50: 236 253 245;
+    --brand-100: 209 250 229;
+    --brand-200: 167 243 208;
+    --brand-300: 110 231 183;
+    --brand-500: 16 185 129;
+    --brand-600: 5 150 105;
+    --brand-700: 4 120 87;
+    --brand-800: 6 95 70;
+    --brand-900: 6 78 59;
+    --brand-950: 2 44 34;
+
+    --accent-50: 255 251 235;
+    --accent-100: 254 243 199;
+    --accent-300: 252 211 77;
+    --accent-400: 251 191 36;
+    --accent-500: 245 158 11;
+    --accent-700: 180 83 9;
+
+    --ink-300: 203 213 225;
+    --ink-400: 148 163 184;
+    --ink-500: 100 116 139;
+    --ink-600: 71 85 105;
+    --ink-700: 51 65 85;
+    --ink-900: 15 23 42;
+
+    --surface: 255 255 255;
+    --surface-muted: 248 250 252;
+    --surface-sunken: 241 245 249;
+
+    --line: 226 232 240;
+    --line-strong: 203 213 225;
+
+    --danger-50: 254 242 242;
+    --danger-200: 254 202 202;
+    --danger-600: 220 38 38;
+
+    --grade-a-solid: 5 150 105;
+    --grade-a-soft: 236 253 245;
+    --grade-a-ink: 4 120 87;
+    --grade-b-solid: 2 132 199;
+    --grade-b-soft: 240 249 255;
+    --grade-b-ink: 3 105 161;
+    --grade-c-solid: 245 158 11;
+    --grade-c-soft: 255 251 235;
+    --grade-c-ink: 180 83 9;
+    --grade-d-solid: 100 116 139;
+    --grade-d-soft: 241 245 249;
+    --grade-d-ink: 71 85 105;
+
+    /* The asset lifecycle. Same solid/soft/ink shape as grade.* - `soft` + `ink` paint the
+       status chips, `solid` is free for a dot. Values are the hues the pages already used. */
+    --status-received-solid: 100 116 139;
+    --status-received-soft: 241 245 249;
+    --status-received-ink: 51 65 85;
+    --status-tested-solid: 2 132 199;
+    --status-tested-soft: 240 249 255;
+    --status-tested-ink: 3 105 161;
+    --status-in-repair-solid: 245 158 11;
+    --status-in-repair-soft: 255 251 235;
+    --status-in-repair-ink: 180 83 9;
+    --status-graded-solid: 124 58 237;
+    --status-graded-soft: 245 243 255;
+    --status-graded-ink: 109 40 217;
+    --status-listed-solid: 5 150 105;
+    --status-listed-soft: 236 253 245;
+    --status-listed-ink: 4 120 87;
+    --status-reserved-solid: 79 70 229;
+    --status-reserved-soft: 238 242 255;
+    --status-reserved-ink: 67 56 202;
+    --status-sold-solid: 13 148 136;
+    --status-sold-soft: 240 253 250;
+    --status-sold-ink: 15 118 110;
+    --status-shipped-solid: 8 145 178;
+    --status-shipped-soft: 236 254 255;
+    --status-shipped-ink: 14 116 144;
+    --status-returned-solid: 225 29 72;
+    --status-returned-soft: 255 241 242;
+    --status-returned-ink: 190 18 60;
+    --status-scrapped-solid: 220 38 38;
+    --status-scrapped-soft: 254 242 242;
+    --status-scrapped-ink: 185 28 28;
+  }
+}

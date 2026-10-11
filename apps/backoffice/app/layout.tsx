@@ -6,7 +6,7 @@ export const metadata = { title: "RFO Backoffice", description: "RFO staff porta
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en-AU">
-      <body className="bg-slate-100 min-h-screen text-slate-900 antialiased">{children}</body>
+      <body className="bg-surface-sunken min-h-screen text-ink-900 antialiased">{children}</body>
     </html>
   );
 }

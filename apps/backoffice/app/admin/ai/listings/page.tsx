@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { API, apiFetch } from "@/lib/api";
+import { Button, Card, Heading, Select } from "@/app/components/ui";
 
 type Cat = { id: number; slug: string; title: string };
 
@@ -34,24 +35,24 @@ export default function ListingsPage() {
 
   return (
     <main className="max-w-2xl mx-auto pt-8 px-4 space-y-4">
-      <h1 className="text-xl font-semibold">AI listings (human-approved)</h1>
-      <p className="text-xs text-slate-500">Drafts use verified product facts only - you approve before anything publishes (ACCC-safe wording rule).</p>
-      <div className="bg-white rounded-xl shadow p-6 space-y-3">
-        <select className="border rounded px-3 py-2 w-full" value={pid ?? ""} onChange={(e) => setPid(e.target.value ? parseInt(e.target.value) : null)}>
+      <Heading level="h1">AI listings (human-approved)</Heading>
+      <p className="text-xs text-ink-500">Drafts use verified product facts only - you approve before anything publishes (ACCC-safe wording rule).</p>
+      <Card className="p-6 space-y-3">
+        <Select className="w-full" value={pid ?? ""} onChange={(e) => setPid(e.target.value ? parseInt(e.target.value) : null)}>
           <option value="">choose product...</option>
           {cat.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
-        </select>
-        <button className="bg-slate-900 text-white rounded px-4 py-2 disabled:opacity-50" onClick={draftIt} disabled={busy || pid == null}>Generate draft</button>
-      </div>
+        </Select>
+        <Button onClick={draftIt} disabled={busy || pid == null}>Generate draft</Button>
+      </Card>
       {draft && (
-        <div className="bg-white rounded-xl shadow p-6 space-y-2">
+        <Card className="p-6 space-y-2">
           <p className="font-medium">{draft.title}</p>
-          <p className="text-sm text-slate-700 whitespace-pre-line">{draft.description}</p>
-          <p className="text-xs text-slate-400">{(draft.keywords ?? []).join(" | ")}</p>
-          <button className="bg-green-700 text-white rounded px-4 py-2" onClick={approve} disabled={busy}>Approve &amp; publish</button>
-        </div>
+          <p className="text-sm text-ink-700 whitespace-pre-line">{draft.description}</p>
+          <p className="text-xs text-ink-500">{(draft.keywords ?? []).join(" | ")}</p>
+          <Button onClick={approve} disabled={busy}>Approve &amp; publish</Button>
+        </Card>
       )}
-      {msg && <p className="text-sm text-slate-600">{msg}</p>}
+      {msg && <p className="text-sm text-ink-600">{msg}</p>}
     </main>
   );
 }

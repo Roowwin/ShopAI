@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { logout } from "@/lib/api";
+import { Button } from "@/app/components/ui";
 
 /* Every entry here must have a page behind it. Orders / Customers / Audit are intentionally
    absent: those pages do not exist yet, and linking them would ship three 404s. */
@@ -22,7 +23,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div>
-      <nav className="bg-slate-900 text-white px-4 py-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm">
+      <nav className="bg-ink-900 text-white px-4 py-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm">
         {LINKS.map((l) => {
           /* `=== href || startsWith(href + "/")`, not a bare startsWith: a raw prefix test also
              matches SIBLING routes, so a later /admin/intake-queue would light two entries at once.
@@ -33,20 +34,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               key={l.href}
               href={l.href}
               aria-current={active ? "page" : undefined}
-              className={active ? "text-white font-semibold" : "text-slate-300 hover:text-white"}
+              className={active ? "text-white font-semibold" : "text-ink-300 hover:text-white"}
             >
               {l.label}
             </a>
           );
         })}
         <span className="ml-auto flex items-center gap-3">
-          <span className="text-slate-400">RFO Backoffice</span>
-          <button
-            className="border border-slate-600 rounded px-2.5 py-1 text-slate-200 hover:bg-slate-800"
-            onClick={async () => { try { await logout(); } finally { router.replace("/"); } }}
-          >
+          <span className="text-ink-400">RFO Backoffice</span>
+          {/* Through the Button primitive, not the ~28px hand-rolled control this used to be, so
+              it sits on the one 36px control height. `onDark` is the documented backoffice-only
+              variant for a control on the dark nav surface. */}
+          <Button variant="onDark" onClick={async () => { try { await logout(); } finally { router.replace("/"); } }}>
             Sign out
-          </button>
+          </Button>
         </span>
       </nav>
       {children}
