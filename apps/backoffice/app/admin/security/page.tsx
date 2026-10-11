@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { Button, Card, Heading, Input } from "@/app/components/ui";
 
 export default function SecurityPage() {
   const [secret, setSecret] = useState("");
@@ -32,27 +33,29 @@ export default function SecurityPage() {
 
   return (
     <main className="max-w-2xl mx-auto pt-10 px-4">
-      <h1 className="text-xl font-semibold mb-4">Security / TOTP</h1>
-      <div className="bg-white rounded-xl shadow p-6 space-y-4">
+      <Heading level="h1" className="mb-4">Security / TOTP</Heading>
+      <Card className="p-6 space-y-4">
         {!enabled && !secret && (
-          <button className="bg-slate-900 text-white rounded px-4 py-2 disabled:opacity-50" onClick={setup} disabled={busy}>
+          <Button onClick={setup} disabled={busy}>
             Generate TOTP secret
-          </button>
+          </Button>
         )}
         {secret && !enabled && (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">Add this to your authenticator app (manual entry):</p>
-            <code className="block bg-slate-100 rounded p-3 break-all">{secret}</code>
-            <p className="text-xs text-slate-500 break-all">{uri}</p>
-            <input className="border rounded px-3 py-2 tracking-widest" placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} />
-            <button className="bg-slate-900 text-white rounded px-4 py-2 disabled:opacity-50" onClick={enable} disabled={busy}>
+            <p className="text-sm text-ink-600">Add this to your authenticator app (manual entry):</p>
+            <code className="block bg-surface-sunken rounded-control p-3 break-all">{secret}</code>
+            <p className="text-xs text-ink-500 break-all">{uri}</p>
+            <div className="w-40">
+              <Input className="tracking-widest" placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} />
+            </div>
+            <Button onClick={enable} disabled={busy}>
               Enable TOTP
-            </button>
+            </Button>
           </div>
         )}
-        {enabled && <p className="text-green-700">TOTP is enabled for this account.</p>}
-        {msg && <p className="text-sm text-slate-600">{msg}</p>}
-      </div>
+        {enabled && <p className="text-brand-700">TOTP is enabled for this account.</p>}
+        {msg && <p className="text-sm text-ink-600">{msg}</p>}
+      </Card>
     </main>
   );
 }

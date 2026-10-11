@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { Card, Heading, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
 import { requireRole, useMe } from "@/lib/session";
 
 type Sub = { email: string; created_at: string };
@@ -40,36 +41,34 @@ export default function NewsletterPage() {
 
   return (
     <main className="max-w-6xl mx-auto p-4 min-h-screen">
-      <div className="bg-slate-950 text-white rounded-2xl px-5 py-3 mb-4 flex items-center gap-3">
+      <div className="bg-ink-900 text-white rounded-card px-5 py-3 mb-4 flex items-center gap-3">
         <b>Newsletter</b>
-        <span className="text-xs text-slate-400">public signups from the storefront footer</span>
+        <span className="text-xs text-ink-400">public signups from the storefront footer</span>
       </div>
-      {msg && (<div className="rounded-xl bg-amber-100 text-amber-800 px-3 py-2 mb-3 text-sm">{msg}</div>)}
+      {msg && (<div className="rounded-control bg-accent-100 text-accent-700 px-3 py-2 mb-3 text-sm">{msg}</div>)}
 
-      <section className="rounded-2xl ring-1 ring-slate-200 bg-white p-4">
+      <Card className="p-4">
         <div className="flex items-baseline justify-between mb-2">
-          <h2 className="text-sm font-semibold">Subscribers</h2>
-          <span className="text-sm text-slate-500">{total} total</span>
+          <Heading level="h3" as="h2">Subscribers</Heading>
+          <span className="text-sm text-ink-500">{total} total</span>
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase tracking-wider text-slate-400">
-              <th className="py-1">Email</th><th>Subscribed</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <THead>
+            <TH>Email</TH><TH>Subscribed</TH>
+          </THead>
+          <TBody>
             {subs.map((s) => (
-              <tr key={s.email} className="border-t border-slate-100">
-                <td className="py-2 pr-2">{s.email}</td>
-                <td className="text-slate-500">{when(s.created_at)}</td>
-              </tr>
+              <TR key={s.email}>
+                <TD>{s.email}</TD>
+                <TD className="text-ink-500">{when(s.created_at)}</TD>
+              </TR>
             ))}
             {loaded && subs.length === 0 && !msg && (
-              <tr><td colSpan={2} className="text-slate-400 py-2">No subscribers yet.</td></tr>
+              <TR><TD colSpan={2} className="text-ink-400">No subscribers yet.</TD></TR>
             )}
-          </tbody>
-        </table>
-      </section>
+          </TBody>
+        </Table>
+      </Card>
     </main>
   );
 }
