@@ -1,1 +1,1 @@
-{ "job_id": "job-20261011-101451-1281", "title": "content-pages: FAQ, Contact, Our Grades A-D, Returns/Warranty pages", "created": "2026-10-11 10:14:51", "branch": null, "builder": null }
+{ "job_id": "job-20261011-101451-1281", "title": "content-pages: FAQ, Contact, Our Grades A-D, Returns/Warranty pages", "created": "2026-10-11 10:14:51", "branch": "factory/job-20261011-101451-1281", "builder": "claude-code v2.1.296 via ollama launch / deepseek-v4.1-flash:cloud, rounds 1-2; reviewer: manual" }

@@ -58,7 +58,7 @@ switch ($Action) {
         $prompt = "You are the $role reviewer for job $JobId. Read factory/jobs/$JobId/spec.md and inspect the diff: git diff phase11-ai...factory/$JobId. Evaluate only from your stated lens: architect = structure and patterns; security = authz, secrets, data exposure; performance = queries, N+1, latency. Then create the file $out whose first content line is exactly VERDICT: PASS or VERDICT: CHANGES, followed by short bullet findings."
         & claude -p $prompt --allowedTools "Read Write Bash(git diff*)" --permission-mode acceptEdits --model sonnet
       } else {
-        "reviewer $role: claude not on PATH - MANUAL REVIEW: write $out, first content line VERDICT: PASS or VERDICT: CHANGES"
+        "reviewer ${role}: claude not on PATH - MANUAL REVIEW: write $out, first content line VERDICT: PASS or VERDICT: CHANGES"
       }
     }
     "REVIEW SCAFFOLD: $rd - write verdicts, then: .\factory.ps1 -Action decision -JobId $JobId"
