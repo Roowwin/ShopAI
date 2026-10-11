@@ -2,7 +2,7 @@ import { apiInternal } from "@/lib/api";
 import { iconFor } from "@/lib/productIcons";
 import LoadMore from "./components/LoadMore";
 import DealOfMonth from "./components/DealOfMonth";
-import { Button, cn, Heading, linkClass, ProductCard } from "./components/ui";
+import { Button, cn, Eyebrow, Heading, linkClass, ProductCard } from "./components/ui";
 
 export const revalidate = 30;
 
@@ -26,28 +26,34 @@ export default async function Home() {
   } catch { void 0; }
   return (
     <main>
-      <section className="bg-gradient-to-r from-brand-700 via-brand-800 to-brand-950 text-white px-4 md:px-8 py-12">
-        <div className="max-w-6xl mx-auto flex items-center gap-8">
+      {/* No emerald block. The hero is the warm page ground with a lot of air, the headline in
+          the display face, and a single soft emerald bloom behind the CTA cluster - the only
+          chromatic element in the section. It wraps to a column on phones. */}
+      <section className="px-4 md:px-8 py-16 md:py-24">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-12 md:gap-16">
           <div className="flex-1">
-            <p className="text-eyebrow uppercase text-brand-200">RFO Store</p>
-            <Heading level="display" className="mt-2">{promo ?? hero.hero_title}</Heading>
-            <p className="text-lead text-brand-100 mt-2 max-w-xl">{promo ? "Sale prices below - " + hero.hero_sub : hero.hero_sub}</p>
-            <Button variant="accent" href="#shop" className="mt-5">{hero.cta_label}</Button>
+            <Eyebrow tone="brand">RFO Store</Eyebrow>
+            <Heading level="display" className="mt-4">{promo ?? hero.hero_title}</Heading>
+            <p className="text-lead text-ink-600 mt-5 max-w-xl">{promo ? "Sale prices below - " + hero.hero_sub : hero.hero_sub}</p>
+            <div className="relative mt-9 inline-flex items-center">
+              <span aria-hidden="true" className="pointer-events-none absolute -inset-x-12 -inset-y-8 rounded-full bg-gradient-to-r from-brand-300/45 via-brand-200/25 to-transparent blur-2xl" />
+              <Button variant="primary" href="#shop" className="relative">{hero.cta_label}</Button>
+            </div>
           </div>
           {heroArt.length > 0 && (
-            <div className="hidden md:flex flex-1 items-center justify-center gap-4">
+            <div className="hidden md:flex flex-1 items-center justify-center gap-5">
               {heroArt.map((src) => (
                 <img key={src} src={src} alt="" aria-hidden="true"
-                  className="w-40 lg:w-48 aspect-[4/3] object-cover rounded-card ring-1 ring-white/20 shadow-lg" />
+                  className="w-40 lg:w-48 aspect-[4/3] object-cover rounded-2xl ring-1 ring-line shadow-sm" />
               ))}
             </div>
           )}
         </div>
       </section>
       <DealOfMonth deal={hero.deal_of_month} />
-      <section className="max-w-6xl mx-auto px-4 pt-10">
+      <section className="max-w-6xl mx-auto px-4 pt-16">
         <div className="flex items-end justify-between"><Heading level="h2">New arrivals</Heading><a href="/" className={cn("text-xs", linkClass)}>View all</a></div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-6">
           {arrivals.map((i) => (
             <ProductCard key={i.slug} variant="compact" href={"/products/" + i.slug} title={i.title}
               brand={i.brand} slug={i.slug} imageUrl={i.image_url} priceCents={i.price_from_cents} />
@@ -55,10 +61,10 @@ export default async function Home() {
         </div>
       </section>
       {best.length > 0 && (
-      <section className="max-w-6xl mx-auto px-4 pt-8">
+      <section className="max-w-6xl mx-auto px-4 pt-14">
         <Heading level="h2">Best sellers</Heading>
-        <p className="text-xs text-ink-400">Most purchased by real customers (paid orders).</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+        <p className="text-xs text-ink-400 mt-2">Most purchased by real customers (paid orders).</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-6">
           {best.map((i) => (
             <ProductCard key={i.slug} variant="compact" href={"/products/" + i.slug} title={i.title}
               brand={i.brand} slug={i.slug} priceCents={i.price_from_cents} meta={i.sold + " sold"} />
@@ -66,7 +72,7 @@ export default async function Home() {
         </div>
       </section>)}
 
-      <section id="shop" className="max-w-6xl mx-auto px-4 pt-10 pb-8">
+      <section id="shop" className="max-w-6xl mx-auto px-4 pt-16 pb-20">
         <Heading level="h2">Our products</Heading>
         <LoadMore initial={items.filter((_: any, k: number) => k >= 4)} categories={cats} />
       </section>

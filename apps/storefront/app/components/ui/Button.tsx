@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "./cn";
 
-type Variant = "primary" | "accent" | "secondary" | "ghost" | "danger";
+type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 /* `min-h-[44px]` lives in the base so every button clears the ~44px touch target, including
@@ -11,7 +11,12 @@ type Size = "sm" | "md" | "lg";
    active = the same element sinking 1px and darkening one more step, focus-visible = the 2px
    emerald ring for keyboard users, disabled = muted and inert. Duration and curve come from the
    motion tokens, and the reduced-motion pair cancels the 1px movement for anyone who has asked
-   for no motion (a 0ms transition would still move it). */
+   for no motion (a 0ms transition would still move it).
+
+   Palette, round 2: only `primary` carries emerald - it is THE accent, so a solid emerald button
+   is the one loud thing on a page. Secondary is a white button on a slate hairline and ghost is
+   transparent; both step through neutral slate fills, so emerald never appears as a large area
+   and the eye always knows which control is the action. */
 const BASE =
   "inline-flex items-center justify-center gap-2 min-h-[44px] rounded-control font-semibold " +
   "transition duration-fast ease-out active:translate-y-px " +
@@ -20,10 +25,10 @@ const BASE =
   "motion-reduce:transition-none motion-reduce:active:translate-y-0";
 
 const VARIANTS: Record<Variant, string> = {
+  // white on brand-700 is the darkest emerald step that still clears 4.5:1 - do not lighten it
   primary: "bg-brand-700 text-white hover:bg-brand-800 active:bg-brand-900",
-  accent: "bg-accent-400 text-ink-900 hover:bg-accent-300 active:bg-accent-500",
-  secondary: "bg-surface text-brand-700 ring-1 ring-line hover:bg-brand-50 hover:ring-brand-300 active:bg-brand-100",
-  ghost: "text-brand-700 hover:bg-brand-50 active:bg-brand-100",
+  secondary: "bg-surface text-ink-700 ring-1 ring-line hover:bg-surface-sunken hover:ring-line-strong active:bg-surface-pressed",
+  ghost: "text-ink-700 hover:bg-surface-sunken active:bg-surface-pressed",
   danger: "bg-surface text-danger-600 ring-1 ring-danger-200 hover:bg-danger-50 active:bg-danger-200",
 };
 

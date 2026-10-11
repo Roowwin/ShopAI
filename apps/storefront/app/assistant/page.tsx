@@ -47,15 +47,15 @@ export default function AssistantPage() {
     <main className="max-w-2xl mx-auto pt-8 px-4">
       <Heading level="h1" className="mb-4">Ask about our stock</Heading>
       {about && <p className="text-xs text-ink-500 mb-2">About: {about} <a className={linkClass} href={"/products/" + about}>view item</a></p>}
-      <Card className="p-6 shadow space-y-3 min-h-[360px]">
+      <Card className="p-6 space-y-4 min-h-[360px]">
         {msgs.length === 0 && <p className="text-ink-400 text-sm">Try: &quot;What refurbished phones do you have under $300?&quot;</p>}
         {msgs.map((m, i) => (
-          <div key={i} className={"rounded-control p-3 text-sm " + (m.role === "you" ? "bg-surface-sunken ml-8" : "bg-brand-50")}>
+          <div key={i} className={"rounded-xl p-4 text-sm " + (m.role === "you" ? "bg-surface-sunken ml-8" : "bg-surface-page-alt ring-1 ring-line")}>
             <b className="mr-1">{m.role === "you" ? "You" : "Assistant"}:</b>{m.text}
             {!!m.cards?.length && (
               <div className="mt-2 space-y-2">
                 {m.cards.map((c) => (
-                  <a key={c.title + c.grade} href={c.url} className="block rounded-control border border-line p-2 transition-colors duration-fast ease-out hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 motion-reduce:transition-none">
+                  <a key={c.title + c.grade} href={c.url} className="block rounded-xl border border-line p-3 transition-colors duration-fast ease-out hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 motion-reduce:transition-none">
                     {c.title} · Grade {c.grade} · from {aud(c.price_cents)} · {c.units_available} in stock
                   </a>
                 ))}

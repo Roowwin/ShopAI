@@ -46,15 +46,15 @@ export default function GradePanel({ units, title }: { units: Unit[]; title: str
   }
 
   return (
-    <Card className="p-4">
+    <Card className="p-6">
       <Heading level="h3">Choose your grade</Heading>
-      <p className="text-xs text-ink-400 mt-0.5">
+      <p className="text-xs text-ink-400 mt-1">
         Every unit is serialised and graded by hand. Pick a grade and we reserve the lowest-priced
         unit in it - the exact serial appears in your cart.
       </p>
-      <div className="mt-3 space-y-2">
+      <div className="mt-4 space-y-3">
         {rows.map((r) => (
-          <div key={r.letter} className="border border-line rounded-control px-3 py-2.5">
+          <div key={r.letter} className="border border-line rounded-xl px-4 py-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 min-w-0">
                 <Badge colorClass={r.pill}>Grade {r.letter}</Badge>
@@ -71,10 +71,10 @@ export default function GradePanel({ units, title }: { units: Unit[]; title: str
                 )}
               </div>
             </div>
-            <p className="mt-2 text-xs text-ink-600">
+            <p className="mt-3 text-xs text-ink-600">
               <span className="text-ink-400">Most common use case: </span>{r.useCase}
             </p>
-            <p className="mt-1 text-xs text-ink-600">
+            <p className="mt-2 text-xs text-ink-600">
               <span className="text-ink-400">Spec: </span>{r.spec}
             </p>
           </div>

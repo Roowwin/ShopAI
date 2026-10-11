@@ -117,7 +117,7 @@ export default function ReturnsPage() {
         <div className="space-y-4">
           {STEPS.map((s) => (
             <div key={s.n} className="flex gap-3">
-              <span className="h-7 w-7 shrink-0 rounded-full bg-brand-700 text-white text-sm font-semibold flex items-center justify-center">
+              <span className="h-7 w-7 shrink-0 rounded-full bg-ink-900 text-white text-sm font-semibold flex items-center justify-center">
                 {s.n}
               </span>
               <div>
