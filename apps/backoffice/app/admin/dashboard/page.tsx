@@ -1,0 +1,191 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api";
+import { Card, Heading, Stat } from "@/app/components/ui";
+import { requireRole, useMe } from "@/lib/session";
+import { aud } from "@/lib/format";
+import { NOTICE_TONE } from "@/app/components/dashboard/tokens";
+import { GradeBars, StatusDonut, type Slice } from "./charts";
+
+/* /admin/dashboard - the operations view: four headline numbers, the three backlogs that need a
+   human, two hand-rolled SVG charts and the week's leaderboard.
+
+   ONE read. This page calls the SAME `GET /staff/overview` the home page calls - there is no
+   second summary endpoint. The dashboard is one screen, so it is one guarded surface and one
+   round trip; a page assembled from several endpoints would be several places a read can leak
+   and several sequential waits before the first pixel lands. The fields it needs that the home
+   page did not (pricing_pending, the two mixes, the leaderboard) live in the payload's
+   `dashboard` block, added to that same endpoint rather than to a new route.
+
+   Read-only by construction, like the home page it sits beside: nothing here writes, and every
+   count links out to the workbench page that owns the fix. */
+
+type Overview = {
+  inventory: { by_status: Record<string, number>; total_units: number };
+  stock_value: { listed_units: number };
+  dashboard: {
+    pricing_pending: number;
+    revenue_last_7d_cents: number;
+    orders_last_7d: number;
+    stuck_assets: { count: number; oldest_serial_number: string | null };
+    lots_stuck: { count: number };
+    grade_mix: Record<string, number>;
+    category_mix: Record<string, number>;
+    team_activity: { actor_id: number | null; actor_email: string | null; actions: number }[];
+  };
+};
+
+/* The three backlogs, each pointing at the page that can act on it. The counts come from the
+   payload; only the route and the wording live here. */
+type Alert = { label: string; count: number; href: string; detail?: string };
+
+function AlertRow({ a }: { a: Alert }) {
+  return (
+    <a href={a.href}
+       className="flex items-center gap-3 rounded-control px-3 py-2 -mx-1 hover:bg-surface-sunken">
+      <span className={`text-lg font-semibold tabular-nums ${a.count > 0 ? "text-accent-700" : "text-ink-400"}`}>
+        {a.count}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm text-ink-900">{a.label}</span>
+        {a.detail && <span className="block text-xs text-ink-500">{a.detail}</span>}
+      </span>
+      <span className="ml-auto shrink-0 text-xs text-ink-500">Open &rarr;</span>
+    </a>
+  );
+}
+
+export default function DashboardPage() {
+  const { me, checked } = useMe();
+  const allowed = requireRole(me, ["admin", "manager"]);
+  const [data, setData] = useState<Overview | null>(null);
+  const [msg, setMsg] = useState("");
+
+  const load = useCallback(async () => {
+    const r = await apiFetch("/staff/overview");
+    if (!r.ok) {
+      setMsg(r.status === 403 ? "admin or manager role required" : "Could not load the dashboard");
+      return;
+    }
+    setData(await r.json().catch(() => null));
+  }, []);
+
+  useEffect(() => {
+    if (!checked) { return; }
+    if (!allowed) { return; }
+    void load();
+  }, [checked, allowed, load]);
+
+  const d = data?.dashboard;
+
+  /* The donut's slices come straight out of the payload's own keys, in the API's order (Python
+     dict order survives JSON). Never a list re-typed here: the API zero-fills the whole asset
+     lifecycle, and that guarantee only holds if the chart draws what it was sent. */
+  const statusSlices: Slice[] = data
+    ? Object.entries(data.inventory.by_status).map(([key, value]) => ({ key, label: key, value }))
+    : [];
+  const gradeBars: Slice[] = d
+    ? Object.entries(d.grade_mix).map(([key, value]) => ({ key, label: key, value }))
+    : [];
+
+  const alerts: Alert[] = d ? [
+    { label: "Units graded but not priced", count: d.pricing_pending, href: "/admin/assets",
+      detail: "A graded unit with no price cannot reach the storefront." },
+    { label: "Units stuck in intake/received", count: d.stuck_assets.count, href: "/admin/assets",
+      detail: d.stuck_assets.oldest_serial_number
+        ? `Oldest: ${d.stuck_assets.oldest_serial_number}` : "Nothing older than 7 days." },
+    { label: "Lots in intake over 14 days", count: d.lots_stuck.count, href: "/admin/intake",
+      detail: "Received but never activated." },
+  ] : [];
+
+  const categories = d ? Object.entries(d.category_mix) : [];
+
+  return (
+    <main className="max-w-6xl mx-auto p-4 space-y-4 min-h-screen">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <Heading level="h1">Dashboard</Heading>
+          <p className="text-sm text-ink-500">Inventory health, backlogs and this week&rsquo;s activity.</p>
+        </div>
+        {me && <span className="text-sm text-ink-500">Signed in as <span className="text-ink-900">{me.email}</span></span>}
+      </header>
+
+      {msg && <div className={`rounded-control px-3 py-2 text-sm ${NOTICE_TONE}`}>{msg}</div>}
+
+      {!checked && <p className="text-sm text-ink-500">Loading...</p>}
+
+      {checked && !allowed && !msg && (
+        <Card className="p-6"><p className="text-sm text-ink-600">admin or manager role required.</p></Card>
+      )}
+
+      {checked && allowed && data && d && (
+        <>
+          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat label="Listed inventory" value={data.stock_value.listed_units}
+                  sub={`of ${data.inventory.total_units} units on hand`} />
+            <Stat label="Pricing pending" value={d.pricing_pending} sub="graded, no price set" />
+            <Stat label="Revenue (7 days)" value={aud(d.revenue_last_7d_cents)}
+                  sub={`${d.orders_last_7d} paid ${d.orders_last_7d === 1 ? "order" : "orders"}`} />
+            <Stat label="Stuck assets" value={d.stuck_assets.count} sub="received/tested over 7 days" />
+          </section>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Card className="p-4 lg:col-span-1">
+              <Heading level="h3" as="h2" className="mb-2">Needs attention</Heading>
+              <div className="space-y-0.5">
+                {alerts.map((a) => <AlertRow key={a.label} a={a} />)}
+              </div>
+            </Card>
+
+            <Card className="p-4 lg:col-span-2">
+              <Heading level="h3" as="h2" className="mb-2">Units by status</Heading>
+              <StatusDonut slices={statusSlices} total={data.inventory.total_units} centerLabel="units" />
+            </Card>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Card className="p-4 lg:col-span-2">
+              <div className="flex items-baseline justify-between mb-2">
+                <Heading level="h3" as="h2">Listed units by grade</Heading>
+                <span className="text-xs text-ink-500">graded A&ndash;D, live on the storefront</span>
+              </div>
+              <GradeBars bars={gradeBars} />
+            </Card>
+
+            <Card className="p-4 lg:col-span-1">
+              <Heading level="h3" as="h2" className="mb-2">Team activity (7 days)</Heading>
+              {d.team_activity.length === 0 ? (
+                <p className="text-sm text-ink-500">No staff activity recorded this week.</p>
+              ) : (
+                <ol className="space-y-2">
+                  {d.team_activity.map((t, i) => (
+                    <li key={`${t.actor_id ?? "none"}-${i}`} className="flex items-center gap-2 text-sm">
+                      <span className="w-4 text-xs text-ink-400 tabular-nums">{i + 1}</span>
+                      <span className="min-w-0 truncate text-ink-900">{t.actor_email ?? `actor #${t.actor_id ?? "-"}`}</span>
+                      <span className="ml-auto shrink-0 tabular-nums text-ink-600">{t.actions}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+
+              {categories.length > 0 && (
+                <>
+                  <Heading level="h3" as="h2" className="mt-4 mb-2">Listed by category</Heading>
+                  <ul className="space-y-1">
+                    {categories.map(([name, n]) => (
+                      <li key={name} className="flex items-center gap-2 text-sm">
+                        <span className="min-w-0 truncate text-ink-600">{name}</span>
+                        <span className="ml-auto shrink-0 tabular-nums text-ink-900">{n}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </Card>
+          </div>
+        </>
+      )}
+    </main>
+  );
+}

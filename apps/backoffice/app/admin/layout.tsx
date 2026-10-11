@@ -18,8 +18,8 @@ import { kickerClass } from "@/lib/ui";
 
    Every entry must have a page behind it - a link with no page is a 404 in the chrome. Orders,
    Customers and Audit were deliberately withheld until the ops pages existed and landed in the
-   same commit as those pages; Agents landed with the agent-identity job. Twelve entries, twelve
-   pages.
+   same commit as those pages; Agents landed with the agent-identity job; Dashboard landed with the
+   dashboard job. Thirteen entries, thirteen pages.
 
    Narrow width: the content column keeps its own width and the sidebar is what gives way. In a
    narrow window the section list is closed by default and opens from the toggle in the strip
@@ -33,7 +33,13 @@ type NavGroup = { heading: string; items: NavItem[] };
 /* The taxonomy, in the order it renders. Kept as data so a group is one edit rather than a second
    copy of the markup below. */
 const GROUPS: NavGroup[] = [
-  { heading: "Overview", items: [{ href: "/admin", label: "Dashboard" }] },
+  /* Two entries, one name each: the dashboard job added /admin/dashboard, and the entry that used
+     to be called "Dashboard" is now "Overview" - so the word Dashboard points at exactly one
+     route and the older /admin summary keeps a name of its own. */
+  { heading: "Overview", items: [
+    { href: "/admin/dashboard", label: "Dashboard" },
+    { href: "/admin", label: "Overview" },
+  ] },
   { heading: "Catalogue", items: [
     { href: "/admin/intake", label: "Lots & intake" },
     { href: "/admin/assets", label: "Assets" },
