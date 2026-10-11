@@ -27,6 +27,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               <a href="/" className="block hover:text-emerald-300">Shop</a>
               <a href="/search" className="block hover:text-emerald-300">Search</a>
               <a href="/assistant" className="block hover:text-emerald-300">Ask the AI</a>
+              <a href="/faq" className="block hover:text-emerald-300">FAQ</a>
+              <a href="/contact" className="block hover:text-emerald-300">Contact</a>
+              <a href="/grades" className="block hover:text-emerald-300">Our grades A-D</a>
+              <a href="/returns" className="block hover:text-emerald-300">Returns &amp; warranty</a>
             </div>
             <div className="text-xs text-slate-400">
               <p>Prices in AUD incl. applicable GST (AU 10% / NZ 15%).</p>
