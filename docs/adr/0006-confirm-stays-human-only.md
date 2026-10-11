@@ -20,7 +20,14 @@ The staff AI co-pilot performs inventory ops behind a human Confirm (proposal ->
 - Heavy agent days may throttle against caps (by design; raise deliberately).
 
 ## Status
-PROPOSED - awaiting owner sign-off on the one open question below.
+ACCEPTED (owner-authored; recorded as binding in `docs/state.md`).
+
+**Decision 4 is superseded for granted (identity, action) pairs by ADR 0008 (scoped autonomous execution).**
+Every other decision here stands, and the human Confirm remains the default and the fallback for anything not
+granted - an ungranted rail behaves exactly as this ADR describes.
 
 ## Open question for the owner
 Confirm the invariant as stated: an agent may PROPOSE anything its role allows, but no WRITE executes without a human Confirm - including after weeks of observed good behavior. (The alternative - scoped auto-execute allowlists for low-risk ops - would require its own ADR with its own rehearsal evidence.)
+
+**Answered.** The owner chose the alternative. ADR 0008 is that ADR: it scopes the supersession to explicitly
+granted pairs, keeps the Confirm line for everything else, and carries the rehearsal gate this question required.
