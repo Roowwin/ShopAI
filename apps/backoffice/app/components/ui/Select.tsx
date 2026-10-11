@@ -14,7 +14,7 @@ export default function Select({ className, ...rest }: Props) {
   return (
     <select
       className={cn(
-        "rounded-control ring-1 ring-line bg-surface px-4 py-2 text-sm text-ink-900 outline-none transition focus:ring-2 focus:ring-brand-500",
+        "rounded-control ring-1 ring-line bg-surface px-4 py-2 text-sm text-ink-900 outline-none transition focus:ring-2 focus:ring-brand-700",
         className,
       )}
       {...rest}

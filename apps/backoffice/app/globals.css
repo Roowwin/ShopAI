@@ -37,6 +37,12 @@
     --surface-muted: 248 250 252;
     --surface-sunken: 241 245 249;
 
+    /* The two hairline boundary tokens are DELIBERATELY left below the 3:1 non-text contrast bar
+       of WCAG SC 1.4.11. Against white the first measures 1.23:1 and the stronger one 1.48:1.
+       That is a recorded exception, not an oversight: raising either puts a mid-grey border on
+       every card and every input in both apps, which is a visible design change the owner has
+       decided against. Do not "fix" these two values to satisfy a checker - everything else in
+       this app that failed a contrast bar has been corrected around them. */
     --line: 226 232 240;
     --line-strong: 203 213 225;
 
