@@ -130,3 +130,50 @@ export function GradeBars({ bars }: { bars: Slice[] }) {
     </svg>
   );
 }
+
+/* The mini-sparkline the brief asks the Revenue and Inventory cards to carry.
+
+   THE PAYLOAD HAS NO SERIES, and this is the one briefed element that needs backend data. GET
+   /staff/overview reports `dashboard.revenue_last_7d_cents` and `stock_value.listed_units` as
+   single figures; it carries no per-day revenue (or per-day anything), and nothing else in it is
+   a time series - inventory.by_status, grade_mix, category_mix and orders.by_state are
+   distributions, team_activity is per-actor, audit_feed is a capped list of events. So the page
+   passes `series={null}` and the card renders the explicit unavailable state below.
+
+   The drawn branch is the shape the endpoint would have to grow - seven daily values - and it is
+   deliberately NOT fed a made-up one: a plausible-looking trend line invented from a single
+   7-day total is a fabricated fact on a page an operator makes stock decisions from, which is
+   strictly worse than an honest gap. Nothing renders here that is not a number the API sent.
+
+   The mark wears `--brand-500` (emerald) like the bars wear their grade colour, and the value is
+   also in the aria-label and the <title>, so the trend is never colour-only. */
+
+export function Sparkline({ series, label, unavailable }: {
+  series: number[] | null;
+  label: string;
+  unavailable: string;
+}) {
+  const values = series && series.length >= 2 && series.every(Number.isFinite) ? series : null;
+  if (!values) {
+    return <p className="mt-2 text-xs text-ink-400">{unavailable}</p>;
+  }
+  const W = 120;
+  const H = 28;
+  const PAD = 2;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const x = (i: number) => PAD + (i / (values.length - 1)) * (W - PAD * 2);
+  const y = (v: number) => H - PAD - ((v - min) / span) * (H - PAD * 2);
+  const line = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const last = values[values.length - 1];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="mt-2 h-7 w-full" role="img"
+         aria-label={`${label}: ${values.length}-point trend, lowest ${min}, highest ${max}, latest ${last}`}>
+      <path d={line} fill="none" stroke="rgb(var(--brand-500))" strokeWidth="1.5"
+            strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={x(values.length - 1)} cy={y(last)} r="2" fill="rgb(var(--brand-300))" />
+      <title>{`${label}: latest ${last}`}</title>
+    </svg>
+  );
+}
