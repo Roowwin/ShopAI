@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { Badge, Button, Card, Heading, Input, Select, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
-import { kickerClass, statusTone } from "@/lib/ui";
+import { statusTone } from "@/lib/ui";
 import ValidationStream, { type Level, type StreamEvent } from "./ValidationStream";
 import AiReview, { type Draft, type Photo, type RawField } from "./AiReview";
 import DropZone from "./DropZone";
@@ -36,10 +36,16 @@ type Lot = { id: number; lot_number: string; status: string; warehouse: string |
 const EVENT_CAP = 200;
 
 /* A lot row is reachable by keyboard, so the row that carries the press has to carry a cue too.
-   The wash is the same step the hover uses, so one treatment covers both. The cue is drawn INSIDE
-   the row's edge because this row lives in the lots list's horizontal scroll box, and a scroll box
-   trims anything painted outside its own box - the workbench's row list carries the same pair. */
-const ROW_FOCUS = "focus-visible:outline-none focus-visible:bg-surface-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500";
+   The cue is drawn INSIDE the row's edge because this row lives in the lots list's horizontal
+   scroll box, and a scroll box trims anything painted outside its own box - the workbench's row
+   list carries the same pair.
+
+   The workbench's pair also carries a focus WASH, and it is deliberately NOT copied here: on the
+   workbench a row opens a panel, but on THIS screen the row IS the selector, so a wash would
+   paint over the chosen lot's own fill exactly while the operator is on the row they are choosing
+   - the one moment the cue matters. The inset cue is the whole focus signal instead, and the audit
+   measured it clear of the non-text bar on both grounds it can sit on. */
+const ROW_FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500";
 
 function sizeText(bytes: number): string {
   return bytes < 1024 ? bytes + " B" : Math.round(bytes / 1024) + " KB";
@@ -61,6 +67,11 @@ export default function IntakePage() {
 
   const seq = useRef(0);
   const photoUrl = useRef<string | null>(null);
+  /* The draft call's ticket. `draftLive` is the door - 0 means nothing is out, and a second photo
+     is refused rather than allowed to race the first. `draftSeq` is the identity of the newest
+     call, so a response that is no longer the newest can write nothing at all. */
+  const draftSeq = useRef(0);
+  const draftLive = useRef(0);
 
   /* The record is appended to, never rewritten. The stamp is the real clock time at the moment
      the event was recorded, which is why it is taken here and not derived later. */
@@ -135,14 +146,39 @@ export default function IntakePage() {
   }
 
   async function aiDraft(file: File) {
+    /* Re-entry is refused. Two calls in flight can answer out of order, and the review panel draws
+       the photo and the draft as ONE record - a late answer would pair photo B with draft A's
+       brand, model and serial, and the prefill would then copy A's serial into the field the
+       operator is matching against B. The door is shut here as well as in the zone, because this
+       is the function that owns the state, not the widget that calls it. */
+    if (draftLive.current !== 0) { return; }
+    const me = ++draftSeq.current;
+    draftLive.current = me;
     setAiBusy(true); setErr(""); setDraft(null);
     keepPhoto(file);
     setPending("/staff/ai/intake-draft");
     log("AI", "POST /staff/ai/intake-draft - reading " + file.name + " (" + sizeText(file.size) + ").");
     const fd = new FormData();
     fd.append("image", file);
-    const r = await apiFetch("/staff/ai/intake-draft", { method: "POST", body: fd });
-    if (r.ok) {
+    /* The call itself is the base's own expression, unchanged. Only the way a REJECTED request is
+       handled is new: it is reported and the door reopens, where the base let the rejection escape
+       and left its busy flag set for the rest of the session. */
+    let r: Response | null = null;
+    try {
+      r = await apiFetch("/staff/ai/intake-draft", { method: "POST", body: fd });
+    } catch {
+      r = null;
+    }
+    /* Only the newest call may touch the panel. A response that has been superseded writes
+       nothing - not the draft, not the waiting marker, not the busy flag. */
+    if (draftLive.current !== me) { return; }
+    draftLive.current = 0;
+    if (r === null) {
+      /* The request never landed - a transport failure, or the session gate tearing the page
+         away. Said out loud rather than leaving the zone shut. */
+      setErr("the draft request could not be sent");
+      log("WARN", "Draft not sent: the request could not be made.");
+    } else if (r.ok) {
       const d: Draft = await r.json();
       setDraft(d);
       log("AI", "Draft back: " + d.brand + " " + d.model + " - grade " + d.suggested_grade
@@ -156,11 +192,14 @@ export default function IntakePage() {
     setAiBusy(false);
   }
 
-  /* A sheet arrived and this build cannot read one. It is named in the record and in the zone,
-     and it is not sent anywhere. */
-  function onSheet(name: string) {
-    log("WARN", "Spreadsheet refused: " + name + " - this build has no spreadsheet reader, so "
-      + "nothing was read and nothing was sent. A photo can be scanned instead.");
+  /* A file arrived and this build cannot read it. The zone says what it established - a sheet or
+     merely "not a photo" - and the record repeats the same distinction rather than calling every
+     non-image a spreadsheet. Nothing was sent either way. */
+  function onRefuse(name: string, sheet: boolean) {
+    log("WARN", (sheet
+      ? "Spreadsheet refused: " + name + " - this build has no spreadsheet reader"
+      : "File refused: " + name + " - it is not a photo")
+      + ", so nothing was read and nothing was sent. A photo can be scanned instead.");
   }
 
   function prefill() {
@@ -194,7 +233,7 @@ export default function IntakePage() {
           <p className="mt-1 pb-4 text-xs text-ink-500">
             The model only reads the photo - you confirm everything. Drafts never touch stock.
           </p>
-          <DropZone onPhoto={aiDraft} onSheet={onSheet} busy={aiBusy} />
+          <DropZone onPhoto={aiDraft} onRefuse={onRefuse} busy={aiBusy} />
         </Card>
 
         <Card className="p-6">
@@ -207,14 +246,19 @@ export default function IntakePage() {
       </div>
 
       <Card className="p-6">
-        <AiReview photo={photo} raw={raw} draft={draft} onPrefill={prefill} />
+        <AiReview photo={photo} raw={raw} draft={draft} reading={aiBusy} onPrefill={prefill} />
       </Card>
 
       <Card className="p-6 space-y-6">
         <Heading level="h3" as="h2">Capture</Heading>
 
         <section>
-          <p className={kickerClass}>New lot</p>
+          {/* A real heading, not a styled paragraph: these two label sections of the page, and the
+              heading structure a screen reader announces had lost them. The kicker look is kept,
+              and the important modifier is what keeps it - the primitive carries its own size in
+              the base and this app has no merge step, so without the modifier the built sheet would
+              decide between the two sizes, and in that sheet the primitive's class is the later one. */}
+          <Heading level="h3" as="h2" className="!text-eyebrow uppercase text-ink-500">New lot</Heading>
           <div className="mt-2 flex flex-wrap gap-3">
             <div className="w-40">
               <Input placeholder="warehouse" value={warehouse} onChange={(e) => setWarehouse(e.target.value)} />
@@ -230,7 +274,7 @@ export default function IntakePage() {
         </section>
 
         <section className="border-t border-line pt-6">
-          <p className={kickerClass}>Scan in</p>
+          <Heading level="h3" as="h2" className="!text-eyebrow uppercase text-ink-500">Scan in</Heading>
           <div className="mt-2 flex flex-wrap gap-3">
             <Select value={lotId ?? ""} onChange={(e) => setLotId(e.target.value ? parseInt(e.target.value) : null)} aria-label="Lot to scan into">
               <option value="">select lot...</option>

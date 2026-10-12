@@ -6,11 +6,14 @@ import { kickerClass } from "@/lib/ui";
 
 /* The live activity record for the intake calls.
 
-   Every line in it is a real event from a request this page actually made: the moment a call is
-   dispatched, the payload's own answer, or the API's own refusal detail, kept verbatim. Nothing
-   is generated on a timer and there is no progress bar - this API reports no progress at all, so
-   a percentage here would be a number the payload never produced. While a call is in flight the
-   panel says what it is waiting on, and nothing more.
+   Every line in it is a real event from something this page actually did: the moment one of the
+   three calls is dispatched, the payload's own answer, or the API's own refusal detail, kept
+   verbatim - and, beside those request events, the two things the page decides on its own, which
+   are the refusals it makes before it ever sends anything (no lot selected, no serial entered, a
+   file that is not a photo) and the prefill that copies a draft's values into the scan-in fields.
+   Nothing else is written: no line is generated on a timer and there is no progress bar, because
+   this API reports no progress at all - a percentage here would be a number no payload produced.
+   While a call is in flight the panel says what it is waiting on, and nothing more.
 
    The record holds no control and writes nothing. Its ground is the page step rather than the
    card step, which is what makes it read as a console set into the panel; that fill is opaque,
@@ -48,11 +51,17 @@ export default function ValidationStream({ events, pending, idle }: {
   const box = useRef<HTMLDivElement | null>(null);
 
   /* Follow the tail: a record that stops at the fold on its newest line hides the thing the
-     reader opened it for. */
+     reader opened it for.
+
+     The dependency is the newest line's own counter, NOT the list length. The page caps the list
+     (see EVENT_CAP), so once it is full an append leaves the length exactly where it was and this
+     effect would never run again - which is precisely when a reader has the most lines to scroll
+     past. The counter rises on every single append, capped or not. */
+  const tail = events.length > 0 ? events[events.length - 1].seq : -1;
   useEffect(() => {
     const el = box.current;
     if (el) { el.scrollTop = el.scrollHeight; }
-  }, [events.length, pending]);
+  }, [tail, pending]);
 
   return (
     <section>

@@ -16,6 +16,11 @@ import { gradeTone, kickerClass } from "@/lib/ui";
    a sheet - so it renders as a labelled, explicit absence rather than a row list. The same is
    true of an empty draft: the panel names what has not happened instead of drawing a shape.
 
+   ONE RECORD AT A TIME. The two sides are only one record if they come from one call, so a new
+   photo cannot start while a draft is being read (the zone shuts its door and the page refuses
+   re-entry), and a response that is no longer the newest cannot write here at all. While a call
+   is out the right column says so rather than claiming the model has not read anything.
+
    The prefill control is the page's existing one, moved here unchanged: it writes the scan-in
    fields and nothing else. No control on this panel writes to the API; the review is read-only
    until the operator chooses to carry a value across. */
@@ -39,10 +44,12 @@ export type RawField = { label: string; value: string };
    inside each column the ones that apply to it. */
 const COLUMN = "rounded-card bg-surface-muted p-4 ring-1 ring-line";
 
-export default function AiReview({ photo, raw, draft, onPrefill }: {
+export default function AiReview({ photo, raw, draft, reading, onPrefill }: {
   photo: Photo | null;
   raw: RawField[];
   draft: Draft | null;
+  /** a draft call is out right now - the card is not empty, it is pending */
+  reading: boolean;
   onPrefill: () => void;
 }) {
   /* The right column arrives rather than appearing: the draft is a result, and a result that
@@ -137,6 +144,10 @@ export default function AiReview({ photo, raw, draft, onPrefill }: {
               </p>
               <Button size="sm" onClick={onPrefill}>Prefill scan-in</Button>
             </div>
+          ) : reading ? (
+            <p className="mt-3 rounded-control bg-surface-sunken px-3 py-2 text-sm text-ink-400 ring-1 ring-line">
+              Reading the photo now - this card fills in when the call answers.
+            </p>
           ) : (
             <p className="mt-3 rounded-control bg-surface-sunken px-3 py-2 text-sm text-ink-400 ring-1 ring-line">
               No draft yet - the model has not read a photo in this session.
