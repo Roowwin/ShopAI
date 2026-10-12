@@ -5,9 +5,23 @@ import { useRouter, usePathname } from "next/navigation";
 import { API, aud } from "@/lib/api";
 import { cartGet } from "@/lib/cart";
 import NavDropdown from "./NavDropdown";
+import NavDropdown, { type NavLink } from "./NavDropdown";
+import { NAV_SHORTCUTS, shortcutHref } from "./navMenu";
 import { Button, cn, Input, navLinkClass } from "./ui";
 
 type SItem = { slug: string; title: string; units_available: number; price_from_cents: number | null };
+
+/* A category as the menu wants it: its own page, plus the curated sub-categories when there are any.
+   navMenu.ts is the curated half - the categories themselves are the API's, and this only hangs a
+   second level off them, so a category with no entry there stays a single link. */
+function catLink(c: { name: string }): NavLink {
+  const href = "/category/" + encodeURIComponent(c.name);
+  const sub = NAV_SHORTCUTS[c.name];
+  return sub
+    ? { href, label: c.name,
+        children: sub.map((s) => ({ href: shortcutHref(c.name, s.term), label: s.label })) }
+    : { href, label: c.name };
+}
 
 export default function Header() {
   const [q, setQ] = useState("");
@@ -19,11 +33,14 @@ export default function Header() {
   // The Shop menu's open state is the header's, not the dropdown's, so opening it is also what
   // closes any other header panel - and a navigation closes it along with the page it opened from.
   const [shop, setShop] = useState(false);
+  // Which drawer category is expanded, on a phone - one at a time, and closed by the same navigation
+  // that closes everything else.
+  const [openCat, setOpenCat] = useState<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
   const timer = useRef<any>(null);
 
-  useEffect(() => { setCartN(cartGet().length); setShop(false); }, [pathname]);
+  useEffect(() => { setCartN(cartGet().length); setShop(false); setOpenCat(null); }, [pathname]);
   useEffect(() => {
     (async () => {
       try { const r = await fetch(API + "/store/categories", { cache: "no-store" }); if (r.ok) { setCats(await r.json()); } } catch { void 0; }
@@ -68,8 +85,7 @@ export default function Header() {
             already lists the same links, is the way in. */}
         <div className="hidden md:flex items-center gap-1 shrink-0">
           <NavDropdown label="Shop" open={shop} onOpenChange={setShop}
-            links={[{ href: "/", label: "Shop" },
-              ...cats.map((c) => ({ href: "/category/" + encodeURIComponent(c.name), label: c.name }))]} />
+            links={[{ href: "/", label: "Shop" }, ...cats.map(catLink)]} />
           <a href="/faq" className={cn("inline-flex items-center min-h-[44px] px-3 text-sm", navLinkClass)}>FAQ</a>
           <a href="/assistant" className={cn("inline-flex items-center min-h-[44px] px-3 text-sm", navLinkClass)}>Ask AI</a>
         </div>
@@ -113,9 +129,44 @@ export default function Header() {
       {menu && (
         <nav className="md:hidden bg-white ring-1 ring-line border-t border-line px-4 py-1 flex flex-col text-sm text-ink-600">
           <a href="/" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>Shop</a>
-          {cats.map((c) => (
-            <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>{c.name}</a>
-          ))}
+          {/* A category with sub-categories becomes an accordion here, because hover does not exist on
+              a phone. The word still goes to the category - a shopper who wants all of Accessories has
+              to be able to tap it - and the chevron opens the same shortcuts the desktop fly-out shows,
+              so both levels of the menu lead to the same places either way. */}
+          {cats.map((c) => {
+            const sub = NAV_SHORTCUTS[c.name];
+            const isOpen = openCat === c.name;
+            return (
+              <div key={c.name}>
+                <div className="flex items-stretch">
+                  <a href={"/category/" + encodeURIComponent(c.name)} className={cn("flex-1 py-3", navLinkClass)}
+                    onClick={() => setMenu(false)}>{c.name}</a>
+                  {sub && (
+                    <button type="button" aria-expanded={isOpen}
+                      aria-label={(isOpen ? "Hide " : "Show ") + c.name + " sub-categories"}
+                      onClick={() => setOpenCat(isOpen ? null : c.name)}
+                      className="w-11 shrink-0 flex items-center justify-center text-ink-500 transition-colors duration-fast ease-out hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 motion-reduce:transition-none">
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor"
+                        strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+                        className={cn("transition-transform duration-fast ease-out motion-reduce:transition-none", isOpen && "rotate-180")}>
+                        <path d="M2 4l3 3 3-3" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                {sub && isOpen && (
+                  <ul className="pb-1">
+                    {sub.map((s) => (
+                      <li key={s.term}>
+                        <a href={shortcutHref(c.name, s.term)} className={cn("block py-3 pl-6", navLinkClass)}
+                          onClick={() => setMenu(false)}>{s.label}</a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
           <a href="/faq" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>FAQ</a>
           <a href="/assistant" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>Ask AI</a>
         </nav>
