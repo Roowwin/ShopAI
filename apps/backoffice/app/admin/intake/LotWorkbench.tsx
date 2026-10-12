@@ -26,13 +26,20 @@
 
    KEYBOARD. A grader works down a list, so the keyboard does too: after a grade lands, focus moves
    to the SAME grade button on the next row, which makes a pass down a lot one keypress per unit.
-   Up and Down arrows walk the same column between rows, and Tab reaches everything else. */
+   Up and Down arrows walk the same column between rows, and Tab reaches everything else.
+
+   THE GRADE CONTROL SAYS WHICH GRADE THE UNIT HOLDS. Four buttons that all look alike answer "what
+   grades exist", never "what is this unit", so the grade the row carries is drawn BRIGHT and the
+   other three are dimmed - see GRADE_ACTIVE/GRADE_IDLE. The bright state moves on the press rather
+   than on the round trip: the request is still the only thing that writes a grade, but the operator
+   grading down a list reads that chip to know where they are, and a chip that lags a request behind
+   the row above it is a chip they cannot trust. */
 
 import { useCallback, useRef, useState } from "react";
 
 import { Badge, Button, Card, Heading, Input, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
-import { gradeTone, kickerClass } from "@/lib/ui";
+import { kickerClass } from "@/lib/ui";
 
 type WorkUnit = {
   id: number;
@@ -70,6 +77,22 @@ const GRADES = ["A", "B", "C", "D"] as const;
 /* The grade buttons sit inside the table's horizontal scroll region, which trims anything its
    descendants paint outside its own box - so the cue is drawn INSIDE the button's edge. */
 const GRADE_FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-900";
+
+/* The two states of a grade button, as classes rather than `gradeTone`: that helper paints ONE
+   colour per grade for a chip that NAMES a grade, and it paints all four of these the same, which
+   is precisely the state this control could not show.
+
+   ACTIVE - the brand's saturated emerald, which is `emerald-500` by value, under the dark ink. White
+   on that step measures 2.5:1 and is not text; `ink-inverse` is the token this palette keeps for
+   exactly this pairing (Button's `accent` variant is the same shape in amber). `shadow-glow-sm` is
+   the config's emerald hairline plus bloom, the halo a dark ground needs - a grey shadow is invisible
+   against slate, so the glow is drawn in light.
+
+   IDLE - the page ground, muted ink, one hairline, and a lift to the primary button's emerald on
+   hover. Both states carry a 1px ring so only its COLOUR changes between them: the focus ring that
+   arrives on a keypress is then the one thing widening the edge. */
+const GRADE_ACTIVE = "bg-brand-500 text-ink-inverse ring-1 ring-brand-500 shadow-glow-sm";
+const GRADE_IDLE = "bg-surface-sunken text-ink-500 ring-1 ring-line hover:bg-brand-700 hover:text-white";
 
 /* How the server says it read the term, in the operator's own words. */
 const RESOLVED_BY: Record<string, string> = {
@@ -129,6 +152,15 @@ export default function LotWorkbench() {
     if (submitted) await load(submitted);
   }
 
+  /* Moves one row's grade chip without touching the list the server sent. Only the chip: every
+     counter under the table still comes from the payload, so an optimistic row can never make the
+     progress bar disagree with the database. */
+  function setRowGrade(unitId: number, grade: string | null) {
+    setList((cur) =>
+      cur ? { ...cur, assets: cur.assets.map((a) => (a.id === unitId ? { ...a, grade } : a)) } : cur,
+    );
+  }
+
   function focusGrade(unitId: number, grade: string) {
     const el = gradeRefs.current.get(`${unitId}:${grade}`);
     if (el) el.focus();
@@ -151,6 +183,9 @@ export default function LotWorkbench() {
     const order = (list?.assets ?? []).map((a) => a.id);
     const at = order.indexOf(unit.id);
     const nextId = at >= 0 && at + 1 < order.length ? order[at + 1] : null;
+    // What the server holds for this row right now, so a refusal has something to put back.
+    const held = unit.grade;
+    setRowGrade(unit.id, grade);
     try {
       const r = await apiFetch(`/staff/assets/${unit.id}/grade`, {
         method: "POST",
@@ -159,14 +194,21 @@ export default function LotWorkbench() {
       });
       const j: any = await r.json().catch(() => ({}));
       if (!r.ok) {
+        // The bright chip goes back to the grade the database still has, rather than showing a
+        // grade that was refused.
+        setRowGrade(unit.id, held);
         setErr(typeof j.detail === "string" ? j.detail : "that grade was refused");
         return;
       }
       setMsg(`Asset ${unit.id} graded ${grade}.`);
+      // The read that follows is what makes the row true, not what makes it look true: it lands the
+      // unit's status and the counters, and it is also what settles the chip if the server wrote
+      // something other than what was pressed.
       await reload();
       // The next row, same grade button. One keypress per unit down the list.
       if (nextId !== null) setTimeout(() => focusGrade(nextId, grade), 0);
     } catch (e: any) {
+      setRowGrade(unit.id, held);
       setErr(String(e?.message ?? e));
     } finally {
       setInFlight(null);
@@ -374,11 +416,10 @@ export default function LotWorkbench() {
                                     aria-pressed={u.grade === g}
                                     className={cn(
                                       "h-7 w-7 rounded-control text-xs font-semibold",
-                                      "transition-colors duration-fast ease-out motion-reduce:transition-none",
-                                      "hover:opacity-80 disabled:opacity-40 disabled:pointer-events-none",
+                                      "transition duration-fast ease-out motion-reduce:transition-none",
+                                      "disabled:opacity-40 disabled:pointer-events-none",
                                       GRADE_FOCUS,
-                                      gradeTone(g),
-                                      u.grade === g ? "ring-2 ring-inset ring-brand-900" : "",
+                                      u.grade === g ? GRADE_ACTIVE : GRADE_IDLE,
                                     )}
                                   >
                                     {g}
