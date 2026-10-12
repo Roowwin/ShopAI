@@ -5,7 +5,7 @@ import { kickerClass } from "@/lib/ui";
 /* The KPI tile: the dashboard's headline number on the glass treatment - a translucent panel
    (`bg-surface-glass/80`, the same step the chrome uses) over `backdrop-blur-md`, an emerald
    hairline, and `shadow-glow-sm` instead of a light-mode box-shadow. On a dark ground a grey
-   the elevation cue is invisible, so the card's edge has to be drawn in light rather than cast in darkness;
+   the elevation cue is not there, so the card's edge has to be drawn in light rather than cast in darkness;
    that is what the two glow tokens are for, and it is why no light-mode elevation utility - not even
    as a word, since Tailwind scans comment text too and would emit a dead rule for it - is
    mentioned in this file.

@@ -140,7 +140,7 @@ export function GradeBars({ bars }: { bars: Slice[] }) {
    distributions, team_activity is per-actor, audit_feed is a capped list of events. So the page
    passes `series={null}` and the card renders the explicit unavailable state below.
 
-   The drawn branch is the shape the endpoint would have to grow - seven daily values - and it is
+   The drawn branch is the shape the endpoint would have to carry - seven daily values - and it is
    deliberately NOT fed a made-up one: a plausible-looking trend line invented from a single
    7-day total is a fabricated fact on a page an operator makes stock decisions from, which is
    strictly worse than an honest gap. Nothing renders here that is not a number the API sent.
