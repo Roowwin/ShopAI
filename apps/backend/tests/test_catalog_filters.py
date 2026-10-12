@@ -210,33 +210,48 @@ async def test_the_filters_compose_and_the_url_is_the_state(client):
 async def test_the_term_searches_only_inside_the_category_it_is_asked_for(client):
     """The Shop menu's shortcuts are category + term, so the term must never leak across categories.
 
-    The same word is put in TWO categories - one product each - and the point is the pair of
-    assertions: on its own the term finds both, and inside a category it finds only that one's. The
-    word is a token of the fixture's own title (search_vec is built from title + model, migration
-    0007), and carries a fresh stamp, so no other row in the shop can match it.
+    The same word is put in TWO categories, and the point is the pair of assertions: on its own the
+    term finds both, and inside a category it finds only that one's. The word is a token of the
+    fixture's own title (search_vec is built from title + model, migration 0007) and carries a fresh
+    stamp, so no other row in the shop can match it.
+
+    The narrowing is then proven on rows THIS FILE owns. The ten accessories that make the shop look
+    populated come from scripts/seed_demo.py - migrations insert products for phones only, and 0012
+    adds the Accessories category row on its own - so a freshly migrated database (CI runs a bare
+    `pytest -q`) has none of them. An absolute count here would pass on the shared dev box and fail
+    in CI, which is the hand-seeded dependence this suite exists to avoid.
     """
     h, email = await _staff(client)
     stamp = uuid.uuid4().hex[:8]
     term = "qterm" + stamp
     in_acc = "pytest-q-" + term + "-acc"
+    in_acc2 = "pytest-q-" + term + "-acc2"
     in_lap = "pytest-q-" + term + "-lap"
+    # ... and one accessories row the term must NOT select, so "narrower" is measurable
+    other_acc = "pytest-elsewhere-" + stamp
     products: list[int] = []
     try:
         products.append(await _staged(client, h, in_acc, KINGSTON, "accessories", [("B", 9900)]))
+        products.append(await _staged(client, h, in_acc2, KINGSTON, "accessories", [("C", 12900)]))
         products.append(await _staged(client, h, in_lap, KINGSTON, "laptops", [("B", 19900)]))
+        products.append(await _staged(client, h, other_acc, KINGSTON, "accessories", [("D", 4900)]))
 
+        # the term on its own is category-blind: it finds every row that carries it
         both = await _items(client, "q=" + term)
-        assert {i["slug"] for i in both} == {in_acc, in_lap}, [i["slug"] for i in both]
+        assert {i["slug"] for i in both} == {in_acc, in_acc2, in_lap}, [i["slug"] for i in both]
 
+        # inside a category it finds that category's rows and none of the other's
         acc = await _items(client, "category=accessories&q=" + term)
-        assert [i["slug"] for i in acc] == [in_acc], [i["slug"] for i in acc]
+        assert {i["slug"] for i in acc} == {in_acc, in_acc2}, [i["slug"] for i in acc]
 
         lap = await _items(client, "category=laptops&q=" + term)
         assert [i["slug"] for i in lap] == [in_lap], [i["slug"] for i in lap]
 
-        # the category alone is a wider net than the category plus the term - the shortcut narrows,
-        # which is the only reason the shortcut is worth having
-        assert len(await _items(client, "category=accessories")) > 1
+        # the shortcut NARROWS rather than merely selecting: the category alone holds the row the
+        # term could not match, and every row here is one this test put on the shelf
+        cat_only = {i["slug"] for i in await _items(client, "category=accessories")}
+        assert {in_acc, in_acc2, other_acc} <= cat_only, sorted(cat_only)
+        assert cat_only > {i["slug"] for i in acc}, "the term must narrow the category, not widen it"
     finally:
         await _archive(products)
         await _drop_staff(email)
