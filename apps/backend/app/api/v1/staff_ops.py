@@ -163,6 +163,9 @@ class GradeIn(BaseModel):
     grade: str
     cost_cents: int | None = None
     condition_report: dict | None = None
+    # Opt-in, and only meaningful for a unit that has not been tested yet: see the ladder note in
+    # `grade`. Default False keeps every existing caller's behaviour byte-identical.
+    test_first: bool = False
 
 class StatusIn(BaseModel):
     status: str
@@ -252,6 +255,33 @@ async def grade(asset_id: int, body: GradeIn, staff: dict = Depends(require_role
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
     before = {"status": asset.status, "grade": asset.grade}
+
+    # THE LADDER IS REAL. The DB trigger (`rfo_assets_check_status`) admits `tested -> graded` and
+    # refuses `received -> graded`, so a unit that has never been tested cannot be graded in one
+    # move - the constraint is the domain model saying a unit is inspected before it is graded.
+    #
+    # A workbench that grades a whole fresh lot would otherwise 409 on every row. `test_first` walks
+    # the one rung the ladder requires, and writes that rung its OWN audit row, so the trail shows
+    # the path the unit really took instead of a jump it never made.
+    #
+    # This widens no permission. It is available only to a role-holder acting on its own behalf -
+    # `_require_role` already admitted them for `ACTION_GRADE` - and the unit never RESTS in
+    # `tested`: the same request continues to `graded`, so the write cannot be used to park a unit
+    # in a state the caller's role could not otherwise produce. An AGENT is refused outright: for
+    # an agent the `test` transition is a separately grantable, separately audited action, so it
+    # must be taken explicitly rather than as a side effect of a `grade` grant.
+    stepped = False
+    if body.test_first and asset.status == "received":
+        if staff.get("identity_type") == "agent":
+            raise HTTPException(status_code=403,
+                                detail="an agent identity must test a unit before grading it")
+        asset.status = "tested"
+        await db.flush()   # its own UPDATE, so the trigger sees received -> tested, not -> graded
+        await _audit_execution(db, staff, grant, entity="asset", entity_id=asset.id, action="test",
+                               before={"status": "received"},
+                               after={"status": "tested", "note": "step of grading an untested unit"})
+        stepped = True
+
     asset.status = "graded"
     asset.grade = body.grade
     if body.cost_cents is not None:
@@ -264,7 +294,7 @@ async def grade(asset_id: int, body: GradeIn, staff: dict = Depends(require_role
         await db.commit()
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
-    return {"id": asset.id, "status": asset.status, "grade": asset.grade}
+    return {"id": asset.id, "status": asset.status, "grade": asset.grade, "stepped_through_tested": stepped}
 
 
 # The chat actions this one door performs, named by the status it is asked to write. A status that
@@ -337,6 +367,66 @@ async def list_assets(status: str | None = None, lot_number: str | None = None,
     rows = (await db.execute(q.order_by(Asset.id.desc()).limit(limit).offset(offset))).scalars().all()
     return [{"id": a.id, "public_id": str(a.public_id), "serial_number": a.serial_number,
              "status": a.status, "grade": a.grade, "lot_number": a.lot.lot_number} for a in rows]
+
+
+# How many awaiting-grade units the workbench returns at once. A corporate lot runs to a few
+# hundred; beyond this the payload says it was cut rather than silently showing a prefix.
+WORKLIST_MAX = 500
+# The statuses a unit can be graded FROM. `rfo_assets_check_status` admits tested/graded and
+# in_repair/graded, and `received` gets there through the one rung `grade(test_first=True)` walks.
+# A null-graded unit sitting in `scrapped` or `sold` is not awaiting anything, so listing it with
+# grade buttons would only offer an action that 409s.
+_AWAITING_GRADE_STATUSES = ("received", "tested", "in_repair")
+
+
+@router.get("/lots/worklist")
+async def lot_worklist(lot_number: str | None = None, lot_id: int | None = None,
+                       staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+    """One lot's grading progress plus the units still awaiting a grade.
+
+    The Lot Process workbench's read. Progress counts EVERY unit in the lot - "3 of 10 units
+    graded" has to mean the lot, not the slice on screen - while `assets` carries only the ones
+    still to do. A lot is addressed by number (what the operator has) or by id (what a link has),
+    never by both, so an ambiguous call is a 422 rather than a guess.
+    """
+    if (lot_id is None) == (lot_number is None):
+        raise HTTPException(status_code=422, detail="provide exactly one of lot_id / lot_number")
+    lot = (await db.execute(select(Lot).where(Lot.id == lot_id) if lot_id is not None
+                            else select(Lot).where(Lot.lot_number == lot_number))).scalars().first()
+    if lot is None:
+        raise HTTPException(status_code=404, detail="lot not found")
+
+    counts = (await db.execute(text("""
+        SELECT count(*) AS total,
+               count(*) FILTER (WHERE grade IS NOT NULL) AS graded,
+               count(*) FILTER (WHERE grade IS NULL
+                                  AND status IN ('received','tested','in_repair')) AS awaiting
+        FROM assets WHERE lot_id = :i
+    """), {"i": lot.id})).mappings().one()
+
+    # One row over the cap, so "was it cut?" is answered by the data rather than by `len == cap`.
+    rows = (await db.execute(text("""
+        SELECT a.id, a.public_id::text AS public_id, a.serial_number::text AS serial_number,
+               a.status, a.grade, a.product_id, p.title AS product_title
+        FROM assets a LEFT JOIN products p ON p.id = a.product_id
+        WHERE a.lot_id = :i AND a.grade IS NULL
+          AND a.status IN ('received','tested','in_repair')
+        ORDER BY a.id LIMIT :lim
+    """), {"i": lot.id, "lim": WORKLIST_MAX + 1})).mappings().all()
+    truncated = len(rows) > WORKLIST_MAX
+    rows = rows[:WORKLIST_MAX]
+
+    return {
+        "lot": {"id": lot.id, "lot_number": lot.lot_number, "status": lot.status,
+                "warehouse": lot.warehouse, "received_at": lot.received_at.isoformat()},
+        "progress": {"total_units": int(counts["total"]), "graded_units": int(counts["graded"]),
+                     "awaiting_grade_units": int(counts["awaiting"])},
+        "assets": [{"id": r["id"], "public_id": r["public_id"], "serial_number": r["serial_number"],
+                    "status": r["status"], "grade": r["grade"], "product_id": r["product_id"],
+                    "product_title": r["product_title"]} for r in rows],
+        "truncated": truncated,
+        "limit": WORKLIST_MAX,
+    }
 
 
 @router.get("/movements")

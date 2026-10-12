@@ -41,7 +41,7 @@ export const GROUPS: NavGroup[] = [
      share: an operator pricing stock is doing inventory work, and a page's heading is a statement
      about who goes there. */
   { id: "inventory", heading: "Inventory & Logistics", icon: "crate", items: [
-    { href: "/admin/intake", label: "Lots & intake" },
+    { href: "/admin/intake", label: "Lot Process" },
     { href: "/admin/product-import", label: "Product Import" },
     { href: "/admin/assets", label: "Assets" },
     { href: "/admin/ai/listings", label: "AI listings" },
