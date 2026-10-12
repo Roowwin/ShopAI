@@ -23,6 +23,17 @@
    on a card) for placeholders and disabled text - it was 1.6:1 on white, so this is an improvement
    rather than a regression. */
 @layer base {
+  /* The focus ring's offset band - declared on the SAME selector Tailwind's base uses, which is the
+     whole point. Tailwind sets this property on `*, ::before, ::after`, i.e. on every element, so a
+     `<button>` receives its own `#fff` and never inherits anything from `:root`: the two rules do not
+     compete for the same element, and specificity and layer order never enter into it. A `:root`
+     override therefore does NOTHING, which is what a first attempt here did. Same selector, later in
+     source order than `@tailwind base`, so this wins - and it is colour that appears nowhere in this
+     app's source, which is why no audit of the app could find it. */
+  *, ::before, ::after {
+    --tw-ring-offset-color: rgb(var(--surface));
+  }
+
   :root {
     /* emerald. 500/600 are the saturated accents, 700/800/900 the button fills (unchanged - white on
        700 is 5.48:1). 50/100/200 are the SOFT fills: on a light ground a pale wash, here a deep tint,
@@ -82,12 +93,6 @@
        that cannot be seen exactly where a recessed panel needs one. */
     --line: 45 55 72;
     --line-strong: 55 68 88;
-
-    /* The focus ring's offset band. Tailwind's base layer declares this as #fff on `*`, so without
-       this line every `ring-offset-2` in the app paints a white band behind an emerald ring - a
-       colour that appears nowhere in this app's source and that no audit of it could find. `:root`
-       outranks the `*` default, so this fixes all seventeen pages at once. */
-    --tw-ring-offset-color: rgb(var(--surface));
 
     /* The user agent's own palette: scrollbars, <select> popups, number spinners, and the fill Chrome
        paints over an autofilled field. Unset, all of them stay light - and an autofilled login field
