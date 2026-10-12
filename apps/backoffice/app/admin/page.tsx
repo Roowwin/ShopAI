@@ -103,7 +103,7 @@ export default function AdminHome() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {me && <Badge colorClass="bg-brand-50 text-brand-700">{me.role}</Badge>}
+          {me && <Badge colorClass="bg-brand-50 text-brand-300">{me.role}</Badge>}
           <Button variant="secondary" onClick={signOut}>Sign out</Button>
         </div>
       </header>

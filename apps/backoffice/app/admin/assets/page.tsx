@@ -69,7 +69,7 @@ export default function AssetsPage() {
                     else on the row still opens the workbench panel below. */}
                 <TD className="font-mono">
                   <a href={"/admin/assets/" + a.id} onClick={(e) => e.stopPropagation()}
-                     className="text-brand-700 hover:underline">{a.serial_number}</a>
+                     className="text-brand-300 hover:underline">{a.serial_number}</a>
                 </TD>
                 <TD><Badge colorClass={statusTone(a.status)}>{a.status}</Badge></TD>
                 <TD>{a.grade ? <Badge colorClass={gradeTone(a.grade)}>{a.grade}</Badge> : null}</TD>
@@ -117,7 +117,7 @@ export default function AssetsPage() {
         </Card>
       )}
 
-      {msg && <p className="text-brand-700 text-sm">{msg}</p>}
+      {msg && <p className="text-brand-300 text-sm">{msg}</p>}
       {err && <p className="text-danger-600 text-sm">{err}</p>}
     </main>
   );

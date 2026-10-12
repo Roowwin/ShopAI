@@ -82,7 +82,7 @@ export default function CustomersPage() {
                 {rows.map((c) => (
                   <TR key={c.id}>
                     <TD>
-                      <a href={"/admin/customers/" + c.id} className="text-brand-700 hover:underline">{c.email}</a>
+                      <a href={"/admin/customers/" + c.id} className="text-brand-300 hover:underline">{c.email}</a>
                     </TD>
                     <TD><span className="text-ink-900">{c.display_name || "-"}</span></TD>
                     <TD><Badge colorClass={statusTone(c.status)}>{c.status}</Badge></TD>

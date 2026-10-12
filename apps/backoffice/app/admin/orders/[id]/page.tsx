@@ -55,7 +55,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   return (
     <main className="max-w-5xl mx-auto p-4 space-y-4 min-h-screen">
-      <a href="/admin/orders" className="text-sm text-brand-700 hover:underline">&larr; All orders</a>
+      <a href="/admin/orders" className="text-sm text-brand-300 hover:underline">&larr; All orders</a>
       <Heading level="h1">
         Order <span className="font-mono text-base">{o ? o.public_id : "#" + id}</span>
       </Heading>
@@ -80,7 +80,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 {data.customer.display_name ? <> &middot; {data.customer.display_name}</> : null}
                 {o.customer_id != null && (
                   <> &middot; <a href={"/admin/customers/" + o.customer_id}
-                                 className="text-brand-700 hover:underline">all their orders</a></>
+                                 className="text-brand-300 hover:underline">all their orders</a></>
                 )}
               </p>
             ) : (
@@ -98,7 +98,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <TD className="font-mono text-xs">
                       {l.asset_id == null
                         ? <span className="text-ink-500">no unit</span>
-                        : <a href={"/admin/assets/" + l.asset_id} className="text-brand-700 hover:underline">{l.asset_id}</a>}
+                        : <a href={"/admin/assets/" + l.asset_id} className="text-brand-300 hover:underline">{l.asset_id}</a>}
                     </TD>
                     <TD><span className="text-ink-900">{l.sku_title}</span></TD>
                     <TD>{l.grade ? <Badge colorClass={gradeTone(l.grade)}>{l.grade}</Badge>

@@ -53,7 +53,7 @@ export default function SecurityPage() {
             </Button>
           </div>
         )}
-        {enabled && <p className="text-brand-700">TOTP is enabled for this account.</p>}
+        {enabled && <p className="text-brand-300">TOTP is enabled for this account.</p>}
         {msg && <p className="text-sm text-ink-600">{msg}</p>}
       </Card>
     </main>

@@ -17,30 +17,34 @@ const BASE =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 " +
   "disabled:opacity-50 disabled:pointer-events-none";
 
-/* Contrast, WCAG AA. The primary fill is the darker emerald step (white on it computes 5.48:1)
-   and its hover goes a further step darker rather than lighter (7.68:1), because white on the
-   step used before measured 3.77:1 and on that variant's old lighter hover only 2.54:1 - both
-   under the 4.5:1 the 14px and 12px labels need. The focus indicator every button shares is the
-   same darker step (5.48:1 against white), clearing the 3:1 non-text bar the lighter emerald
-   indicator was under at 2.54:1. The `muted` label is the heavier ink step for the same reason:
-   at the middle step it passed on the white fill (4.76:1) but fell to 4.34:1 over the slate
-   fill that variant takes on hover.
-   ONE LATENT EXCEPTION, recorded rather than closed: the `danger` variant's hover fill drops
-   its label from 4.83:1 to 4.41:1. No call site in this app uses that variant, and re-colouring
-   it means a new danger token shared with the storefront - an owner decision, not a builder one.
-   Written as numbers rather than utility names on purpose - this file is scanned as text, and a
-   utility spelled in prose would emit a real rule. */
+/* Contrast, WCAG AA - re-measured when the app went dark, because half of this paragraph used to be
+   a light-mode record and was describing conditions that no longer exist.
+
+   Still true, and the reason the primary fill is what it is: white on the darker emerald step
+   computes 5.48:1, its hover goes a further step darker rather than lighter (7.68:1), and white on
+   the step used before measured 3.77:1 and on its old lighter hover only 2.54:1 - under the 4.5:1 the
+   14px and 12px labels need.
+
+   No longer true, and removed rather than left to mislead: the `danger` variant was recorded here as
+   a LATENT EXCEPTION (its hover dropped the label to 4.41:1). The flip lightened the danger ink to
+   248 113 113, which measures 6.45:1 on a card and 5.84:1 on its own danger-50 hover fill - so the
+   exception is closed, and the paragraph that warned about it was warning about nothing.
+
+   Every other fill+ink pair in this file was re-measured against the dark ground in the Midnight
+   Emerald audit (the one that produced the `text-ink-inverse` pairs). Written as numbers rather than
+   utility names on purpose - this file is scanned as text, and a utility spelled in prose would emit
+   a real rule. */
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-brand-700 text-white hover:bg-brand-800",
-  accent: "bg-accent-400 text-ink-900 hover:bg-accent-300",
-  secondary: "bg-surface text-brand-700 ring-1 ring-line hover:bg-brand-50",
-  ghost: "text-brand-700 hover:bg-brand-50",
+  accent: "bg-accent-400 text-ink-inverse hover:bg-accent-300",
+  secondary: "bg-surface text-brand-300 ring-1 ring-line hover:bg-brand-50",
+  ghost: "text-brand-300 hover:bg-brand-50",
   danger: "bg-surface text-danger-600 ring-1 ring-danger-200 hover:bg-danger-50",
   /* Backoffice-only additions - the storefront's set stops at `danger`. `onDark` is a control
      that sits ON the dark nav/banner surface, which the storefront never has (it is what the
      hand-rolled ~28px nav Sign out became); `muted` is a quiet neutral text action, for a state
      toggle that is not the primary action. Keep these two here and nowhere else. */
-  onDark: "text-ink-300 ring-1 ring-ink-600 hover:bg-ink-700",
+  onDark: "text-ink-600 ring-1 ring-ink-600 hover:bg-surface-sunken",
   muted: "text-ink-600 hover:bg-surface-sunken",
 };
 

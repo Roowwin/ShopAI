@@ -23,7 +23,7 @@ const RADIUS: Record<"card" | "control", string> = {
 
 const TONE: Record<"default" | "brand", string> = {
   default: "bg-surface ring-line",
-  brand: "bg-brand-50 ring-brand-100 text-brand-900",
+  brand: "bg-brand-50 ring-brand-100 text-brand-300",
 };
 
 export default function Card({ children, radius = "card", tone = "default", interactive = false, href, className }: Props) {
