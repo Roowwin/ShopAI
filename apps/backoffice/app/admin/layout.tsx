@@ -2,39 +2,44 @@
 
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { logout } from "@/lib/api";
 import { useMe } from "@/lib/session";
 import { Badge, Button, cn } from "@/app/components/ui";
-import { kickerClass } from "@/lib/ui";
 import CommandPalette from "@/app/components/CommandPalette";
-import { GROUPS } from "@/app/components/nav";
+import SidebarNav from "@/app/components/SidebarNav";
 
 /* The admin chrome. A grouped sidebar beside the content replaces the horizontal strip that had
-   grown to twelve entries and wrapped on a narrow window: the twelve become six named sections,
-   so the portal reads as Overview / Catalogue / Commerce / Storefront / AI / Account instead of
-   one flat run.
+   grown to twelve entries and wrapped on a narrow window: those entries now read as seven named
+   categories, so the portal is Command Center / Inventory & Logistics / Commerce / Storefront /
+   AI Intelligence / Omnichannel / System instead of one flat run.
 
-   The taxonomy itself now lives in app/components/nav.ts, because the command palette renders the
-   same thirteen entries - one list, so a link with no page behind it cannot appear in the chrome
-   twice. Each heading's "Operations / Commerce / Intelligence" reading was considered and NOT
-   adopted: the six group names above are the ones this app settled on, and regrouping them is a
-   taxonomy change rather than a restyle.
+   The taxonomy itself lives in app/components/nav.ts, because the command palette renders the same
+   sixteen entries through flatNav() - one list, so a link with no page behind it cannot appear in
+   the chrome twice. The categories are disclosures, which is a behaviour rather than a heading, so
+   the list itself is drawn by app/components/SidebarNav.tsx and this file keeps what belongs to the
+   frame: the width, the rail, the narrow-width drawer and the identity at the foot.
 
-   A group's label is the shared eyebrow (lib/ui.ts), the same class Table's header row and Stat's
+   A category's label is the shared eyebrow (lib/ui.ts), the same class Table's header row and Stat's
    label take, so the app has ONE small-caps label style rather than a second one grown here.
 
    Every entry must have a page behind it - a link with no page is a 404 in the chrome. Orders,
    Customers and Audit were deliberately withheld until the ops pages existed and landed in the
    same commit as those pages; Agents landed with the agent-identity job; Dashboard landed with the
-   dashboard job. Thirteen entries, thirteen pages.
+   dashboard job; the three marketplace hubs landed with the category that holds them. Sixteen
+   entries, sixteen pages.
 
    Narrow width: the content column keeps its own width and the sidebar is what gives way. In a
-   narrow window the section list is closed by default and opens from the toggle in the strip
+   narrow window the category list is closed by default and opens from the toggle in the strip
    across the top, so it comes down ABOVE the content rather than squeezing it into a 16rem
    remainder - which at 375px would leave the content almost nothing. The toggle takes a 44px
    touch target on purpose: it is the one control in this app on a phone-width surface, where the
-   pointer-first 36px control height that holds everywhere else is too small to hit. */
+   pointer-first 36px control height that holds everywhere else is too small to hit.
+
+   Collapsed width: the rail used to hold nothing but the control that reopens it, which is a
+   reversible dead end rather than a navigation. It now draws the categories as their own icons -
+   see SidebarNav's rail - so the collapsed sidebar still says where everything is. The identity and
+   Sign out stay behind the expand, exactly as before. */
 const COLLAPSE_KEY = "rfo.admin.nav.collapsed";
 
 /* The desktop sidebar's collapsed state is a VIEWER preference and lives in this browser only.
@@ -46,12 +51,6 @@ function readCollapsed(): boolean {
 function writeCollapsed(v: boolean): void {
   try { window.localStorage.setItem(COLLAPSE_KEY, v ? "1" : "0"); } catch { void 0; }
 }
-
-/* One sub-topic link and the two states it can be in, defined once so the current-page treatment
-   is identical wherever a link is drawn. */
-const LINK_BASE = "flex min-h-[36px] items-center rounded-control px-2 text-sm";
-const LINK_ACTIVE = "bg-brand-50 font-semibold text-brand-300";
-const LINK_IDLE = "text-ink-600 hover:bg-surface-sunken";
 
 /* The narrow-width toggle. A plain button rather than the Button primitive on purpose: this one
    control carries a 44px touch target, and Button's own 36px minimum height cannot be replaced
@@ -70,7 +69,6 @@ const COLLAPSE_BTN =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 motion-reduce:transition-none";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
   const router = useRouter();
   const { me } = useMe();
   const [navOpen, setNavOpen] = useState(false);
@@ -79,6 +77,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   // Read after mount, not during the first render: the server has no storage, and a first paint that
   // disagrees with the second is a hydration mismatch.
   useEffect(() => { setCollapsed(readCollapsed()); }, []);
+
+  /* The rail's own way back: a category icon opens that category and gives the rail up for the
+     labelled list. Both halves of the preference are written together at the one place it changes,
+     so the rail cannot look expanded while the browser remembers it collapsed. */
+  function expandRail(): void {
+    writeCollapsed(false);
+    setCollapsed(false);
+  }
 
   return (
     <div className="min-h-screen md:flex">
@@ -132,56 +138,38 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </button>
         </div>
 
-        {(!collapsed || navOpen) && (
-          <>
-            <div className="max-h-[70vh] min-h-0 flex-1 overflow-y-auto px-2 pb-4 md:max-h-none">
-              {GROUPS.map((g) => (
-                <section key={g.heading} className="pt-4 first:pt-0">
-                  <p className={cn(kickerClass, "px-2 pb-1")}>{g.heading}</p>
-                  <ul className="space-y-0.5">
-                    {g.items.map((l) => {
-                      /* `=== href || startsWith(href + "/")`, not a bare startsWith: a raw prefix test
-                         also matches SIBLING routes, so a later /admin/intake-queue would light two
-                         entries at once. This form needs no `exact` flag and cannot false-positive. */
-                      const active = pathname === l.href || pathname.startsWith(l.href + "/");
-                      return (
-                        <li key={l.href}>
-                          <a
-                            href={l.href}
-                            aria-current={active ? "page" : undefined}
-                            onClick={() => setNavOpen(false)}
-                            className={cn(LINK_BASE, active ? LINK_ACTIVE : LINK_IDLE)}
-                          >
-                            {l.label}
-                          </a>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </section>
-              ))}
-            </div>
+        {/* The scroller is always here, because the taxonomy always has something to draw in it:
+            the seven categories beside the content, or their seven icons in the collapsed rail.
+            It is also the reason every cue inside it is drawn within a control's own edge - a
+            scroller trims whatever is painted outside its box. */}
+        <div className="max-h-[70vh] min-h-0 flex-1 overflow-y-auto px-2 pb-4 md:max-h-none">
+          <SidebarNav
+            rail={collapsed && !navOpen}
+            onNavigate={() => setNavOpen(false)}
+            onExpand={expandRail}
+          />
+        </div>
 
-            {/* The identity and Sign out live at the foot of the sidebar: the narrow-width strip that
-                used to carry them is gone once the sidebar has a column of its own, and a control that
-                scrolls out of the section list is a control a long list can hide. */}
-            <div className="border-t border-line px-4 py-3">
-              {me && (
-                <>
-                  <p className="truncate text-xs text-ink-600">{me.email}</p>
-                  <Badge colorClass="bg-brand-50 text-brand-300" className="mt-1">{me.role}</Badge>
-                </>
-              )}
-              <Button
-                variant="secondary"
-                size="sm"
-                className="mt-3 w-full"
-                onClick={async () => { try { await logout(); } finally { router.replace("/"); } }}
-              >
-                Sign out
-              </Button>
-            </div>
-          </>
+        {/* The identity and Sign out live at the foot of the sidebar, and they are kept for the
+            labelled width only: in the rail there is no room for an address or a role, so they
+            return with the expand - which is where they were before the rail drew anything. */}
+        {!(collapsed && !navOpen) && (
+          <div className="border-t border-line px-4 py-3">
+            {me && (
+              <>
+                <p className="truncate text-xs text-ink-600">{me.email}</p>
+                <Badge colorClass="bg-brand-50 text-brand-300" className="mt-1">{me.role}</Badge>
+              </>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mt-3 w-full"
+              onClick={async () => { try { await logout(); } finally { router.replace("/"); } }}
+            >
+              Sign out
+            </Button>
+          </div>
         )}
       </nav>
 
