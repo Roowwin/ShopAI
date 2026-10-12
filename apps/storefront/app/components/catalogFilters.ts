@@ -1,14 +1,14 @@
 /* The catalog's filter vocabulary, and the ONE place a filter set becomes a query string.
 
    Both sides of the page use this module: the server component parses the incoming URL and builds
-   the API call, the client component writes the URL back when a chip is clicked. That is what makes
+   the API call, the client component writes the URL back when a facet is picked. That is what makes
    the URL the single source of truth - a pasted link is parsed by exactly the code that produced it,
    so the same link always renders the same view, and the API never sees a value this module would
    not have written itself.
 
    Parsing is deliberately forgiving: an unknown grade, a malformed brand or a contradictory price
    band is DROPPED rather than passed on (the endpoint would answer 422 and the page would die on a
-   typo in a shared link). Every dropped value simply leaves its chip row on "All", which is the
+   typo in a shared link). Every dropped value simply leaves its facet on "All", which is the
    honest reading of a link that asks for something that does not exist.
 
    Price bands are carried as min_cents/max_cents - the endpoint's own parameters - rather than as a
@@ -37,14 +37,38 @@ export const SORTS = [
   { value: "name", label: "Name" },
 ];
 
-/* The presets the chip row offers. `value` is the chip's key; the band it means is min/max, which
-   is what the URL carries. */
+/* The presets the Price facet offers. `value` is the option's key; the band it means is min/max,
+   which is what the URL carries.
+
+   The steps follow the shelf rather than round numbers: against the live catalog (57 priced
+   products, $13 to $1,104, median $164) they split 31 / 20 / 5 / 1, so no band is a dead end that
+   can only ever return the empty state. */
 export const PRICE_BANDS = [
-  { value: "under-100", label: "Under $100", min: null as number | null, max: 10000 as number | null },
-  { value: "100-300", label: "$100 - $300", min: 10000, max: 30000 },
-  { value: "300-600", label: "$300 - $600", min: 30000, max: 60000 },
-  { value: "600-plus", label: "$600+", min: 60000, max: null },
+  { value: "under-200", label: "Under $200", min: null as number | null, max: 20000 as number | null },
+  { value: "200-500", label: "$200 - $500", min: 20000, max: 50000 },
+  { value: "500-1000", label: "$500 - $1,000", min: 50000, max: 100000 },
+  { value: "1000-plus", label: "$1,000+", min: 100000, max: null },
 ];
+
+/* A whole-dollar figure for a band label, thousands separated. Deliberately not toLocaleString:
+   these strings are rendered on the server and in the browser, and a locale that resolves
+   differently in the two is a hydration mismatch. */
+function dollars(cents: number): string {
+  return "$" + String(Math.round(cents / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+/* How a price in force reads. A preset answers with its own label; any other pair - every band of
+   the previous set is one, and so is a hand-written URL - is described by its own numbers instead of
+   being announced as a bare "price band". The grid behind is filtered by exactly those numbers, so
+   the control has to say them. */
+export function bandLabel(min: number | null, max: number | null): string | null {
+  if (min === null && max === null) return null;
+  const preset = PRICE_BANDS.find((b) => b.min === min && b.max === max);
+  if (preset) return preset.label;
+  if (min === null) return "Under " + dollars(max as number);
+  if (max === null) return dollars(min) + "+";
+  return dollars(min) + " - " + dollars(max);
+}
 
 const BRAND_SLUG = /^[a-z0-9][a-z0-9-]{0,79}$/;
 
@@ -107,9 +131,8 @@ export function activeFilters(f: Filters): string[] {
   if (f.category) out.push("category " + f.category);
   if (f.brand) out.push("brand " + f.brand);
   if (f.grade) out.push("grade " + f.grade);
-  const band = PRICE_BANDS.find((b) => b.min === f.min_cents && b.max === f.max_cents);
-  if (band) out.push(band.label.toLowerCase());
-  else if (f.min_cents !== null || f.max_cents !== null) out.push("price band");
+  const band = bandLabel(f.min_cents, f.max_cents);
+  if (band) out.push(band.toLowerCase());
   if (f.sort !== "featured") out.push("sorted by " + (SORTS.find((s) => s.value === f.sort)?.label ?? f.sort));
   return out;
 }
