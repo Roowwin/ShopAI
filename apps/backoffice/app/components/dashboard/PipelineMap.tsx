@@ -3,6 +3,12 @@ import { kickerClass } from "@/lib/ui";
 
 /* The lifecycle pipeline: Received -> Tested -> Graded -> Listed, as four connected nodes.
 
+   J2 wrote this beside /admin/dashboard; J7's /admin draws the same map from the same endpoint, so
+   the file moved into the shared dashboard set and `lifecycleStages` - the mapping from the
+   payload's two backlog fields onto the four nodes - moved with it. Both pages call that one
+   function: a second copy of this mapping in a second page is how two maps of one lifecycle start
+   disagreeing about which node owns a backlog.
+
    Every number is the payload's own. `count` is `inventory.by_status[key]` - the same zero-filled
    lifecycle the donut beside it draws - and a `backlog` is only ever set where the payload
    attributes work TO A SINGLE STAGE:
@@ -95,6 +101,46 @@ function Connector() {
       <path d="M0 4h10M7.5 1l3 3-3 3" fill="none" stroke="rgb(var(--line-strong))" strokeWidth="1.5" />
     </svg>
   );
+}
+
+/* The four stages, built from the payload's own counts. `count` comes from `inventory.by_status`
+   (the same zero-filled map the donut draws, so the two can never disagree); a key the payload
+   omits renders as "not reported by the API" rather than 0. A `backlog` is set only where the
+   payload attributes work to ONE stage - Received takes `lots_stuck`, Graded takes
+   `pricing_pending` - because `stuck_assets` spans Received AND Tested together and nothing in the
+   payload flags listed stock. */
+export type StageBacklogs = {
+  /** lots in intake past 14 days, never activated */
+  lotsStuck: number;
+  /** graded units carrying no price */
+  pricingPending: number;
+};
+
+export function lifecycleStages(byStatus: Record<string, number>, backlogs: StageBacklogs): PipelineStage[] {
+  const count = (key: string): number | null => {
+    const n = byStatus[key];
+    return typeof n === "number" ? n : null;
+  };
+  return [
+    { key: "received", label: "Received", count: count("received"),
+      backlog: backlogs.lotsStuck > 0
+        ? { count: backlogs.lotsStuck, label: "lots awaiting activation" } : undefined },
+    { key: "tested", label: "Tested", count: count("tested") },
+    { key: "graded", label: "Graded", count: count("graded"),
+      backlog: backlogs.pricingPending > 0
+        ? { count: backlogs.pricingPending, label: "unpriced, cannot be listed" } : undefined },
+    { key: "listed", label: "Listed", count: count("listed") },
+  ];
+}
+
+/* The one thing the map cannot say per node, in one place so both pages say it the same way. */
+export function stuckNote(stuckCount: number): string {
+  return "A stage counts the units currently in it, from the same inventory.by_status the donut " +
+    "draws. " +
+    (stuckCount > 0
+      ? `${stuckCount} units have sat in Received or Tested for over 7 days - the API reports ` +
+        "those two stages together, so the count is not attributed to either node."
+      : "No unit has sat in Received or Tested for over 7 days.");
 }
 
 export default function PipelineMap({ stages, note }: { stages: PipelineStage[]; note?: string }) {
