@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { apiFetch } from "@/lib/api";
 import { Badge, Button, Card, Heading, Input, Select, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
 import { statusTone } from "@/lib/ui";
@@ -8,6 +8,7 @@ import ValidationStream, { type Level, type StreamEvent } from "./ValidationStre
 import AiReview, { type Draft, type Photo, type RawField } from "./AiReview";
 import DropZone from "./DropZone";
 import LotWorkbench from "./LotWorkbench";
+import ProductImportPanel from "@/app/admin/product-import/ProductImportPanel";
 
 /* The intake screen.
 
@@ -52,43 +53,66 @@ function sizeText(bytes: number): string {
   return bytes < 1024 ? bytes + " B" : Math.round(bytes / 1024) + " KB";
 }
 
-/* The two areas of this screen. "Process Lot" is the workbench and is where the screen opens:
-   grading an existing lot is the daily job, and taking stock in is the occasional one. */
-type Tab = "process" | "intake";
+/* THE PIPELINE, in the order stock moves through it: a unit is brought in, graded, priced, then
+   listed. The page is that funnel read downwards.
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "process", label: "Process Lot" },
-  { id: "intake", label: "New Intake" },
+   `built` is not decoration. Price and List are stages this build does NOT have, and the strip
+   says so in words on the stage itself rather than drawing an empty box that a reader would take
+   for a feature. A stage that shows a spinner or a zero is a stage someone will wait on. */
+const STAGES = [
+  { n: 1, title: "Import", built: true },
+  { n: 2, title: "Process", built: true },
+  { n: 3, title: "Price", built: false },
+  { n: 4, title: "List", built: false },
 ];
 
-/* A segmented control rather than a tablist: both panels are always mounted in the tree's
-   routing sense (there is one page), and these buttons toggle which is rendered. Reported to
-   assistive technology as pressed-or-not, which is what they are, instead of as tabs whose
-   panels are not wired. */
-function TabBar({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
+/* The funnel at a glance, above the stages themselves. An ordered list because the order is the
+   information - these are steps, not options. */
+function StageStrip() {
   return (
-    <div className="inline-flex gap-1 rounded-control bg-surface-sunken p-1 ring-1 ring-line">
-      {TABS.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          aria-pressed={tab === t.id}
-          onClick={() => onTab(t.id)}
-          className={
-            "rounded-control px-4 py-2 text-sm font-semibold transition-colors duration-fast ease-out motion-reduce:transition-none " +
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 " +
-            (tab === t.id ? "bg-brand-700 text-white" : "text-ink-600 hover:bg-surface")
-          }
-        >
-          {t.label}
-        </button>
+    <ol className="flex flex-wrap items-center gap-2 text-xs">
+      {STAGES.map((s, i) => (
+        <li key={s.title} className="flex items-center gap-2">
+          {i > 0 && <span aria-hidden="true" className="text-ink-500">&rarr;</span>}
+          <span
+            className={
+              "rounded-full px-3 py-1 font-semibold ring-1 " +
+              (s.built
+                ? "bg-brand-50 text-brand-300 ring-brand-100"
+                : "bg-surface-sunken text-ink-500 ring-line")
+            }
+          >
+            {s.n}. {s.title}
+            {!s.built && <span className="font-normal"> &ndash; not built</span>}
+          </span>
+        </li>
       ))}
-    </div>
+    </ol>
+  );
+}
+
+/* One numbered stage of the funnel. The number is decorative and hidden from assistive tech -
+   the heading beside it already carries the name, and an ordered list that repeats its index in
+   every item is noise when read aloud. */
+function Stage({ n, title, note, children }: { n: number; title: string; note?: string; children: ReactNode }) {
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-wrap items-baseline gap-3 border-b border-line pb-3">
+        <span
+          aria-hidden="true"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-700 text-sm font-semibold text-white"
+        >
+          {n}
+        </span>
+        <Heading level="h2" as="h2">{title}</Heading>
+        {note && <p className="text-xs text-ink-500">{note}</p>}
+      </div>
+      {children}
+    </section>
   );
 }
 
 export default function IntakePage() {
-  const [tab, setTab] = useState<Tab>("process");
   const [lots, setLots] = useState<Lot[]>([]);
   const [warehouse, setWarehouse] = useState("WH-A");
   const [notes, setNotes] = useState("");
@@ -281,16 +305,25 @@ export default function IntakePage() {
       <div>
         <Heading level="h1">Lot Process</Heading>
         <p className="mt-1 text-sm text-ink-500">
-          Grade a lot's units, or take new stock in. Everything is confirmed by you.
+          The stock pipeline, top to bottom: bring units in, grade them, then price and list them.
+          Everything is confirmed by you.
         </p>
       </div>
 
-      <TabBar tab={tab} onTab={setTab} />
+      <StageStrip />
 
-      {tab === "process" && <LotWorkbench />}
+      <Stage n={1} title="Import" note="A product sheet, or one photo and one serial at a time.">
+      <ProductImportPanel />
 
-      {tab === "intake" && (
-        <>
+      <div className="border-t border-line pt-6">
+        <Heading level="h3" as="h2" className="!text-eyebrow uppercase text-ink-500">
+          Photo &amp; scan
+        </Heading>
+        <p className="mt-1 text-xs text-ink-500">
+          The other way in: read one unit from a photo, create a lot, scan serials into it.
+        </p>
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="p-6 lg:col-span-2">
           <Heading level="h3" as="h2">Photo intake</Heading>
@@ -394,8 +427,33 @@ export default function IntakePage() {
 
       {msg && <p className="text-brand-300 text-sm">{msg}</p>}
       {err && <p className="text-danger-600 text-sm">{err}</p>}
-        </>
-      )}
+      </Stage>
+
+      <Stage n={2} title="Process" note="Grade what came in. A graded unit is ready to price.">
+        <LotWorkbench />
+      </Stage>
+
+      <Stage n={3} title="Price" note="Not built yet.">
+        <Card className="p-6">
+          <p className="text-sm text-ink-500">
+            Price evaluation is not built, so this stage draws nothing rather than an empty box.
+            Nothing on this page sets a price and no placeholder price is invented for one - units
+            are priced from the Asset Workbench until this stage exists. Every unit the workbench
+            marks <span className="font-semibold text-ink-600">Ready for pricing</span> is what this
+            stage will read when it is written.
+          </p>
+        </Card>
+      </Stage>
+
+      <Stage n={4} title="List" note="Not built yet.">
+        <Card className="p-6">
+          <p className="text-sm text-ink-500">
+            Listing is not a pipeline stage yet. A unit reaches the shop today by being listed from
+            the Asset Workbench, which needs a grade and a price first; this stage is where that
+            moves once pricing exists.
+          </p>
+        </Card>
+      </Stage>
     </main>
   );
 }

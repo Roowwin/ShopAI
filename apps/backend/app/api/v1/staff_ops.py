@@ -2,7 +2,7 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
@@ -160,12 +160,20 @@ class ScanIn(BaseModel):
     notes: str | None = None
 
 class GradeIn(BaseModel):
-    grade: str
+    # Nullable so a grade can be TAKEN BACK, but the field must be PRESENT either way: the handler
+    # reads `model_fields_set` and refuses a body that simply omits it. That keeps the old contract
+    # (a caller that forgets the grade is refused) while letting an explicit null clear it - the
+    # two are very different requests and must not collapse into one.
+    grade: str | None = None
     cost_cents: int | None = None
     condition_report: dict | None = None
     # Opt-in, and only meaningful for a unit that has not been tested yet: see the ladder note in
     # `grade`. Default False keeps every existing caller's behaviour byte-identical.
     test_first: bool = False
+
+class NotesIn(BaseModel):
+    """A description edit. Null or blank clears the description rather than storing empty text."""
+    notes: str | None = None
 
 class StatusIn(BaseModel):
     status: str
@@ -251,10 +259,36 @@ async def scan_in(body: ScanIn, staff: dict = Depends(require_roles(*ROLES_SCAN_
 @router.post("/assets/{asset_id}/grade")
 async def grade(asset_id: int, body: GradeIn, staff: dict = Depends(require_roles(*ROLES_GRADE)), db=Depends(get_db)):
     grant = await _require_role(staff, ROLES_GRADE, ACTION_GRADE, db)
+    if "grade" not in body.model_fields_set:
+        raise HTTPException(status_code=422, detail="grade is required (send null to clear it)")
+    if body.grade is not None:
+        body.grade = body.grade.strip().upper()
+        if body.grade not in ("A", "B", "C", "D"):
+            raise HTTPException(status_code=422, detail="grade must be one of A, B, C, D, or null")
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
     before = {"status": asset.status, "grade": asset.grade}
+
+    # TAKING A GRADE BACK. A null grade is a correction, not a demotion: the unit has been found
+    # to need another look, so it drops out of the graded set and back into the queue - which is
+    # exactly what "reappears in Unfinished" means (that view is `grade IS NULL`).
+    #
+    # The STATUS is deliberately left where it is. The trigger has no `graded -> tested` edge, so
+    # there is no legal demotion to write; inventing one here would be this handler pretending to
+    # a transition the domain does not have. The unit therefore reads `graded` with no grade until
+    # it is graded again, and `ready_for_pricing` (status graded AND a grade present) correctly
+    # drops to false in the same breath. The workbench labels that state rather than hiding it.
+    if body.grade is None:
+        asset.grade = None
+        await _audit_execution(db, staff, grant, entity="asset", entity_id=asset.id, action="grade",
+                               before=before, after={"status": asset.status, "grade": None,
+                                                     "note": "grade cleared"})
+        try:
+            await db.commit()
+        except SQLAlchemyError as e:
+            await db.rollback(); _409(e)
+        return {"id": asset.id, "status": asset.status, "grade": None, "stepped_through_tested": False}
 
     # THE LADDER IS REAL. The DB trigger (`rfo_assets_check_status`) admits `tested -> graded` and
     # refuses `received -> graded`, so a unit that has never been tested cannot be graded in one
@@ -295,6 +329,40 @@ async def grade(asset_id: int, body: GradeIn, staff: dict = Depends(require_role
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
     return {"id": asset.id, "status": asset.status, "grade": asset.grade, "stepped_through_tested": stepped}
+
+
+# Who may correct a unit's description. The same people who may grade it: the description is the
+# note the grader writes about what they found, so splitting the two would let one role write a
+# finding it could not act on. Deliberately NOT in GUARDED_ACTIONS / TOOL_ROLES - this is an HTTP
+# door the chat rail does not dispatch into, so it passes `db=None` and an agent identity is
+# refused rather than admitted through a grant for an action the rail cannot run.
+ROLES_EDIT_NOTES = ("admin", "manager", "technician")
+ACTION_EDIT_NOTES = "edit_notes"
+
+
+@router.post("/assets/{asset_id}/notes")
+async def edit_notes(asset_id: int, body: NotesIn, staff: dict = Depends(require_roles(*ROLES_EDIT_NOTES)), db=Depends(get_db)):
+    """Correct the unit's description - the merged Audit/Cosmetic/Functional note the import wrote.
+
+    The before/after pair is the point of this door existing at all: a description that can be
+    edited without a trail is a description nobody can be held to, and the grader's note is
+    evidence about a unit that will be sold. Blank clears it rather than storing an empty string,
+    so "no description" has one representation instead of two.
+    """
+    await _require_role(staff, ROLES_EDIT_NOTES, ACTION_EDIT_NOTES, None)
+    asset = await db.get(Asset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    before = {"notes": asset.notes}
+    cleaned = (body.notes or "").strip()
+    asset.notes = cleaned or None
+    await _audit_execution(db, staff, None, entity="asset", entity_id=asset.id, action="edit_notes",
+                           before=before, after={"notes": asset.notes})
+    try:
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    return {"id": asset.id, "notes": asset.notes}
 
 
 # The chat actions this one door performs, named by the status it is asked to write. A status that
@@ -373,57 +441,135 @@ async def list_assets(status: str | None = None, lot_number: str | None = None,
 # hundred; beyond this the payload says it was cut rather than silently showing a prefix.
 WORKLIST_MAX = 500
 # The statuses a unit can be graded FROM. `rfo_assets_check_status` admits tested/graded and
-# in_repair/graded, and `received` gets there through the one rung `grade(test_first=True)` walks.
-# A null-graded unit sitting in `scrapped` or `sold` is not awaiting anything, so listing it with
-# grade buttons would only offer an action that 409s.
-_AWAITING_GRADE_STATUSES = ("received", "tested", "in_repair")
+# in_repair/graded, `received` gets there through the one rung `grade(test_first=True)` walks, and
+# `graded` is on the list because re-grading an already-graded unit overwrites its grade without
+# attempting any transition at all - the trigger only fires on a CHANGE of status.
+#
+# `graded` is ALSO why this is the right filter for "unfinished", which is the subtler half. When a
+# grade is taken back the status cannot follow it down (there is no graded -> tested edge), so the
+# unit sits in `graded` holding no grade. Filtering the queue on "not yet graded" would then hide
+# exactly the units the operator just asked to see again. The queue is therefore `grade IS NULL`
+# AND gradable - which is what "awaiting a grade" means, and it is the same set in both places so
+# the count beside the bar can never disagree with the rows under it.
+_GRADABLE_STATUSES = ("received", "tested", "in_repair", "graded")
+# The one place the SQL and the Python agree on which statuses those are.
+_GRADABLE_SQL = ", ".join("'" + s + "'" for s in _GRADABLE_STATUSES)
 
 
 @router.get("/lots/worklist")
-async def lot_worklist(lot_number: str | None = None, lot_id: int | None = None,
+async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_id: int | None = None,
+                       scope: str = Query("unfinished"),
                        staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
-    """One lot's grading progress plus the units still awaiting a grade.
+    """One lot's grading progress, and the units to show for it.
 
-    The Lot Process workbench's read. Progress counts EVERY unit in the lot - "3 of 10 units
-    graded" has to mean the lot, not the slice on screen - while `assets` carries only the ones
-    still to do. A lot is addressed by number (what the operator has) or by id (what a link has),
-    never by both, so an ambiguous call is a 422 rather than a guess.
+    Three ways in, and exactly one per call - an ambiguous call is a 422 rather than a guess:
+
+    * `lot_id` / `lot_number` - a caller that already knows the lot.
+    * `q` - the universal search box. The term is resolved in a fixed order and the payload
+      REPORTS which rule matched (`match.resolved_by`), because a search that silently picks one
+      reading of an ambiguous term is a search whose answer nobody can check. The order is:
+      lot number first (the operator's own handle), then a bare number as an asset id (a numeric
+      serial is rare; a numeric id is not), then the serial itself (CITEXT, so case-insensitive).
+
+    `scope` decides which units come back: `unfinished` (the default) is the grading queue -
+    units with no grade that are still on the ladder - while `all` is every unit in the lot, for
+    correcting a grade that was already given. A search that resolved to ONE asset always returns
+    that asset whatever the scope, because the operator asked for it by name.
+
+    Progress is counted over the WHOLE lot in every case: "3 of 10 units graded" has to mean the
+    lot, not the slice on screen. `ready_for_pricing` is derived, never stored - `status='graded'`
+    with a grade is what that flag MEANS here, and a second column holding the same fact is a
+    second thing to drift.
     """
-    if (lot_id is None) == (lot_number is None):
-        raise HTTPException(status_code=422, detail="provide exactly one of lot_id / lot_number")
-    lot = (await db.execute(select(Lot).where(Lot.id == lot_id) if lot_id is not None
-                            else select(Lot).where(Lot.lot_number == lot_number))).scalars().first()
+    if scope not in ("unfinished", "all"):
+        raise HTTPException(status_code=422, detail="scope must be 'unfinished' or 'all'")
+    if len([x for x in (q, lot_number, lot_id) if x is not None]) != 1:
+        raise HTTPException(status_code=422, detail="provide exactly one of q / lot_id / lot_number")
+
+    match = {"kind": "lot", "resolved_by": "lot_id" if lot_id is not None else "lot_number", "term": None}
+    focus_asset_id: int | None = None
+    lot = None
+    if lot_id is not None:
+        lot = (await db.execute(select(Lot).where(Lot.id == lot_id))).scalars().first()
+    elif lot_number is not None:
+        lot = (await db.execute(select(Lot).where(Lot.lot_number == lot_number))).scalars().first()
+    else:
+        term = (q or "").strip()
+        if not term:
+            raise HTTPException(status_code=422, detail="q must not be blank")
+        match["term"] = term
+        lot = (await db.execute(
+            select(Lot).where(func.lower(Lot.lot_number) == term.lower()))).scalars().first()
+        if lot is not None:
+            match["resolved_by"] = "lot_number"
+        else:
+            row = None
+            if term.isdigit():
+                row = (await db.execute(text("SELECT id, lot_id FROM assets WHERE id = :i"),
+                                        {"i": int(term)})).mappings().first()
+                if row is not None:
+                    match["resolved_by"] = "asset_id"
+            if row is None:
+                row = (await db.execute(text(
+                    "SELECT id, lot_id FROM assets WHERE serial_number = :s ORDER BY id LIMIT 1"),
+                    {"s": term})).mappings().first()
+                if row is not None:
+                    match["resolved_by"] = "serial"
+            if row is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="nothing matches that lot number, asset id or serial")
+            match["kind"] = "asset"
+            focus_asset_id = row["id"]
+            lot = (await db.execute(select(Lot).where(Lot.id == row["lot_id"]))).scalars().first()
     if lot is None:
         raise HTTPException(status_code=404, detail="lot not found")
 
     counts = (await db.execute(text("""
         SELECT count(*) AS total,
+               count(*) FILTER (WHERE status = 'received') AS received,
                count(*) FILTER (WHERE grade IS NOT NULL) AS graded,
-               count(*) FILTER (WHERE grade IS NULL
-                                  AND status IN ('received','tested','in_repair')) AS awaiting
+               count(*) FILTER (WHERE grade IS NULL AND status IN (""" + _GRADABLE_SQL + """)) AS awaiting,
+               count(*) FILTER (WHERE grade IS NOT NULL AND status = 'graded') AS ready
         FROM assets WHERE lot_id = :i
     """), {"i": lot.id})).mappings().one()
 
+    # The WHERE is assembled from constants only - no caller text reaches this string, and the
+    # values ride as bound parameters.
+    params: dict = {"i": lot.id, "lim": WORKLIST_MAX + 1}
+    if focus_asset_id is not None:
+        where = "a.lot_id = :i AND a.id = :aid"
+        params["aid"] = focus_asset_id
+    elif scope == "unfinished":
+        where = ("a.lot_id = :i AND a.grade IS NULL AND a.status IN (" + _GRADABLE_SQL + ")")
+    else:
+        where = "a.lot_id = :i"
     # One row over the cap, so "was it cut?" is answered by the data rather than by `len == cap`.
     rows = (await db.execute(text("""
         SELECT a.id, a.public_id::text AS public_id, a.serial_number::text AS serial_number,
-               a.status, a.grade, a.product_id, p.title AS product_title
+               a.status, a.grade, a.product_id, a.notes, p.title AS product_title
         FROM assets a LEFT JOIN products p ON p.id = a.product_id
-        WHERE a.lot_id = :i AND a.grade IS NULL
-          AND a.status IN ('received','tested','in_repair')
+        WHERE """ + where + """
         ORDER BY a.id LIMIT :lim
-    """), {"i": lot.id, "lim": WORKLIST_MAX + 1})).mappings().all()
+    """), params)).mappings().all()
     truncated = len(rows) > WORKLIST_MAX
     rows = rows[:WORKLIST_MAX]
 
     return {
+        "match": match,
         "lot": {"id": lot.id, "lot_number": lot.lot_number, "status": lot.status,
                 "warehouse": lot.warehouse, "received_at": lot.received_at.isoformat()},
-        "progress": {"total_units": int(counts["total"]), "graded_units": int(counts["graded"]),
-                     "awaiting_grade_units": int(counts["awaiting"])},
+        "progress": {"total_units": int(counts["total"]), "received_units": int(counts["received"]),
+                     "graded_units": int(counts["graded"]),
+                     "awaiting_grade_units": int(counts["awaiting"]),
+                     "ready_for_pricing_units": int(counts["ready"])},
+        "scope": scope,
         "assets": [{"id": r["id"], "public_id": r["public_id"], "serial_number": r["serial_number"],
                     "status": r["status"], "grade": r["grade"], "product_id": r["product_id"],
-                    "product_title": r["product_title"]} for r in rows],
+                    "product_title": r["product_title"], "notes": r["notes"],
+                    "gradable": r["status"] in _GRADABLE_STATUSES,
+                    "ready_for_pricing": r["grade"] is not None and r["status"] == "graded"}
+                   for r in rows],
         "truncated": truncated,
         "limit": WORKLIST_MAX,
     }
