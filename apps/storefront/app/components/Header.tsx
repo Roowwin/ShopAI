@@ -62,10 +62,14 @@ export default function Header() {
     }, 300);
   }
 
+  /* Two bands, both tightened: the shape stays (a micro strip over one control row), the height
+     comes off the padding. The strip is the smallest step this type scale sanctions - the eyebrow
+     size, 11px - and keeps its own sentence tracking rather than the eyebrow's 0.1em, which is for
+     a two-word kicker. The announcement's sentence is copy, not chrome: it is shrunk, never dropped. */
   return (
     <header className="sticky top-0 z-50">
-      <div className="bg-surface-page-alt text-ink-600 border-b border-line text-xs px-6 py-2 text-center tracking-wide">Renewed tech. Zero waste. - Certified refurbished, delivered AU &amp; NZ</div>
-      <div className="bg-surface text-ink-900 px-4 md:px-6 py-3 flex items-center gap-2 md:gap-4 shadow-sm">
+      <div className="bg-surface-page-alt text-ink-600 border-b border-line text-[11px] px-6 py-1 text-center tracking-wide">Renewed tech. Zero waste. - Certified refurbished, delivered AU &amp; NZ</div>
+      <div className="bg-surface text-ink-900 px-4 md:px-6 py-2 flex items-center gap-2 md:gap-3 shadow-sm">
         <a href="/" className="flex items-center gap-1.5 font-semibold tracking-wide shrink-0">
           <span className="h-2.5 w-2.5 rounded-full bg-brand-600"></span>
           RFO<span className="text-brand-700">Store</span>
@@ -76,7 +80,7 @@ export default function Header() {
             stay put at their ends. */}
         <div className="relative hidden md:block min-w-0 flex-1">
           <nav ref={strip} onScroll={measure} aria-label="Categories"
-            className="flex gap-4 text-sm text-ink-600 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            className="flex gap-3 text-sm text-ink-600 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <a href="/" className={cn("shrink-0", navLinkClass)}>Shop</a>
             {cats.map((c) => (
               <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className={cn("shrink-0", navLinkClass)}>{c.name}</a>
