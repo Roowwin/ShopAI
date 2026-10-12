@@ -49,6 +49,7 @@ CATALOG_SORTS = {
 GRADES = ("A", "B", "C", "D")
 BRAND_SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,79}\Z")
 MAX_CENTS = 100_000_000     # $1,000,000 - a ceiling for the parameter, not a business rule
+MAX_Q = 100                 # a search term, not a paragraph; the URL layer drops anything longer
 
 # The brands a shopper can filter by, and how many products each actually has on the shelf. Live
 # from the same tables as the list, so a chip can never offer a brand with nothing behind it.
@@ -69,18 +70,28 @@ async def _brand_facets(db) -> list:
 
 
 def _catalog_sql(category: str | None, brand: str | None, grade: str | None,
-                 min_cents: int | None, max_cents: int | None, sort: str | None) -> str:
+                 min_cents: int | None, max_cents: int | None, sort: str | None,
+                 *, q: str | None = None) -> str:
     """The statement for one catalog page. Every filter is a bound parameter; none is ever text.
 
     Unfiltered this returns CATALOG_SELECT with both placeholders expanded to nothing - the
     statement this endpoint has always run, byte for byte. That is what the placeholders exist for:
     a filter may change which rows come back, never the shape of the query.
+
+    `q` is keyword-only and last on purpose: the six filters before it are the ones this endpoint has
+    always had, in the order its callers and its test have always passed them, and adding a term must
+    not move them. It rides in the same WHERE as the category, which is what makes the term
+    category-SCOPED: the two predicates are ANDed, so a term matching something outside the category
+    cannot pull it in. `websearch_to_tsquery` is the function for raw shopper input - it is built to
+    take whatever they type and never raises, which `to_tsquery` would.
     """
     where = []
     if category:
         where.append("AND (c.name = :cat OR c.slug = :cat)")
     if brand:
         where.append("AND b.slug = :brand")
+    if q:
+        where.append("AND p.search_vec @@ websearch_to_tsquery('english', :q)")
     unit = ""
     if grade:
         unit += " AND a.grade = :grade"
@@ -95,25 +106,35 @@ def _catalog_sql(category: str | None, brand: str | None, grade: str | None,
 @router.get("/catalog")
 async def catalog(limit: int = Query(24, le=100), offset: int = 0,
                   category: str | None = None, sort: str | None = None,
-                  brand: str | None = None, grade: str | None = None,
+                  brand: str | None = None, grade: str | None = None, q: str | None = None,
                   min_cents: int | None = Query(None, ge=0, le=MAX_CENTS),
                   max_cents: int | None = Query(None, ge=0, le=MAX_CENTS),
                   with_filters: bool = False, db=Depends(get_db)):
-    """Listed stock, optionally filtered by category, brand, unit grade and price band.
+    """Listed stock, optionally filtered by category, brand, unit grade, price band and a text term.
 
     The response is the same bare array it has always been unless `with_filters=1` asks for the
     envelope - the backoffice reads this endpoint as an array, and an unfiltered request has to stay
     byte-identical for it. With the envelope the caller also gets `applied` (the filter set as the
     SERVER resolved it, so a UI can show what is really in force rather than what it hoped) and
     `brands` (the chip row's live options).
+
+    `q` searches the product's own vector (title + model, see migration 0007) and is ANDed with every
+    other filter, so `?category=laptops&q=dock` can only ever return laptops - which is the whole
+    point of it: the Shop menu's shortcuts are category + term, and a shortcut that leaked across
+    categories would be worse than no shortcut.
     """
     category = (category or "").strip() or None
     brand = (brand or "").strip().lower() or None
     grade = (grade or "").strip().upper() or None
+    q = (q or "").strip() or None
     if grade is not None and grade not in GRADES:
         raise HTTPException(status_code=422, detail="grade must be one of " + ", ".join(GRADES))
     if brand is not None and not BRAND_SLUG.fullmatch(brand):
         raise HTTPException(status_code=422, detail="brand must be a brand slug")
+    if q is not None and len(q) > MAX_Q:
+        # The only bound on the term: websearch_to_tsquery takes any syntax, so length is the one
+        # thing this parameter can be abused with.
+        raise HTTPException(status_code=422, detail="q must be at most " + str(MAX_Q) + " characters")
     if min_cents is not None and max_cents is not None and min_cents > max_cents:
         raise HTTPException(status_code=422, detail="min_cents must not be greater than max_cents")
 
@@ -127,13 +148,15 @@ async def catalog(limit: int = Query(24, le=100), offset: int = 0,
         params["brand"] = brand
     if grade:
         params["grade"] = grade
+    if q:
+        params["q"] = q
     if min_cents is not None:
         params["min_cents"] = min_cents
     if max_cents is not None:
         params["max_cents"] = max_cents
 
     applied_sort = sort if sort in CATALOG_SORTS else "featured"
-    sql_txt = _catalog_sql(category, brand, grade, min_cents, max_cents, applied_sort)
+    sql_txt = _catalog_sql(category, brand, grade, min_cents, max_cents, applied_sort, q=q)
     rows = (await db.execute(text(sql_txt), params)).mappings().all()
     items = [{"id": r["id"], "public_id": r["public_id"], "slug": r["slug"], "title": r["title"],
               "model": r["model"], "brand": r["brand"], "category": r["category"], "specs": r["specs"],
@@ -143,7 +166,7 @@ async def catalog(limit: int = Query(24, le=100), offset: int = 0,
     if not with_filters:
         return items
     return {"items": items,
-            "applied": {"category": category, "brand": brand, "grade": grade,
+            "applied": {"category": category, "brand": brand, "grade": grade, "q": q,
                         "min_cents": min_cents, "max_cents": max_cents, "sort": applied_sort},
             "brands": await _brand_facets(db)}
 
