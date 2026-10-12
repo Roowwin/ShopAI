@@ -192,6 +192,31 @@ async def test_worklist_is_closed_to_a_non_manager(client):
     assert g.status_code == 403, g.text
 
 
+async def test_the_grading_queue_carries_the_model_the_grader_reads(client):
+    """Each row names the unit's Model, which is what the operator grades against."""
+    tag = _tag()
+    tok = await _staff(client, "admin")
+    r = await client.post("/staff/lots", json={"lot_number": tag + "-LOT", "warehouse": "WH-T"},
+                          headers=_h(tok))
+    lot = r.json()
+    model = "Pytest Model " + uuid.uuid4().hex[:6]
+    p = await client.post("/staff/products", json={
+        "brand_slug": "apple", "category_slug": "phones", "model": model,
+        "title": "Pytest queue product " + uuid.uuid4().hex[:8],
+    }, headers=_h(tok))
+    assert p.status_code == 201, p.text
+    s = await client.post("/staff/assets/scan-in",
+                          json={"lot_number": lot["lot_number"], "serial_number": tag + "-S1",
+                                "product_id": p.json()["id"]}, headers=_h(tok))
+    assert s.status_code == 201, s.text
+
+    body = (await client.get(f"/staff/lots/worklist?q={lot['lot_number']}", headers=_h(tok))).json()
+    row = body["assets"][0]
+    assert row["product_model"] == model
+    assert row["status"] == "received" and row["grade"] is None, "it is in the queue, ungraded"
+    assert row["gradable"] is True and row["ready_for_pricing"] is False
+
+
 async def test_universal_search_resolves_lot_serial_and_asset_id(client):
     """One box, three handles - and the payload says which rule matched."""
     tag = _tag()
