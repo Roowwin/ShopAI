@@ -1,0 +1,9 @@
+# Security review round 2 - job-20261012-185830-3696 (catalog free-text term `q`): PASS
+
+- Round-2 delta is test-only: `git diff --stat 92ce800 72a3e6a` = 1 file, `apps/backend/tests/test_catalog_filters.py` (+24/-9); no production code, endpoint, frontend or dependency moved.
+- Whole job diff (phase12-backoffice...branch) = 4 files, all inside the spec's allowed surfaces: store_catalog.py, test_catalog_filters.py, catalogFilters.ts, LoadMore.tsx. Round-1 findings hold unchanged at the tip: `q` bound (`params["q"] = q`, store_catalog.py:152) against a literal `:q` predicate (`AND p.search_vec @@ websearch_to_tsquery('english', :q)`, store_catalog.py:94; the only `::` casts are pre-existing `public_id::text` at 26/176/184, none in the term path); no error-raising path.
+- Bound is still enforced before the query: `len(q) > MAX_Q` -> 422 at store_catalog.py:134-137, well before `db.execute` at 159-160; `p.search_vec` is the sole vector read (94), `assets.search_vec`/serial fields untouched, and the bare-array branch is unchanged (store_catalog.py:166-167).
+- New fixtures do not outlive the test: all four rows are appended to `products` (test_catalog_filters.py:234-237) and the `finally` archives them (`_archive`, status='archived', :80-84) and drops the staff identity (`_drop_staff` deletes refresh_tokens + staff_users by email, :87-92) at :255-256. New assertions read only slugs from the public `/store/catalog` response (:241-254) - an oracle for nothing the endpoint does not already serve publicly.
+- No secrets, host paths or debug output in either commit: full-diff grep for secret/password/api_key/C:\\/home/Administrator/print(/console.log matched only the word "token" inside a test docstring. Frontend term is escaped JSX text (`Search: {filters.q}`, LoadMore.tsx pill) with no `dangerouslySetInnerHTML`/`innerHTML`/`eval` anywhere under apps/storefront.
+
+VERDICT: PASS
