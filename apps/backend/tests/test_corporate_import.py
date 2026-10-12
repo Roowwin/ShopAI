@@ -1,0 +1,399 @@
+"""The corporate spreadsheet importer: read a supplier sheet, map it, refuse it or write it.
+
+Unlike the other intake suites this one CANNOT leave its rows behind: the importer mints lots,
+products and hundreds of assets per call, and a dev DB that accumulates them would drift the
+catalogue and the hand-seeded stock every count-asserting suite depends on. So every test picks a
+unique tag, uses it for the serial numbers, the lot numbers and the brand name, and purges exactly
+those rows in a finally. The audit log and the identities follow test_intake's rule and are left
+alone (the audit trail is append-only; pytest-% identities are cleaned by _cleanup).
+
+The tag is load-bearing in one more way: the importer matches products on (brand, category, model),
+so a tag-unique brand makes "the product this test created" unambiguous without touching the
+seeded catalogue.
+"""
+
+import csv
+import io
+import uuid
+
+from openpyxl import Workbook
+from sqlalchemy import text
+
+from app.bootstrap_staff import bootstrap
+from app.core.db import get_engine
+
+# The corporate sheet's header, as the brief spells it. Order is deliberately not the mapping
+# order, so a test that passes proves the mapping is by NAME and not by position.
+CORPORATE_HEADER = ["Asset", "Status", "Lot", "Class", "Mfg", "Model", "Grade", "Serial#",
+                    "Resale", "Audit", "Cosmetic", "Functional"]
+
+
+def _h(tok: str) -> dict:
+    return {"Authorization": "Bearer " + tok}
+
+
+async def _staff(client, role: str) -> str:
+    email = "pytest-" + uuid.uuid4().hex + "@test.rfo"
+    sid, pw = await bootstrap(email, role)
+    r = await client.post("/staff/auth/login", json={"email": email, "password": pw})
+    return r.json()["access_token"]
+
+
+async def _cleanup_identities():
+    eng = get_engine()
+    async with eng.begin() as c:
+        await c.execute(text("DELETE FROM refresh_tokens WHERE identity_id IN (SELECT id FROM staff_users WHERE email LIKE 'pytest-%')"))
+        await c.execute(text("DELETE FROM staff_users WHERE email LIKE 'pytest-%'"))
+        await c.execute(text("DELETE FROM users WHERE email LIKE 'pytest-%'"))
+
+
+async def _purge(tag: str):
+    """Best-effort removal of what this test created, and only what the app role may remove.
+
+    A COMMITTED import cannot be undone from here, and that is a property of the database rather
+    than an oversight: `rfo_app` holds SELECT and INSERT on stock_movements and nothing else
+    (checked against information_schema on 2026-10-13), so the ledger row is append-only by GRANT,
+    and the ledger's FK then pins the asset it points at. A committed unit therefore stays in dev
+    exactly as a scan-in unit does - `test_intake` records the same concession for the same reason.
+
+    What this leaves behind is confined and invisible: the lots carry the pytest tag, and the
+    products were created with no listed stock, which is what the storefront's catalogue query
+    requires, so none of it reaches a shop page. Products, lots and brands that NOTHING references
+    are still removed, which means a test that only previewed leaves no trace at all.
+    """
+    eng = get_engine()
+    async with eng.begin() as c:
+        await c.execute(text(
+            "DELETE FROM products WHERE slug LIKE :p AND NOT EXISTS"
+            " (SELECT 1 FROM assets a WHERE a.product_id = products.id)"), {"p": tag + "%"})
+        await c.execute(text(
+            "DELETE FROM lots WHERE lot_number LIKE :p AND NOT EXISTS"
+            " (SELECT 1 FROM assets a WHERE a.lot_id = lots.id)"), {"p": tag + "%"})
+        await c.execute(text(
+            "DELETE FROM brands WHERE name LIKE :p AND NOT EXISTS"
+            " (SELECT 1 FROM products p WHERE p.brand_id = brands.id)"), {"p": tag + "%"})
+
+
+def _tag() -> str:
+    return "pytest-ci-" + uuid.uuid4().hex[:10]
+
+
+def _csv(rows, header=None) -> bytes:
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(header or CORPORATE_HEADER)
+    for row in rows:
+        writer.writerow(row)
+    return buf.getvalue().encode("utf-8")
+
+
+def _row(tag: str, serial: str, **over) -> list:
+    """One corporate row, all twelve columns in the header's order."""
+    values = {
+        "Asset": "TAG-" + serial,
+        "Status": "received",
+        "Lot": tag + "-LOT-1",
+        "Class": "Phones",
+        "Mfg": tag,
+        "Model": "Model One",
+        "Grade": "B",
+        "Serial#": serial,
+        "Resale": "279.00",
+        "Audit": "audit notes",
+        "Cosmetic": "cosmetic notes",
+        "Functional": "functional notes",
+    }
+    values.update(over)
+    return [values[c] for c in CORPORATE_HEADER]
+
+
+async def _post(client, tok, data, name="corporate.csv", phase="preview"):
+    return await client.post(f"/staff/imports/corporate/{phase}",
+                             files={"file": (name, data)}, headers=_h(tok))
+
+
+async def _xlsx(rows, header=None) -> bytes:
+    wb = Workbook()
+    ws = wb.active
+    ws.append(header or CORPORATE_HEADER)
+    for row in rows:
+        ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+async def _counts(tag: str) -> dict:
+    eng = get_engine()
+    async with eng.begin() as c:
+        assets = (await c.execute(text(
+            "SELECT count(*) FROM assets WHERE serial_number::text LIKE :p"), {"p": tag + "%"})).scalar_one()
+        lots = (await c.execute(text(
+            "SELECT count(*) FROM lots WHERE lot_number LIKE :p"), {"p": tag + "%"})).scalar_one()
+        products = (await c.execute(text(
+            "SELECT count(*) FROM products WHERE slug LIKE :p"), {"p": tag + "%"})).scalar_one()
+    return {"assets": assets, "lots": lots, "products": products}
+
+
+async def test_preview_maps_columns_and_merges_technical_notes(client):
+    """The mapping contract, and proof that a preview writes nothing."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        data = _csv([_row(tag, tag + "-S1"), _row(tag, tag + "-S2")])
+        r = await _post(client, tok, data)
+        assert r.status_code == 200, r.text
+        body = r.json()
+
+        by_field = {c["field"]: c["header"] for c in body["columns"]["detected"]}
+        assert by_field == {
+            "asset": "Asset", "status": "Status", "lot": "Lot", "category": "Class",
+            "brand": "Mfg", "model": "Model", "grade": "Grade", "serial": "Serial#",
+            "price": "Resale", "audit": "Audit", "cosmetic": "Cosmetic",
+            "functional": "Functional",
+        }, by_field
+        assert body["columns"]["missing"] == []
+        assert body["columns"]["unmapped"] == []
+
+        assert body["summary"]["rows"] == 2
+        assert body["summary"]["ready"] == 2
+        assert body["summary"]["blocked"] == 0
+        assert body["summary"]["lots"] == 1
+
+        first = body["sample"][0]
+        assert first["serial_number"] == tag + "-S1"
+        assert first["grade"] == "B"
+        assert first["status"] == "received"
+        assert first["sale_price_cents"] == 27900
+        assert first["brand"] == tag and first["category"] == "Phones" and first["model"] == "Model One"
+        assert first["technical_notes"] == (
+            "Audit: audit notes\nCosmetic: cosmetic notes\nFunctional: functional notes")
+
+        assert (await _counts(tag)) == {"assets": 0, "lots": 0, "products": 0}
+    finally:
+        await _purge(tag)
+
+
+async def test_preview_accepts_alternative_header_spellings(client):
+    """'Manufacturer', 'Serial No' and 'Resale Price' are the same columns as Mfg/Serial#/Resale."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        header = ["Manufacturer", "Serial No", "Lot No", "Product Class", "Product Name",
+                  "Resale Price", "Condition Grade", "Asset Status", "Asset Tag"]
+        data = _csv([["Acme", tag + "-S1", tag + "-LOT-1", "Laptops", "Trail Blazer", "1,199.50",
+                      "Grade A", "Tested", "T-1"]], header=header)
+        r = await _post(client, tok, data)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        by_field = {c["field"]: c["header"] for c in body["columns"]["detected"]}
+        assert by_field["brand"] == "Manufacturer"
+        assert by_field["serial"] == "Serial No"
+        assert by_field["price"] == "Resale Price"
+        # 'ConditioN Grade' normalises onto the grade aliases, 'Tested' onto the status vocabulary.
+        assert by_field["grade"] == "Condition Grade"
+        assert by_field["status"] == "Asset Status"
+        row = body["sample"][0]
+        assert row["grade"] == "A"
+        assert row["status"] == "tested"
+        assert row["sale_price_cents"] == 119950
+    finally:
+        await _purge(tag)
+
+
+async def test_preview_reports_a_missing_required_column(client):
+    """A sheet with no serial column is refused by name, not silently imported with blank serials."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        header = [c for c in CORPORATE_HEADER if c != "Serial#"]
+        row = [v for c, v in zip(CORPORATE_HEADER, _row(tag, tag + "-S1")) if c != "Serial#"]
+        data = _csv([row], header=header)
+        r = await _post(client, tok, data)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["columns"]["missing"] == ["serial"]
+        assert body["columns"]["missing_labels"] == ["Serial number"]
+        assert body["summary"]["blocked"] == 1
+        assert any("serial number is blank" in i["message"] for i in body["issues"])
+    finally:
+        await _purge(tag)
+
+
+async def test_preview_reads_an_xlsx_workbook(client):
+    """The .xlsx path, not just CSV."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        data = await _xlsx([_row(tag, tag + "-S1")])
+        r = await _post(client, tok, data, name="corporate.xlsx")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["file"]["name"] == "corporate.xlsx"
+        assert body["summary"]["ready"] == 1
+        assert body["sample"][0]["serial_number"] == tag + "-S1"
+    finally:
+        await _purge(tag)
+
+
+async def test_preview_refuses_an_unsupported_file_type(client):
+    tok = await _staff(client, "admin")
+    r = await _post(client, tok, b"not a sheet", name="corporate.xls")
+    assert r.status_code == 422, r.text
+    assert "xls" in r.json()["detail"].lower()
+
+
+async def test_commit_creates_lots_products_and_assets(client):
+    """The write path: lots grouped by the Lot column, one product per (brand, class, model)."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        rows = [
+            _row(tag, tag + "-S1", **{"Lot": tag + "-LOT-1", "Model": "Model One"}),
+            _row(tag, tag + "-S2", **{"Lot": tag + "-LOT-1", "Model": "Model One"}),
+            _row(tag, tag + "-S3", **{"Lot": tag + "-LOT-2", "Model": "Model Two"}),
+        ]
+        r = await _post(client, tok, _csv(rows), phase="commit")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["mode"] == "committed"
+        assert body["summary"]["assets_created"] == 3
+        assert body["summary"]["lots_created"] == 2
+        assert body["summary"]["products_created"] == 2
+        assert {l["lot_number"] for l in body["lots_created"]} == {tag + "-LOT-1", tag + "-LOT-2"}
+
+        assert (await _counts(tag)) == {"assets": 3, "lots": 2, "products": 2}
+
+        eng = get_engine()
+        async with eng.begin() as c:
+            # The two rows of LOT-1 share one lot row, and every asset carries its mapped fields.
+            grouped = (await c.execute(text("""
+                SELECT l.lot_number, count(*) AS n FROM assets a JOIN lots l ON l.id = a.lot_id
+                WHERE a.serial_number::text LIKE :p GROUP BY l.lot_number ORDER BY l.lot_number
+            """), {"p": tag + "%"})).mappings().all()
+            assert [(g["lot_number"], g["n"]) for g in grouped] == [(tag + "-LOT-1", 2), (tag + "-LOT-2", 1)]
+
+            mapped = (await c.execute(text("""
+                SELECT a.status, a.grade, a.sale_price_cents, a.notes, a.condition_report,
+                       p.model, p.title FROM assets a LEFT JOIN products p ON p.id = a.product_id
+                WHERE a.serial_number::text = :s
+            """), {"s": tag + "-S1"})).mappings().one()
+            assert mapped["status"] == "received"
+            assert mapped["grade"] == "B"
+            assert mapped["sale_price_cents"] == 27900
+            assert mapped["model"] == "Model One" and mapped["title"] == "Model One"
+            assert mapped["notes"] == (
+                "Audit: audit notes\nCosmetic: cosmetic notes\nFunctional: functional notes")
+            assert mapped["condition_report"]["audit"] == "audit notes"
+            assert mapped["condition_report"]["technical_notes"] == mapped["notes"]
+
+            # One ledger movement per unit, labelled with this door's reason.
+            movements = (await c.execute(text("""
+                SELECT count(*) FROM stock_movements m JOIN assets a ON a.id = m.asset_id
+                WHERE a.serial_number::text LIKE :p AND m.reason = 'corporate_import' AND m.qty = 1
+            """), {"p": tag + "%"})).scalar_one()
+            assert movements == 3
+    finally:
+        await _purge(tag)
+
+
+async def test_commit_refuses_the_whole_file_when_one_row_is_blocked(client):
+    """Atomicity: one unreadable grade and NOTHING is written - not even the rows that were fine."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        rows = [_row(tag, tag + "-S1"), _row(tag, tag + "-S2", **{"Grade": "Z"})]
+        r = await _post(client, tok, _csv(rows), phase="commit")
+        assert r.status_code == 422, r.text
+        detail = r.json()["detail"]
+        assert detail["summary"]["blocked"] == 1
+        assert any(i["row"] == 3 and i["field"] == "grade" for i in detail["issues"])
+        assert (await _counts(tag)) == {"assets": 0, "lots": 0, "products": 0}
+    finally:
+        await _purge(tag)
+
+
+async def test_commit_rejects_duplicate_serials(client):
+    """A serial twice in one file, and a serial already on the shelf - both are blocking."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        twice = _csv([_row(tag, tag + "-S1"), _row(tag, tag + "-S1", **{"Asset": "TAG-dup"})])
+        r = await _post(client, tok, twice, phase="commit")
+        assert r.status_code == 422, r.text
+        assert any("also appears on row 2" in i["message"] for i in r.json()["detail"]["issues"])
+        assert (await _counts(tag))["assets"] == 0
+
+        good = _csv([_row(tag, tag + "-S1")])
+        assert (await _post(client, tok, good, phase="commit")).status_code == 200
+        # Re-importing the same sheet must not double the stock.
+        again = await _post(client, tok, good, phase="commit")
+        assert again.status_code == 422, again.text
+        assert any("already in the system" in i["message"] for i in again.json()["detail"]["issues"])
+        assert (await _counts(tag))["assets"] == 1
+    finally:
+        await _purge(tag)
+
+
+async def test_commit_blocks_a_listed_row_with_no_price(client):
+    """The DB's own constraint, caught before the transaction opens."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        rows = [_row(tag, tag + "-S1", **{"Status": "listed", "Resale": ""})]
+        r = await _post(client, tok, _csv(rows), phase="commit")
+        assert r.status_code == 422, r.text
+        assert any("no resale price" in i["message"] for i in r.json()["detail"]["issues"])
+        assert (await _counts(tag))["assets"] == 0
+    finally:
+        await _purge(tag)
+
+
+async def test_commit_accepts_a_listed_row_when_price_and_grade_are_present(client):
+    """The same row WITH a price and grade lands - and the report says it is catalog-visible."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        rows = [_row(tag, tag + "-S1", **{"Status": "listed", "Resale": "AUD $1,234.56", "Grade": "A"})]
+        r = await _post(client, tok, _csv(rows), phase="commit")
+        assert r.status_code == 200, r.text
+        assert r.json()["summary"]["listed"] == 1
+        eng = get_engine()
+        async with eng.begin() as c:
+            price = (await c.execute(text(
+                "SELECT sale_price_cents FROM assets WHERE serial_number::text = :s"),
+                {"s": tag + "-S1"})).scalar_one()
+        assert price == 123456
+    finally:
+        await _purge(tag)
+
+
+async def test_import_requires_admin_or_manager(client):
+    """The door is closed to anyone else, and to nobody at all."""
+    tag = _tag()
+    try:
+        await _cleanup_identities()
+        data = _csv([_row(tag, tag + "-S1")])
+        for role in ("sales", "warehouse", "technician"):
+            tok = await _staff(client, role)
+            r = await _post(client, tok, data)
+            assert r.status_code == 403, f"{role}: {r.status_code} {r.text}"
+        anon = await client.post("/staff/imports/corporate/preview",
+                                 files={"file": ("c.csv", data)})
+        assert anon.status_code in (401, 403), anon.text
+        assert (await _counts(tag))["assets"] == 0
+    finally:
+        await _purge(tag)
+
+
+async def test_preview_keeps_fractional_cents_exact(client):
+    """Money is parsed to cents, not floats: 1234.565 rounds half-up, never to a float artefact."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        rows = [_row(tag, tag + "-S1", **{"Resale": "$1,234.565"})]
+        r = await _post(client, tok, _csv(rows))
+        assert r.status_code == 200, r.text
+        assert r.json()["sample"][0]["sale_price_cents"] == 123457
+    finally:
+        await _purge(tag)
