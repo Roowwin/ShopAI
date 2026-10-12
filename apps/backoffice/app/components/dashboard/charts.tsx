@@ -1,6 +1,8 @@
-/* The dashboard's two charts - hand-rolled SVG. No chart library, no new dependency: the two
-   shapes here are a ring of arcs and four rounded bars, and a charting package would be a new
-   runtime dependency and a new build step for that.
+/* The dashboard charts - hand-rolled SVG. No chart library, no new dependency: the shapes here
+   are a ring of arcs, four rounded bars and one stacked bar, and a charting package would be a new
+   runtime dependency and a new build step for those. J2 wrote this file beside /admin/dashboard;
+   J7's /admin draws the same donut and the same grade palette, so the file moved into the shared
+   dashboard set and both pages import it - one chart module, not two.
 
    The palette is not invented here. Every mark takes its fill from the design system's own CSS
    custom properties (app/globals.css), so a donut slice IS the status colour its badge chip
@@ -9,12 +11,14 @@
    tokens are raw channel triples on :root, so an SVG attribute reads them directly and no class
    has to survive the Tailwind scanner for the chart to paint.
 
-   Identity is never carried by colour alone: the donut ships a legend (label + count) and each
-   bar is directly labelled with its grade and its value, and every mark carries a <title> so a
-   hover reports the exact figure without a JS tooltip layer.
+   Identity is never carried by colour alone: the donut ships a legend (label + count), each bar is
+   directly labelled with its grade and its value, the stacked bar's legend names every grade
+   including the ones at zero, and every mark carries a <title> so a hover reports the exact figure
+   without a JS tooltip layer.
 
    `total` is passed in rather than summed here so the ring and its legend cannot disagree with
-   the KPI tiles above them: the page takes both from the same payload read. */
+   the KPI tiles above them: the page takes both from the same payload read. The stacked bar's
+   whole is the one figure this module sums itself, and it says so at the call site. */
 
 export type Slice = { key: string; label: string; value: number };
 
@@ -131,14 +135,67 @@ export function GradeBars({ bars }: { bars: Slice[] }) {
   );
 }
 
+/* Units by grade as ONE horizontal stacked bar, for /admin (J7).
+
+   The dashboard's own GradeBars draws four separate pills, which answers "how many of each" but
+   not "what is the mix". The brief asks for the stacked shape, so this composes the same grade
+   palette into a single whole-width bar. It is a different component rather than a mode of
+   GradeBars because the two draw different data and answer different questions: GradeBars draws
+   `dashboard.grade_mix` (LISTED units only - the storefront-facing mix) while this draws
+   `inventory.by_grade` (every unit that carries a grade - the same map /admin's breakdown table
+   used to print). Both are real payload maps; the headings say which one is on screen.
+
+   EVERY exact number survives the conversion. No segment carries text of its own, and the legend
+   under the bar prints each grade's label and its count - including a grade at zero, which draws
+   no segment and would otherwise vanish from the chart entirely. The whole-set figure is printed
+   under the legend, and it is the ONE number on this page that is summed in the browser rather
+   than read from the payload: `inventory.by_grade` has no total field, and a whole-width bar
+   cannot be drawn without its whole. It is labelled as the sum it is, so it cannot be mistaken
+   for a field the API sent. */
+export function GradeStack({ segments }: { segments: Slice[] }) {
+  const total = segments.reduce((n, s) => n + s.value, 0);
+  const share = (v: number) => (total > 0 ? `${(v / total) * 100}%` : "0%");
+  return (
+    <div>
+      {/* The bar is bounded by the app's own hairline rather than filled with a recessed tone: a
+          fill that is nothing but a darker step of the card reads as no bar at all when the whole
+          set is zero, and the hairline is the boundary every other panel on this surface uses. */}
+      <div className="flex h-7 w-full gap-[2px] overflow-hidden rounded-full ring-1 ring-line" role="img"
+           aria-label={`Units by grade: ${segments.map((s) => `grade ${s.label} ${s.value}`).join(", ")}; ${total} units carry a grade`}>
+        {segments.filter((s) => s.value > 0).map((s) => (
+          <span key={s.key} className="h-full" style={{ width: share(s.value), backgroundColor: gradeToken(s.key) }} />
+        ))}
+      </div>
+      {/* The legend is mandatory, not decoration: identity and the exact count live here, because
+          the segments themselves carry no text. */}
+      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+        {segments.map((s) => (
+          <li key={s.key} className="flex items-center gap-1.5 text-xs">
+            <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: gradeToken(s.key) }} />
+            <span className="text-ink-600">Grade {s.label}</span>
+            <span className="tabular-nums text-ink-900">{s.value}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1 text-xs text-ink-500">
+        {total.toLocaleString("en-AU")} units carry a grade - the sum of the segments above, since
+        the API reports no graded-units total of its own.
+      </p>
+    </div>
+  );
+}
+
 /* The mini-sparkline the brief asks the Revenue and Inventory cards to carry.
 
    THE PAYLOAD HAS NO SERIES, and this is the one briefed element that needs backend data. GET
    /staff/overview reports `dashboard.revenue_last_7d_cents` and `stock_value.listed_units` as
    single figures; it carries no per-day revenue (or per-day anything), and nothing else in it is
    a time series - inventory.by_status, grade_mix, category_mix and orders.by_state are
-   distributions, team_activity is per-actor, audit_feed is a capped list of events. So the page
-   passes `series={null}` and the card renders the explicit unavailable state below.
+   distributions, team_activity is per-actor, audit_feed is a capped list of events. So both pages
+   pass `series={null}` - the dashboard for `dashboard.revenue_last_7d_cents`, /admin's pulse cards
+   for `orders.revenue_paid_cents_30d` and `stock_value.at_list_cents` - and the card renders the
+   explicit unavailable state below.
 
    The drawn branch is the shape the endpoint would have to carry - seven daily values - and it is
    deliberately NOT fed a made-up one: a plausible-looking trend line invented from a single

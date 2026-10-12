@@ -6,10 +6,10 @@ import { Card, Heading } from "@/app/components/ui";
 import { requireRole, useMe } from "@/lib/session";
 import { aud } from "@/lib/format";
 import { NOTICE_TONE } from "@/app/components/dashboard/tokens";
-import { GradeBars, Sparkline, StatusDonut, type Slice } from "./charts";
+import { GradeBars, Sparkline, StatusDonut, type Slice } from "@/app/components/dashboard/charts";
 import AttentionFeed, { type FeedItem } from "./attention";
-import KpiTile from "./kpi";
-import PipelineMap, { type PipelineStage } from "./pipeline";
+import KpiTile from "@/app/components/dashboard/KpiTile";
+import PipelineMap, { lifecycleStages, stuckNote } from "@/app/components/dashboard/PipelineMap";
 
 /* /admin/dashboard - the operations view: the lifecycle pipeline, four glass headline numbers,
    two hand-rolled SVG charts, the week's leaderboard, and the attention feed.
@@ -39,29 +39,9 @@ type Overview = {
   };
 };
 
-/* The four lifecycle stages the pipeline map draws, in the order a unit walks them. `count` is
-   read from `inventory.by_status` (the same zero-filled map the donut draws, so the two can never
-   disagree) and a `backlog` is set only where the payload attributes work to ONE stage:
-   Received -> lots_stuck (lots in intake past 14 days), Graded -> pricing_pending. Tested and
-   Listed have none, because the payload's `stuck_assets.count` covers received AND tested
-   together and nothing in it flags listed stock; that shared figure is printed under the map
-   rather than split in half here. A key the payload omits renders "not reported by the API". */
-function stagesFor(byStatus: Record<string, number>, d: Overview["dashboard"]): PipelineStage[] {
-  const count = (key: string): number | null => {
-    const n = byStatus[key];
-    return typeof n === "number" ? n : null;
-  };
-  return [
-    { key: "received", label: "Received", count: count("received"),
-      backlog: d.lots_stuck.count > 0
-        ? { count: d.lots_stuck.count, label: "lots awaiting activation" } : undefined },
-    { key: "tested", label: "Tested", count: count("tested") },
-    { key: "graded", label: "Graded", count: count("graded"),
-      backlog: d.pricing_pending > 0
-        ? { count: d.pricing_pending, label: "unpriced, cannot be listed" } : undefined },
-    { key: "listed", label: "Listed", count: count("listed") },
-  ];
-}
+/* The four lifecycle stages and the map's own note both live in the shared PipelineMap module,
+   because /admin draws the same map from the same endpoint: one definition of which node owns
+   which backlog, not two. */
 
 /* The attention feed's rows, each pointing at the page that can act on it. The counts are the
    payload's; only the route, the wording and the severity live here. Severity is this page's
@@ -116,18 +96,16 @@ export default function DashboardPage() {
     ? Object.entries(d.grade_mix).map(([key, value]) => ({ key, label: key, value }))
     : [];
 
-  const pipeline = data && d ? stagesFor(data.inventory.by_status, d) : [];
+  const pipeline = data && d
+    ? lifecycleStages(data.inventory.by_status, {
+        lotsStuck: d.lots_stuck.count,
+        pricingPending: d.pricing_pending,
+      })
+    : [];
   const alerts: FeedItem[] = d ? feedFor(d) : [];
 
   /* The one thing the map cannot say per node: the payload's stuck count spans two stages. */
-  const pipelineNote = d
-    ? "A stage counts the units currently in it, from the same inventory.by_status the donut " +
-      "draws. " +
-      (d.stuck_assets.count > 0
-        ? `${d.stuck_assets.count} units have sat in Received or Tested for over 7 days - the ` +
-          "API reports those two stages together, so the count is not attributed to either node."
-        : "No unit has sat in Received or Tested for over 7 days.")
-    : undefined;
+  const pipelineNote = d ? stuckNote(d.stuck_assets.count) : undefined;
 
   const categories = d ? Object.entries(d.category_mix) : [];
 
