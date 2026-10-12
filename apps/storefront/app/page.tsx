@@ -85,7 +85,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
         </div>
       </section>)}
 
-      <section id="shop" className="max-w-6xl mx-auto px-4 pt-16 pb-20">
+      {/* pt-12, not pt-16: the gap above "Our products" closes onto the best-sellers grid, which is
+          the pairing a shopper reads as one shelf ("everything else"), while the gaps between the
+          page's other sections keep their own rhythm. 48px against the 64px it was. */}
+      <section id="shop" className="max-w-6xl mx-auto px-4 pt-12 pb-20">
         <Heading level="h2">Our products</Heading>
         <LoadMore initial={catalog.items ?? []} applied={catalog.applied ?? filters}
           brands={catalog.brands ?? []} categories={cats} />
