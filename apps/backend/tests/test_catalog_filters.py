@@ -356,3 +356,176 @@ def test_the_unfiltered_query_is_the_one_this_endpoint_has_always_run():
     assert "AND b.slug = :brand" in store_catalog._catalog_sql(None, "apple", None, None, None, "featured")
     assert store_catalog._catalog_sql(None, None, None, None, None, "price_asc").endswith(
         "ORDER BY min(a.sale_price_cents), p.title\nLIMIT :lim OFFSET :off")
+
+
+async def _facets(client, query: str) -> dict:
+    """The brand facet as {slug: n}, for the filters in `query`."""
+    r = await client.get("/store/catalog?limit=100&with_filters=1&" + query)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert isinstance(body, dict) and "brands" in body, body
+    return {b["slug"]: b["n"] for b in body["brands"]}
+
+
+async def test_the_brand_facet_only_offers_brands_the_category_has(client):
+    """The facet answers for what the shopper is looking at, not for the whole shop.
+
+    Seeded stock cannot prove this - a brand with nothing anywhere and a brand with nothing HERE look
+    identical in a list that was never scoped - so both sides of the assertion are rows this test
+    stages: a Kingston in Accessories and a Seagate in Laptops. Under Accessories the Seagate must be
+    gone, and unfiltered it must be there, which is what makes the first half the category's doing
+    rather than the fixture's absence.
+    """
+    h, email = await _staff(client)
+    stamp = uuid.uuid4().hex[:8]
+    products: list[int] = []
+    try:
+        # Read the facets BEFORE staging. A brand can be present in a category for reasons this test
+        # did not cause - the shop's own stock is the owner's - so the reading of the same filtered
+        # query before and after is the only evidence that isolates these two rows.
+        before_acc = await _facets(client, "category=accessories")
+        before_lap = await _facets(client, "category=laptops")
+
+        products.append(await _staged(client, h, "pytest-facet-acc-" + stamp, KINGSTON, "accessories",
+                                      [("B", 9900)]))
+        products.append(await _staged(client, h, "pytest-facet-lap-" + stamp, SEAGATE, "laptops",
+                                      [("B", 19900)]))
+
+        acc = await _facets(client, "category=accessories")
+        lap = await _facets(client, "category=laptops")
+
+        # each fixture counted once, in its OWN category's facet...
+        assert acc[KINGSTON] == before_acc.get(KINGSTON, 0) + 1, sorted(acc.items())
+        assert lap[SEAGATE] == before_lap.get(SEAGATE, 0) + 1, sorted(lap.items())
+
+        # ...and not at all in the other's
+        assert lap.get(KINGSTON, 0) == before_lap.get(KINGSTON, 0), \
+            "an accessories Kingston must not appear on the Laptops facet"
+        assert acc.get(SEAGATE, 0) == before_acc.get(SEAGATE, 0), \
+            "a Laptops Seagate must not appear on the Accessories facet"
+
+        everything = await _facets(client, "")
+        assert everything[KINGSTON] >= 1 and everything[SEAGATE] >= 1, "unfiltered, both are on offer"
+    finally:
+        await _archive(products)
+        await _drop_staff(email)
+
+
+async def test_the_brand_facet_follows_the_text_term(client):
+    h, email = await _staff(client)
+    stamp = uuid.uuid4().hex[:8]
+    term = "facetterm" + stamp
+    products: list[int] = []
+    try:
+        # two accessories: one whose title carries the term, one whose title does not
+        products.append(await _staged(client, h, "pytest-facet-" + term + "-a", SEAGATE, "accessories",
+                                      [("B", 9900)]))
+        products.append(await _staged(client, h, "pytest-facet-other-" + stamp, KINGSTON, "accessories",
+                                      [("B", 9900)]))
+
+        both = await _facets(client, "category=accessories")
+        assert SEAGATE in both and KINGSTON in both, sorted(both)
+
+        scoped = await _facets(client, "category=accessories&q=" + term)
+        assert SEAGATE in scoped, "the brand of the product the term found stays on offer"
+        assert KINGSTON not in scoped, \
+            "a brand whose products do not carry the term is not on offer while it is in force"
+    finally:
+        await _archive(products)
+        await _drop_staff(email)
+
+
+async def test_the_brand_facet_follows_the_unit_filters(client):
+    """Behind a grade-A view, a brand whose only units are grade D is nothing - so it is not offered.
+
+    The unit-level filters narrow which UNITS count rather than which products exist, so the facet has
+    to answer for them too; anything else would hand the shopper a brand and then an empty grid.
+
+    Every expectation here is a delta between the same filtered query read before and after staging,
+    because the brand in question is one the shop already stocks: the seeded Seagate BarraCuda sits in
+    Parts with one grade-A and one grade-D unit, so an assertion like "seagate is absent under grade A"
+    would be false for a reason that has nothing to do with this test. What the fixture can prove is
+    its OWN contribution - +1 under the filters it matches, +0 under those it does not.
+    """
+    h, email = await _staff(client)
+    stamp = uuid.uuid4().hex[:8]
+    products: list[int] = []
+    try:
+        plain = await _facets(client, "category=parts")
+        only_a = await _facets(client, "category=parts&grade=A")
+        only_d = await _facets(client, "category=parts&grade=D")
+        under_5000 = await _facets(client, "category=parts&max_cents=5000")
+        over_10000 = await _facets(client, "category=parts&min_cents=10000")
+
+        products.append(await _staged(client, h, "pytest-facet-grada-" + stamp, KINGSTON, "parts",
+                                      [("A", 19900)]))
+        products.append(await _staged(client, h, "pytest-facet-gradd-" + stamp, SEAGATE, "parts",
+                                      [("D", 4900)]))
+
+        after = await _facets(client, "category=parts")
+        assert after[KINGSTON] == plain.get(KINGSTON, 0) + 1, sorted(after.items())
+        assert after[SEAGATE] == plain.get(SEAGATE, 0) + 1, sorted(after.items())
+
+        # grade: the fixtures count only under the grade each one actually has
+        a = await _facets(client, "category=parts&grade=A")
+        assert a[KINGSTON] == only_a.get(KINGSTON, 0) + 1, sorted(a.items())
+        assert a.get(SEAGATE, 0) == only_a.get(SEAGATE, 0), \
+            "the grade-D fixture must add nothing to the grade-A facet"
+        d = await _facets(client, "category=parts&grade=D")
+        assert d[SEAGATE] == only_d.get(SEAGATE, 0) + 1, sorted(d.items())
+        assert d.get(KINGSTON, 0) == only_d.get(KINGSTON, 0), \
+            "the grade-A fixture must add nothing to the grade-D facet"
+
+        # price band, from the same shared unit predicates
+        cheap = await _facets(client, "category=parts&max_cents=5000")
+        assert cheap[SEAGATE] == under_5000.get(SEAGATE, 0) + 1, sorted(cheap.items())
+        assert cheap.get(KINGSTON, 0) == under_5000.get(KINGSTON, 0), \
+            "the 19900 fixture must add nothing under $50"
+        pricey = await _facets(client, "category=parts&min_cents=10000")
+        assert pricey[KINGSTON] == over_10000.get(KINGSTON, 0) + 1, sorted(pricey.items())
+        assert pricey.get(SEAGATE, 0) == over_10000.get(SEAGATE, 0), \
+            "the 4900 fixture must add nothing over $100"
+    finally:
+        await _archive(products)
+        await _drop_staff(email)
+
+
+async def test_a_selected_brand_does_not_take_the_other_brands_off_the_list(client):
+    """The facet must not filter itself: with one brand chosen the rest stay switchable."""
+    h, email = await _staff(client)
+    stamp = uuid.uuid4().hex[:8]
+    products: list[int] = []
+    try:
+        products.append(await _staged(client, h, "pytest-facet-self-k-" + stamp, KINGSTON, "parts",
+                                      [("B", 9900)]))
+        products.append(await _staged(client, h, "pytest-facet-self-s-" + stamp, SEAGATE, "parts",
+                                      [("B", 8900)]))
+
+        chosen = await _facets(client, "category=parts&brand=kingston")
+        assert SEAGATE in chosen, \
+            "the other brands must survive a brand filter, or the shopper is stranded on one: " + str(sorted(chosen))
+        assert KINGSTON in chosen, "the brand in force belongs on its own list"
+        assert chosen[SEAGATE] >= 1
+    finally:
+        await _archive(products)
+        await _drop_staff(email)
+
+
+def test_the_unfiltered_facet_query_is_the_one_this_endpoint_has_always_run():
+    """The facet's additive promise, held the same way the list's is: as a property of the statement."""
+    sql = store_catalog._brand_facet_sql(None, None, None, None, None)
+    assert sql == store_catalog.CATALOG_BRANDS.replace("%CAT%", "").replace("%UNIT%", "")
+    assert "%" not in sql, "a placeholder that did not expand would be a broken statement"
+    for leak in ("a.grade", "a.sale_price_cents", "search_vec", "c.name =", "b.slug ="):
+        assert leak not in sql, "an unset filter leaked into the facet statement: " + leak
+
+    # Each filter adds its own clause, and only its own.
+    assert "AND (c.name = :cat OR c.slug = :cat)" in store_catalog._brand_facet_sql("parts", None, None, None, None)
+    assert "AND p.search_vec @@ websearch_to_tsquery('english', :q)" in store_catalog._brand_facet_sql(
+        None, "dock", None, None, None)
+    assert "AND a.grade = :grade" in store_catalog._brand_facet_sql(None, None, "A", None, None)
+    assert "AND a.sale_price_cents <= :max_cents" in store_catalog._brand_facet_sql(None, None, None, None, 5000)
+
+    # ...and the facet NEVER filters by brand - that absence is the self-exclusion, not an omission
+    assert "b.slug = :brand" not in store_catalog._brand_facet_sql(None, None, None, None, None)
+    assert "b.slug = :brand" not in store_catalog._brand_facet_sql("parts", None, "A", 100, 5000)

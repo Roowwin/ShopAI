@@ -51,21 +51,84 @@ BRAND_SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,79}\Z")
 MAX_CENTS = 100_000_000     # $1,000,000 - a ceiling for the parameter, not a business rule
 MAX_Q = 100                 # a search term, not a paragraph; the URL layer drops anything longer
 
-# The brands a shopper can filter by, and how many products each actually has on the shelf. Live
-# from the same tables as the list, so a chip can never offer a brand with nothing behind it.
+# The brands a shopper can filter by, and how many products each actually has BEHIND IT - where
+# "behind it" means inside what the shopper is looking at, not across the whole shop. This query
+# carries the list's own placeholders: the same product-level clauses in its WHERE and the same
+# unit-level ones on its assets join, so both statements are built from ONE description of the
+# filters and cannot drift apart when a filter is added.
+#
+# The one filter deliberately absent is the BRAND itself. A facet that filtered itself would shrink
+# to the brand already chosen and leave the shopper no way to switch, so the caller passes the other
+# filters in force and never this one - and the parameter is simply None, which needs no flag.
 CATALOG_BRANDS = """
 SELECT b.slug, b.name, count(DISTINCT p.id) AS n
 FROM brands b
-JOIN products p ON p.brand_id = b.id AND p.status = 'active'
+JOIN products p ON p.brand_id = b.id
+JOIN categories c ON c.id = p.category_id
 JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
-             AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
+             AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')%UNIT%
+WHERE p.status = 'active' %CAT%
 GROUP BY b.slug, b.name
 HAVING count(DISTINCT a.id) > 0
 ORDER BY b.name"""
 
 
-async def _brand_facets(db) -> list:
-    rows = (await db.execute(text(CATALOG_BRANDS))).mappings().all()
+def _product_clauses(category: str | None, brand: str | None, q: str | None) -> list[str]:
+    """The predicates that decide WHICH PRODUCTS exist. The list and the facet both build from these.
+
+    The predicate is written once and used by both, because the failure mode is not a wrong clause -
+    it is one query learning a filter the other never hears about. `brand=None` is how the facet
+    excludes itself: no flag to remember, no branch to forget.
+    """
+    where = []
+    if category:
+        where.append("AND (c.name = :cat OR c.slug = :cat)")
+    if brand:
+        where.append("AND b.slug = :brand")
+    if q:
+        where.append("AND p.search_vec @@ websearch_to_tsquery('english', :q)")
+    return where
+
+
+def _unit_clauses(grade: str | None, min_cents: int | None, max_cents: int | None) -> str:
+    """The predicates that decide WHICH UNITS count. They hang off the assets join rather than the
+    WHERE, so the joined set is exactly "the shopper's units" and the counts describe those."""
+    unit = ""
+    if grade:
+        unit += " AND a.grade = :grade"
+    if min_cents is not None:
+        unit += " AND a.sale_price_cents >= :min_cents"
+    if max_cents is not None:
+        unit += " AND a.sale_price_cents <= :max_cents"
+    return unit
+
+
+def _brand_facet_sql(category: str | None, q: str | None, grade: str | None,
+                     min_cents: int | None, max_cents: int | None) -> str:
+    """The Brand facet's statement for the filters in force.
+
+    Unfiltered this is CATALOG_BRANDS with both placeholders expanded to nothing - the statement this
+    endpoint has always run for the facet, character for character.
+    """
+    return (CATALOG_BRANDS.replace("%CAT%", " ".join(_product_clauses(category, None, q)))
+            .replace("%UNIT%", _unit_clauses(grade, min_cents, max_cents)))
+
+
+async def _brand_facets(db, *, category: str | None, q: str | None, grade: str | None,
+                        min_cents: int | None, max_cents: int | None) -> list:
+    sql = _brand_facet_sql(category, q, grade, min_cents, max_cents)
+    params: dict = {}
+    if category:
+        params["cat"] = category
+    if q:
+        params["q"] = q
+    if grade:
+        params["grade"] = grade
+    if min_cents is not None:
+        params["min_cents"] = min_cents
+    if max_cents is not None:
+        params["max_cents"] = max_cents
+    rows = (await db.execute(text(sql), params)).mappings().all()
     return [{"slug": r["slug"], "name": r["name"], "n": int(r["n"])} for r in rows]
 
 
@@ -85,20 +148,8 @@ def _catalog_sql(category: str | None, brand: str | None, grade: str | None,
     cannot pull it in. `websearch_to_tsquery` is the function for raw shopper input - it is built to
     take whatever they type and never raises, which `to_tsquery` would.
     """
-    where = []
-    if category:
-        where.append("AND (c.name = :cat OR c.slug = :cat)")
-    if brand:
-        where.append("AND b.slug = :brand")
-    if q:
-        where.append("AND p.search_vec @@ websearch_to_tsquery('english', :q)")
-    unit = ""
-    if grade:
-        unit += " AND a.grade = :grade"
-    if min_cents is not None:
-        unit += " AND a.sale_price_cents >= :min_cents"
-    if max_cents is not None:
-        unit += " AND a.sale_price_cents <= :max_cents"
+    where = _product_clauses(category, brand, q)
+    unit = _unit_clauses(grade, min_cents, max_cents)
     return (CATALOG_SELECT.replace("%CAT%", " ".join(where)).replace("%UNIT%", unit)
             .replace(CATALOG_SORTS["featured"], CATALOG_SORTS.get(sort, CATALOG_SORTS["featured"])))
 
@@ -168,7 +219,8 @@ async def catalog(limit: int = Query(24, le=100), offset: int = 0,
     return {"items": items,
             "applied": {"category": category, "brand": brand, "grade": grade, "q": q,
                         "min_cents": min_cents, "max_cents": max_cents, "sort": applied_sort},
-            "brands": await _brand_facets(db)}
+            "brands": await _brand_facets(db, category=category, q=q, grade=grade,
+                                          min_cents=min_cents, max_cents=max_cents)}
 
 @router.get("/catalog/{slug}")
 async def catalog_item(slug: str, db=Depends(get_db)):
