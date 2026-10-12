@@ -105,8 +105,11 @@ export default function LoadMore({ initial, applied, categories, brands }: {
               onSelect={(v) => apply({ ...filters, brand: v })}
               open={openFacet === "brand"} onOpenChange={(o) => setOpenFacet(o ? "brand" : null)} />
           )}
+          {/* The option labels are bare letters, not "Grade B": the trigger already says "Grade", so a
+              prefixed option reads "Grade: Grade B" once one is picked. The chip row this replaced
+              carried its own label, which is why the prefix was there and is not needed now. */}
           <FacetDropdown label="Grade" value={filters.grade}
-            options={[ALL, ...GRADES.map((g) => ({ value: g, label: "Grade " + g }))]}
+            options={[ALL, ...GRADES.map((g) => ({ value: g, label: g }))]}
             onSelect={(v) => apply({ ...filters, grade: v })}
             open={openFacet === "grade"} onOpenChange={(o) => setOpenFacet(o ? "grade" : null)} />
           <FacetDropdown label="Price" value={bandValue}
