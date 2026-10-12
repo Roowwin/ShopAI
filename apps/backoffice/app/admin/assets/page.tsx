@@ -132,7 +132,8 @@ export default function AssetsPage() {
                   className={"cursor-pointer " + ROW_FOCUS + " " + (on ? "bg-brand-50" : "hover:bg-surface-muted")}
                   onClick={(e) => { e.currentTarget.focus(); setOpenId(a.id); }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenId(a.id); }
+                    if (e.target !== e.currentTarget) { return; }   // only the row itself - a descendant owns its own Space/Enter
+              if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenId(a.id); }
                   }}
                 >
                   {/* The cell swallows the press so a tick never also opens the panel - one press,
