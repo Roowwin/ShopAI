@@ -1,14 +1,15 @@
 import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "./cn";
 
-/* light = the card fill, the default for form rows; sunken = the raised fill, for a field that sits
-   on the page ground and needs to lift off it; dark = the inverse fill, a well on a dark surface. All
-   three carry a focus highlight, which the pre-design-system inputs did not.
+/* light = the card fill, the default for form rows; sunken = the page ground itself, for a field that
+   separates from a CARD rather than from the page; dark = the inverse fill, a well on a dark surface.
+   All three carry a focus highlight, which the pre-design-system inputs did not.
 
    The placeholder tone is picked against the tone's OWN fill, and on a dark ground the steps run the
-   other way: the card takes the middle ink (6.96:1), the raised fill takes the stronger one (9.85:1),
-   and the inverse fill takes the dim one (5.80:1) - which is the one place that dim step is the right
-   answer rather than a compromise. All three clear 4.5:1 against the fill they sit on.
+   other way: the card takes the middle ink (6.96:1), the raised band takes the stronger one (9.85:1),
+   and the inverse fill takes the dim one (~5.8:1). All three clear 4.5:1 against the fill they sit on.
+
+   The sunken tone has no call site in this app; it is kept in step with the storefront's header search.
 
    The dark tone's ring is a hairline like the other two: it used to be ink-700, which on the old
    palette was a subtle slate border and is now near-white - a 17:1 border on a near-black field. */
