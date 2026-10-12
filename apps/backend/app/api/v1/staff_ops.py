@@ -547,7 +547,8 @@ async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_
     # One row over the cap, so "was it cut?" is answered by the data rather than by `len == cap`.
     rows = (await db.execute(text("""
         SELECT a.id, a.public_id::text AS public_id, a.serial_number::text AS serial_number,
-               a.status, a.grade, a.product_id, a.notes, p.title AS product_title
+               a.status, a.grade, a.product_id, a.notes,
+               p.title AS product_title, p.model AS product_model
         FROM assets a LEFT JOIN products p ON p.id = a.product_id
         WHERE """ + where + """
         ORDER BY a.id LIMIT :lim
@@ -566,7 +567,8 @@ async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_
         "scope": scope,
         "assets": [{"id": r["id"], "public_id": r["public_id"], "serial_number": r["serial_number"],
                     "status": r["status"], "grade": r["grade"], "product_id": r["product_id"],
-                    "product_title": r["product_title"], "notes": r["notes"],
+                    "product_title": r["product_title"], "product_model": r["product_model"],
+                    "notes": r["notes"],
                     "gradable": r["status"] in _GRADABLE_STATUSES,
                     "ready_for_pricing": r["grade"] is not None and r["status"] == "graded"}
                    for r in rows],

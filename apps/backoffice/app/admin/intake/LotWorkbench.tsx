@@ -42,6 +42,7 @@ type WorkUnit = {
   grade: string | null;
   product_id: number | null;
   product_title: string | null;
+  product_model: string | null;
   notes: string | null;
   gradable: boolean;
   ready_for_pricing: boolean;
@@ -187,16 +188,19 @@ export default function LotWorkbench() {
 
   return (
     <div className="space-y-6">
-      <Card className="p-6">
-        <Heading level="h3" as="h2">Find a unit</Heading>
-        <p className="mt-1 pb-4 text-xs text-ink-500">
-          Search by lot number, asset id or serial number. A lot number opens the whole lot; an
-          asset id or serial opens that one unit inside its lot.
+      {/* THE HERO. This is the view the page opens on and the one a grader lives in, so it is
+          first, widest and the only thing above the fold that asks for input. Stage 1 on this page
+          is Import, but Import is the occasional job - grading is the daily one. */}
+      <Card className="p-6 shadow-glow-sm ring-brand-100">
+        <Heading level="h3" as="h2">Find a lot, asset or serial</Heading>
+        <p className="mt-1 pb-4 text-sm text-ink-500">
+          Type a lot number to open its grading queue, or an asset id or serial number to jump
+          straight to one unit inside its lot.
         </p>
         <div className="flex flex-wrap gap-3">
-          <div className="min-w-[14rem] flex-1">
+          <div className="min-w-[16rem] flex-1">
             <Input
-              placeholder="LOT-2026-00050, 14543, or a serial"
+              placeholder="LOT-2026-00050, 14543, or a serial number"
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
@@ -205,8 +209,8 @@ export default function LotWorkbench() {
               aria-label="Lot number, asset id or serial number"
             />
           </div>
-          <Button onClick={() => load(text.trim(), scope)} disabled={busy || !text.trim()}>
-            {busy ? "Searching..." : "Search"}
+          <Button size="lg" onClick={() => load(text.trim(), scope)} disabled={busy || !text.trim()}>
+            {busy ? "Searching..." : "Open"}
           </Button>
         </div>
 
@@ -280,7 +284,7 @@ export default function LotWorkbench() {
           <Card className="p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Heading level="h3" as="h2">
-                {list.match.kind === "asset" ? "The matching unit" : "Units in this lot"}
+                {list.match.kind === "asset" ? "The matching unit" : "Grading queue"}
               </Heading>
               {/* A segmented control, not a tablist: both options show the same table under one
                   heading, and there are no panels to wire. */}
@@ -315,7 +319,8 @@ export default function LotWorkbench() {
             ) : (
               <>
                 <p className="mt-1 pb-3 text-xs text-ink-500">
-                  One press grades one unit; pressing a different letter replaces the grade it
+                  One press grades one unit and it leaves this list immediately, ready for the
+                  store manager to price. Pressing a different letter replaces a grade the unit
                   already has. A unit that has not been tested is marked tested on the way through -
                   the database will not let a unit skip that step, and both steps are written to the
                   audit trail.
@@ -323,7 +328,7 @@ export default function LotWorkbench() {
                 <Table label={`Units in lot ${list.lot.lot_number}`}>
                   <THead>
                     <TH>Serial</TH>
-                    <TH>Product</TH>
+                    <TH>Model</TH>
                     <TH>Status</TH>
                     <TH>Grade</TH>
                     <TH>Description</TH>
@@ -339,7 +344,10 @@ export default function LotWorkbench() {
                             </div>
                           )}
                         </TD>
-                        <TD className="text-ink-600">{u.product_title ?? "-"}</TD>
+                        {/* The model, falling back to the product's title: an imported product is
+                            created with both set to the sheet's Model column, so one of them is
+                            always there for a unit that has a product at all. */}
+                        <TD className="text-ink-600">{u.product_model ?? u.product_title ?? "-"}</TD>
                         <TD><Badge colorClass={statusTone(u.status)}>{u.status}</Badge></TD>
                         <TD>
                           {u.gradable ? (

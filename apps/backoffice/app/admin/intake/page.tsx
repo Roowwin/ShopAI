@@ -91,19 +91,14 @@ function StageStrip() {
   );
 }
 
-/* One numbered stage of the funnel. The number is decorative and hidden from assistive tech -
-   the heading beside it already carries the name, and an ordered list that repeats its index in
-   every item is noise when read aloud. */
-function Stage({ n, title, note, children }: { n: number; title: string; note?: string; children: ReactNode }) {
+/* One stage of the pipeline. It carries NO number: this page is ordered by who is doing the work
+   and how often, not by the pipeline's sequence, so a big "1" on the second block down would be
+   the page arguing with itself. The sequence lives on the strip above, which is the one place it
+   is stated. */
+function Stage({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
   return (
     <section className="space-y-5">
       <div className="flex flex-wrap items-baseline gap-3 border-b border-line pb-3">
-        <span
-          aria-hidden="true"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-700 text-sm font-semibold text-white"
-        >
-          {n}
-        </span>
         <Heading level="h2" as="h2">{title}</Heading>
         {note && <p className="text-xs text-ink-500">{note}</p>}
       </div>
@@ -305,14 +300,23 @@ export default function IntakePage() {
       <div>
         <Heading level="h1">Lot Process</Heading>
         <p className="mt-1 text-sm text-ink-500">
-          The stock pipeline, top to bottom: bring units in, grade them, then price and list them.
-          Everything is confirmed by you.
+          Grade a lot's units - search for the lot and work down the queue. Bringing stock in,
+          pricing and listing are the stages around it. Everything is confirmed by you.
         </p>
       </div>
 
       <StageStrip />
 
-      <Stage n={1} title="Import" note="A product sheet, or one photo and one serial at a time.">
+      <Stage title="Grading queue" note="Stage 2. The daily work - grade what came in.">
+        <LotWorkbench />
+      </Stage>
+
+      <Stage title="Import" note="Stage 1. The occasional job, so it sits under the queue.">
+      <details className="rounded-card bg-surface ring-1 ring-line">
+        <summary className="cursor-pointer rounded-card px-6 py-4 text-sm font-semibold text-ink-600 transition-colors duration-fast ease-out motion-reduce:transition-none hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700">
+          Open the intake tools &ndash; product sheet, photo &amp; scan
+        </summary>
+        <div className="space-y-6 border-t border-line p-6">
       <ProductImportPanel />
 
       <div className="border-t border-line pt-6">
@@ -427,25 +431,25 @@ export default function IntakePage() {
 
       {msg && <p className="text-brand-300 text-sm">{msg}</p>}
       {err && <p className="text-danger-600 text-sm">{err}</p>}
+        </div>
+      </details>
       </Stage>
 
-      <Stage n={2} title="Process" note="Grade what came in. A graded unit is ready to price.">
-        <LotWorkbench />
-      </Stage>
-
-      <Stage n={3} title="Price" note="Not built yet.">
+      <Stage title="Price" note="Stage 3. Not built yet.">
         <Card className="p-6">
           <p className="text-sm text-ink-500">
-            Price evaluation is not built, so this stage draws nothing rather than an empty box.
-            Nothing on this page sets a price and no placeholder price is invented for one - units
-            are priced from the Asset Workbench until this stage exists. Every unit the workbench
-            marks <span className="font-semibold text-ink-600">Ready for pricing</span> is what this
-            stage will read when it is written.
+            The store manager's half of the pipeline: the grading queue takes a unit
+            received &rarr; graded, and this stage takes it graded &rarr; priced &rarr; listed. It
+            is not built, so it draws nothing rather than an empty box - nothing on this page sets a
+            price and no placeholder price is invented for one. Units are priced from the Asset
+            Workbench until this stage exists. Every unit the grading queue marks{" "}
+            <span className="font-semibold text-ink-600">Ready for pricing</span> is what this stage
+            will read when it is written.
           </p>
         </Card>
       </Stage>
 
-      <Stage n={4} title="List" note="Not built yet.">
+      <Stage title="List" note="Stage 4. Not built yet.">
         <Card className="p-6">
           <p className="text-sm text-ink-500">
             Listing is not a pipeline stage yet. A unit reaches the shop today by being listed from
