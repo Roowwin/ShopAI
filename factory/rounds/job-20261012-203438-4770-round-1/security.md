@@ -1,0 +1,9 @@
+# Security review - job-20261012-203438-4770 (Command Center J2)
+
+- No new data path or exposure: the sole fetch is the unchanged `apiFetch("/staff/overview")` (page.tsx:93, one call, no new param) and the guard `requireRole(me, ["admin","manager"])` (page.tsx:88) is byte-identical to base; every field now rendered (inventory.by_status, pricing_pending, stuck_assets.*, lots_stuck.*, stock_value.listed_units) was already in the base Overview type and base render, so the payload surface a manager sees is not widened.
+- JSX text only: no dangerouslySetInnerHTML / innerHTML / eval / Function / document.write anywhere in the diff; API strings go through React children - `{item.detail}` (attention.tsx:74) carries `stuck_assets.oldest_serial_number` as escaped text, counts/labels at attention.tsx:69,73, pipeline.tsx:113-118; alert text is NOT rendered as HTML.
+- Link targets are page-local literals, not payload: attention.tsx:67 renders `href={item.href}` where href is set only to "/admin/assets" / "/admin/intake" in feedFor (page.tsx:73-81) - no API-supplied URL, so no javascript:/open-redirect vector.
+- No client storage or credentials added: grep of the full diff for localStorage/sessionStorage/indexedDB/document.cookie/Authorization/Bearer/token returns only prose about colour tokens; no cookie or auth-header write exists in the change.
+- Scope exact and shadows are self-contained: name-status is page.tsx + 3 new components + charts.tsx + tailwind.config.ts only - nothing under apps/backend, storefront, .env, secrets/, infra/ or factory/, and package.json is untouched (no dependency); the new glow values are `rgb(var(--danger-600)/a)` / `rgb(var(--accent-400)/a)` with no url()/http/data: reference, and Sparkline is hard-wired `series={null}` (page.tsx:157,162) so no fabricated trend data renders.
+
+VERDICT: PASS
