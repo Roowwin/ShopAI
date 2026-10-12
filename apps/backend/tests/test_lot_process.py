@@ -74,7 +74,9 @@ async def test_worklist_reports_progress_and_the_awaiting_queue(client):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["lot"]["lot_number"] == lot_number
-    assert body["progress"] == {"total_units": 3, "graded_units": 0, "awaiting_grade_units": 3}
+    assert body["progress"] == {"total_units": 3, "received_units": 3, "graded_units": 0,
+                                "awaiting_grade_units": 3, "ready_for_pricing_units": 0}
+    assert body["match"] == {"kind": "lot", "resolved_by": "lot_number", "term": None}
     assert [a["id"] for a in body["assets"]] == ids
     assert all(a["grade"] is None for a in body["assets"])
     assert body["truncated"] is False
@@ -84,7 +86,8 @@ async def test_worklist_reports_progress_and_the_awaiting_queue(client):
                           json={"grade": "B", "test_first": True}, headers=_h(tok))
     assert g.status_code == 200, g.text
     after = (await client.get(f"/staff/lots/worklist?lot_id={lot_id}", headers=_h(tok))).json()
-    assert after["progress"] == {"total_units": 3, "graded_units": 1, "awaiting_grade_units": 2}
+    assert after["progress"] == {"total_units": 3, "received_units": 2, "graded_units": 1,
+                                 "awaiting_grade_units": 2, "ready_for_pricing_units": 1}
     assert ids[0] not in [a["id"] for a in after["assets"]]
 
 
@@ -187,3 +190,184 @@ async def test_worklist_is_closed_to_a_non_manager(client):
 
     g = await client.post(f"/staff/assets/{ids[0]}/grade", json={"grade": "A"}, headers=_h(await _staff(client, "sales")))
     assert g.status_code == 403, g.text
+
+
+async def test_universal_search_resolves_lot_serial_and_asset_id(client):
+    """One box, three handles - and the payload says which rule matched."""
+    tag = _tag()
+    tok = await _staff(client, "admin")
+    _, lot_number, ids = await _lot_with_units(client, tok, tag, 2)
+
+    by_lot = (await client.get(f"/staff/lots/worklist?q={lot_number}", headers=_h(tok))).json()
+    assert by_lot["match"]["resolved_by"] == "lot_number"
+    assert by_lot["match"]["kind"] == "lot"
+    assert [a["id"] for a in by_lot["assets"]] == ids
+
+    # `_lot_with_units` numbers its units from S0, so S1 is the SECOND asset in the lot.
+    by_serial = (await client.get(f"/staff/lots/worklist?q={tag}-S1", headers=_h(tok))).json()
+    assert by_serial["match"] == {"kind": "asset", "resolved_by": "serial", "term": f"{tag}-S1"}
+    assert [a["id"] for a in by_serial["assets"]] == [ids[1]]
+    # An asset match still carries its lot's progress, so the workbench has context either way.
+    assert by_serial["lot"]["lot_number"] == lot_number
+    assert by_serial["progress"]["total_units"] == 2
+
+    by_id = (await client.get(f"/staff/lots/worklist?q={ids[0]}", headers=_h(tok))).json()
+    assert by_id["match"]["resolved_by"] == "asset_id"
+    assert [a["id"] for a in by_id["assets"]] == [ids[0]]
+
+    # A serial is matched case-insensitively (the column is CITEXT).
+    upper = (await client.get(f"/staff/lots/worklist?q={tag.upper()}-S1", headers=_h(tok))).json()
+    assert [a["id"] for a in upper["assets"]] == [ids[1]]
+
+    nothing = await client.get("/staff/lots/worklist?q=pytest-nothing-matches-this", headers=_h(tok))
+    assert nothing.status_code == 404, nothing.text
+
+
+async def test_scope_all_shows_graded_units_and_unfinished_hides_them(client):
+    tag = _tag()
+    tok = await _staff(client, "admin")
+    _, lot_number, ids = await _lot_with_units(client, tok, tag, 3)
+    g = await client.post(f"/staff/assets/{ids[0]}/grade",
+                          json={"grade": "B", "test_first": True}, headers=_h(tok))
+    assert g.status_code == 200, g.text
+
+    unfinished = (await client.get(f"/staff/lots/worklist?q={lot_number}&scope=unfinished",
+                                   headers=_h(tok))).json()
+    assert ids[0] not in [a["id"] for a in unfinished["assets"]]
+    assert len(unfinished["assets"]) == 2
+
+    every = (await client.get(f"/staff/lots/worklist?q={lot_number}&scope=all",
+                              headers=_h(tok))).json()
+    assert sorted(a["id"] for a in every["assets"]) == sorted(ids)
+    assert every["scope"] == "all"
+    graded_row = next(a for a in every["assets"] if a["id"] == ids[0])
+    assert graded_row["grade"] == "B" and graded_row["ready_for_pricing"] is True
+
+    bad = await client.get(f"/staff/lots/worklist?q={lot_number}&scope=everything", headers=_h(tok))
+    assert bad.status_code == 422, bad.text
+
+
+async def test_a_grade_can_be_overwritten_and_the_audit_keeps_both(client):
+    tag = _tag()
+    tok = await _staff(client, "admin")
+    _, lot_number, ids = await _lot_with_units(client, tok, tag, 1)
+    asset_id = ids[0]
+    first = await client.post(f"/staff/assets/{asset_id}/grade",
+                              json={"grade": "C", "test_first": True}, headers=_h(tok))
+    assert first.status_code == 200, first.text
+    assert first.json()["stepped_through_tested"] is True
+
+    # A second press with a different letter replaces the grade; the status is already `graded`, so
+    # no transition is attempted and nothing is refused.
+    again = await client.post(f"/staff/assets/{asset_id}/grade",
+                              json={"grade": "A", "test_first": True}, headers=_h(tok))
+    assert again.status_code == 200, again.text
+    assert again.json()["grade"] == "A"
+    assert again.json()["stepped_through_tested"] is False
+    assert await _one("SELECT grade FROM assets WHERE id = :i", i=asset_id) == "A"
+
+    body = (await client.get(f"/staff/lots/worklist?q={lot_number}&scope=all", headers=_h(tok))).json()
+    assert body["progress"]["graded_units"] == 1, "an overwrite is not a second graded unit"
+    # The trail keeps every value it passed through, not just the last one.
+    assert await _audit_actions(asset_id) == ["scan_in", "test", "grade", "grade"]
+
+
+async def test_clearing_a_grade_returns_the_unit_to_the_unfinished_queue(client):
+    tag = _tag()
+    tok = await _staff(client, "admin")
+    _, lot_number, ids = await _lot_with_units(client, tok, tag, 2)
+    asset_id = ids[0]
+    await client.post(f"/staff/assets/{asset_id}/grade",
+                      json={"grade": "B", "test_first": True}, headers=_h(tok))
+
+    cleared = await client.post(f"/staff/assets/{asset_id}/grade", json={"grade": None}, headers=_h(tok))
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["grade"] is None
+    assert await _one("SELECT grade FROM assets WHERE id = :i", i=asset_id) is None
+
+    body = (await client.get(f"/staff/lots/worklist?q={lot_number}", headers=_h(tok))).json()
+    assert asset_id in [a["id"] for a in body["assets"]], "it is back in the unfinished queue"
+    assert body["progress"]["graded_units"] == 0
+    assert body["progress"]["ready_for_pricing_units"] == 0, "no grade means nothing to price"
+
+    # The status cannot be demoted - the trigger has no graded->tested edge - so the row says so
+    # rather than the handler inventing a transition the domain does not have.
+    assert await _one("SELECT status FROM assets WHERE id = :i", i=asset_id) == "graded"
+
+
+async def test_grade_omitted_from_the_body_is_still_refused(client):
+    """The old contract: a caller that forgets the grade is refused, not silently cleared."""
+    tag = _tag()
+    tok = await _staff(client, "admin")
+    _, _, ids = await _lot_with_units(client, tok, tag, 1)
+    r = await client.post(f"/staff/assets/{ids[0]}/grade", json={}, headers=_h(tok))
+    assert r.status_code == 422, r.text
+    assert "grade is required" in r.text
+    bad = await client.post(f"/staff/assets/{ids[0]}/grade", json={"grade": "Z"}, headers=_h(tok))
+    assert bad.status_code == 422, bad.text
+
+
+async def test_a_description_can_be_edited_and_the_edit_is_audited(client):
+    tag = _tag()
+    tok = await _staff(client, "admin")
+    _, lot_number, ids = await _lot_with_units(client, tok, tag, 1)
+    asset_id = ids[0]
+
+    note = "Screen cracked top-left; battery health 87%."
+    r = await client.post(f"/staff/assets/{asset_id}/notes", json={"notes": note}, headers=_h(tok))
+    assert r.status_code == 200, r.text
+    assert r.json()["notes"] == note
+    assert await _one("SELECT notes FROM assets WHERE id = :i", i=asset_id) == note
+
+    body = (await client.get(f"/staff/lots/worklist?q={lot_number}", headers=_h(tok))).json()
+    assert body["assets"][0]["notes"] == note
+
+    row = await _one(
+        "SELECT before::text || ' -> ' || after::text FROM audit_log"
+        " WHERE entity='asset' AND entity_id = :i AND action='edit_notes' ORDER BY id DESC LIMIT 1",
+        i=asset_id)
+    assert "battery health 87%" in row
+    assert await _audit_actions(asset_id) == ["scan_in", "edit_notes"]
+
+    # Blank clears it, so "no description" has one representation rather than two.
+    blank = await client.post(f"/staff/assets/{asset_id}/notes", json={"notes": "   "}, headers=_h(tok))
+    assert blank.status_code == 200, blank.text
+    assert blank.json()["notes"] is None
+    assert await _one("SELECT notes FROM assets WHERE id = :i", i=asset_id) is None
+
+
+async def test_description_edits_follow_the_grading_roles(client):
+    tag = _tag()
+    tok = await _staff(client, "admin")
+    _, _, ids = await _lot_with_units(client, tok, tag, 1)
+    for role in ("sales", "warehouse"):
+        other = await _staff(client, role)
+        r = await client.post(f"/staff/assets/{ids[0]}/notes", json={"notes": "x"}, headers=_h(other))
+        assert r.status_code == 403, f"{role}: {r.status_code}"
+    tech = await _staff(client, "technician")
+    ok = await client.post(f"/staff/assets/{ids[0]}/notes", json={"notes": "tech note"}, headers=_h(tech))
+    assert ok.status_code == 200, ok.text
+
+
+async def test_ready_for_pricing_tracks_grade_and_status_together(client):
+    """The flag the pricing stage will read: graded AND actually holding a grade."""
+    tag = _tag()
+    tok = await _staff(client, "admin")
+    _, lot_number, ids = await _lot_with_units(client, tok, tag, 3)
+
+    def ready(body):
+        return {a["id"]: a["ready_for_pricing"] for a in body["assets"]}
+
+    before = (await client.get(f"/staff/lots/worklist?q={lot_number}&scope=all", headers=_h(tok))).json()
+    assert ready(before) == {i: False for i in ids}
+
+    await client.post(f"/staff/assets/{ids[0]}/grade", json={"grade": "A", "test_first": True}, headers=_h(tok))
+    await client.post(f"/staff/assets/{ids[1]}/grade", json={"grade": "D", "test_first": True}, headers=_h(tok))
+    mid = (await client.get(f"/staff/lots/worklist?q={lot_number}&scope=all", headers=_h(tok))).json()
+    assert ready(mid) == {ids[0]: True, ids[1]: True, ids[2]: False}
+    assert mid["progress"]["ready_for_pricing_units"] == 2
+
+    await client.post(f"/staff/assets/{ids[0]}/grade", json={"grade": None}, headers=_h(tok))
+    after = (await client.get(f"/staff/lots/worklist?q={lot_number}&scope=all", headers=_h(tok))).json()
+    assert ready(after) == {ids[0]: False, ids[1]: True, ids[2]: False}
+    assert after["progress"]["ready_for_pricing_units"] == 1
