@@ -6,7 +6,7 @@ import { API } from "@/lib/api";
 import { Button, EmptyState, ProductCard } from "./ui";
 import FacetDropdown from "./FacetDropdown";
 import {
-  activeFilters, catalogPath, EMPTY_FILTERS, filterQuery, Filters, GRADES, hasFilters,
+  activeFilters, bandLabel, catalogPath, EMPTY_FILTERS, filterQuery, Filters, GRADES, hasFilters,
   PRICE_BANDS, SORTS,
 } from "./catalogFilters";
 
@@ -82,6 +82,14 @@ export default function LoadMore({ initial, applied, categories, brands }: {
   const bandValue = PRICE_BANDS.find(
     (b) => b.min === filters.min_cents && b.max === filters.max_cents)?.value ?? null;
   const ALL = { value: null, label: "All" };
+  /* A link can carry a price pair that matches no preset - every band of the previous set is one,
+     and so is anything hand-written. The grid behind such a link IS filtered, so the control has to
+     say by what: the pair is offered as its own option, already marked as the value in force.
+     Picking it is deliberately inert - apply() is never reached, because the facet drops a pick of
+     the value already held - so the sentinel can never reach the URL. */
+  const customBand = bandValue ? null : bandLabel(filters.min_cents, filters.max_cents);
+  const CUSTOM_BAND = "custom-band";
+  const priceValue = bandValue ?? (customBand ? CUSTOM_BAND : null);
 
   return (
     <div>
@@ -112,8 +120,10 @@ export default function LoadMore({ initial, applied, categories, brands }: {
             options={[ALL, ...GRADES.map((g) => ({ value: g, label: g }))]}
             onSelect={(v) => apply({ ...filters, grade: v })}
             open={openFacet === "grade"} onOpenChange={(o) => setOpenFacet(o ? "grade" : null)} />
-          <FacetDropdown label="Price" value={bandValue}
-            options={[{ value: null, label: "Any" }, ...PRICE_BANDS.map((b) => ({ value: b.value, label: b.label }))]}
+          <FacetDropdown label="Price" value={priceValue}
+            options={[{ value: null, label: "Any" },
+              ...(customBand ? [{ value: CUSTOM_BAND, label: customBand }] : []),
+              ...PRICE_BANDS.map((b) => ({ value: b.value, label: b.label }))]}
             onSelect={(v) => {
               const band = PRICE_BANDS.find((b) => b.value === v);
               apply({ ...filters, min_cents: band ? band.min : null, max_cents: band ? band.max : null });

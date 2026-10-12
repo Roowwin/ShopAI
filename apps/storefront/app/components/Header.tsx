@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { API, aud } from "@/lib/api";
 import { cartGet } from "@/lib/cart";
+import NavDropdown from "./NavDropdown";
 import { Button, cn, Input, navLinkClass } from "./ui";
 
 type SItem = { slug: string; title: string; units_available: number; price_from_cents: number | null };
@@ -15,30 +16,14 @@ export default function Header() {
   const [cartN, setCartN] = useState(0);
   const [cats, setCats] = useState<{ name: string; n: number }[]>([]);
   const [menu, setMenu] = useState(false);
-  // Whether there is more category strip off each edge. Only used to fade it, so a missed
-  // measurement costs nothing but the cue - it is never a reason to hide a link.
-  const [edges, setEdges] = useState({ left: false, right: false });
+  // The Shop menu's open state is the header's, not the dropdown's, so opening it is also what
+  // closes any other header panel - and a navigation closes it along with the page it opened from.
+  const [shop, setShop] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const timer = useRef<any>(null);
-  const strip = useRef<HTMLElement | null>(null);
 
-  const measure = useCallback(() => {
-    const el = strip.current;
-    if (!el) { return; }
-    const max = el.scrollWidth - el.clientWidth;
-    setEdges({ left: el.scrollLeft > 1, right: max > 1 && el.scrollLeft < max - 1 });
-  }, []);
-
-  // Re-measured when the category list lands: the strip is empty on the first paint (the header
-  // fetches its categories itself), so the first measurement would always say "nothing to scroll".
-  useEffect(() => {
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [measure, cats.length]);
-
-  useEffect(() => { setCartN(cartGet().length); }, [pathname]);
+  useEffect(() => { setCartN(cartGet().length); setShop(false); }, [pathname]);
   useEffect(() => {
     (async () => {
       try { const r = await fetch(API + "/store/categories", { cache: "no-store" }); if (r.ok) { setCats(await r.json()); } } catch { void 0; }
@@ -63,9 +48,9 @@ export default function Header() {
   }
 
   /* Two bands, both tightened: the shape stays (a micro strip over one control row), the height
-     comes off the padding. The strip is the smallest step this type scale sanctions - the eyebrow
-     size, 11px - and keeps its own sentence tracking rather than the eyebrow's 0.1em, which is for
-     a two-word kicker. The announcement's sentence is copy, not chrome: it is shrunk, never dropped. */
+     comes off the padding. The announcement line is the smallest step this type scale sanctions -
+     the eyebrow size, 11px - and keeps its own sentence tracking rather than the eyebrow's 0.1em,
+     which is for a two-word kicker. That sentence is copy, not chrome: it is shrunk, never dropped. */
   return (
     <header className="sticky top-0 z-50">
       <div className="bg-surface-page-alt text-ink-600 border-b border-line text-[11px] px-6 py-1 text-center tracking-wide">Renewed tech. Zero waste. - Certified refurbished, delivered AU &amp; NZ</div>
@@ -74,26 +59,19 @@ export default function Header() {
           <span className="h-2.5 w-2.5 rounded-full bg-brand-600"></span>
           RFO<span className="text-brand-700">Store</span>
         </a>
-        {/* Every live category, not the first six: the strip scrolls sideways when it runs out of
-            room, and the two edge fades are the only cue that it does (no scrollbar, no arrows -
-            the links stay where a nav link is expected). Only the strip scrolls; Shop/FAQ/Ask AI
-            stay put at their ends. */}
-        <div className="relative hidden md:block min-w-0 flex-1">
-          <nav ref={strip} onScroll={measure} aria-label="Categories"
-            className="flex gap-3 text-sm text-ink-600 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <a href="/" className={cn("shrink-0", navLinkClass)}>Shop</a>
-            {cats.map((c) => (
-              <a key={c.name} href={"/category/" + encodeURIComponent(c.name)} className={cn("shrink-0", navLinkClass)}>{c.name}</a>
-            ))}
-            <a href="/faq" className={cn("shrink-0", navLinkClass)}>FAQ</a>
-            <a href="/assistant" className={cn("shrink-0", navLinkClass)}>Ask AI</a>
-          </nav>
-          {edges.left && (
-            <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-surface to-transparent" />
-          )}
-          {edges.right && (
-            <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface to-transparent" />
-          )}
+        {/* The centre group: [Shop v | FAQ | Ask AI], per the owner's brief of 2026-10-12. This
+            REPLACES the sideways-scrolling category strip job 17 put here, whose whole point was
+            that no category could be hidden. The menu is a deliberate replacement rather than a fix
+            - and what it keeps of that rule is reach: every live category is one click away, read
+            from the API rather than hardcoded, so a category added to the catalog turns up here
+            without a code change. Below md this group is hidden and the burger drawer, which
+            already lists the same links, is the way in. */}
+        <div className="hidden md:flex items-center gap-1 shrink-0">
+          <NavDropdown label="Shop" open={shop} onOpenChange={setShop}
+            links={[{ href: "/", label: "Shop" },
+              ...cats.map((c) => ({ href: "/category/" + encodeURIComponent(c.name), label: c.name }))]} />
+          <a href="/faq" className={cn("inline-flex items-center min-h-[44px] px-3 text-sm", navLinkClass)}>FAQ</a>
+          <a href="/assistant" className={cn("inline-flex items-center min-h-[44px] px-3 text-sm", navLinkClass)}>Ask AI</a>
         </div>
         <div className="relative flex-1 min-w-0 max-w-xl mx-auto">
           <Input tone="sunken"
