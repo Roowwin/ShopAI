@@ -28,7 +28,19 @@ import GeneratedCopy, { type Draft } from "./GeneratedCopy";
    rather than letting a split view imply the two are always one record.
 
    NOTHING ELSE MOVED: no route, no request, no parameter, no dependency, and no change anywhere
-   under apps/backend. */
+   under apps/backend.
+
+   ONE DOOR IN, AND IT IS THE ASSET STUDIO'S. `?asset=<id>` is how the unit page hands a unit over:
+   the studio's Generate Listing CTA links here with the unit it was pressed on, and this page
+   resolves that unit to its PRODUCT - this page drafts about products, because that is what the
+   two AI calls above take. The resolution is one read of the same asset door the studio just read,
+   and it only ever PRESELECTS: no draft is written, nothing is published, and the picker stays
+   usable, so a bad or stale id costs a pick rather than a page.
+
+   It reads `window.location.search` in an effect rather than `useSearchParams()` on purpose: this
+   page is statically rendered, and the hook would require a Suspense boundary it has no use for.
+   Read once, at mount - the query string is an arrival, not state, and re-reading it on every
+   render would be a way for a later navigation to yank the picker out from under a draft. */
 
 export default function ListingsPage() {
   const [cat, setCat] = useState<CatalogItem[]>([]);
@@ -36,6 +48,9 @@ export default function ListingsPage() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  /* The unit that handed over, kept as the picker's opening move and as the reason line above the
+     columns. A label, not a guard: nothing here depends on it. */
+  const [handoff, setHandoff] = useState<number | null>(null);
 
   /* WHICH PRODUCT THE SHOWN DRAFT BELONGS TO. The draft body carries the id chosen when that press
      was made, while the picker beside it shows the id chosen NOW - the picker stays usable while a
@@ -49,6 +64,24 @@ export default function ListingsPage() {
 
   useEffect(() => {
     fetch(API + "/store/catalog", { credentials: "include" }).then(async (r) => { if (r.ok) setCat(await r.json()); });
+  }, []);
+
+  /* The handoff. The asset id arrives in the query string; the product the page works with is
+     resolved through the same /staff/assets door the studio reads. A 403 or a stale id leaves the
+     picker exactly as it was - this is an opening move, not a wall. */
+  useEffect(() => {
+    const raw = new URLSearchParams(window.location.search).get("asset");
+    if (!raw) return;
+    const assetId = Number(raw);
+    if (!Number.isInteger(assetId) || assetId <= 0) return;
+    setHandoff(assetId);
+    apiFetch("/staff/assets/" + assetId)
+      .then(async (r) => {
+        if (!r.ok) return;
+        const j: any = await r.json().catch(() => null);
+        if (j?.asset?.product_id != null) setPid(j.asset.product_id);
+      })
+      .catch(() => { /* the picker is still there; that is the fallback */ });
   }, []);
 
   async function draftIt() {
@@ -77,6 +110,13 @@ export default function ListingsPage() {
           Drafts use verified product facts only - you approve before anything publishes (ACCC-safe
           wording rule).
         </p>
+        {handoff !== null && (
+          <p className="mt-1 text-xs text-ink-500">
+            Handed over from asset <span className="font-mono">{handoff}</span>
+            {selected ? <> &middot; drafting about <span className="text-ink-600">{selected.title}</span></>
+                       : " - pick the product it belongs to below."}
+          </p>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

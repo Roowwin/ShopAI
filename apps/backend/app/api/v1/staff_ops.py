@@ -1,6 +1,6 @@
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -870,3 +870,253 @@ async def create_product(body: ProductIn, staff: dict = Depends(require_roles(*R
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
     return _product_json(row)
+
+
+# ------------- Asset Studio: the image hub -------------
+# Three doors, and one deliberate thing about their tuple: it is the SAME pair the asset detail
+# page's own read is behind (`staff_views.READ_ROLES`). The image hub is a card ON that page, so a
+# wider tuple here would hand a role a door onto a record it cannot open, and a narrower one would
+# show an operator a control that always refuses. If the page's wall ever moves, these move with it.
+#
+# ROLE-ONLY, like the promotion guards above and for the same structural reason: none of these
+# action names is in GUARDED_ACTIONS, so `_require_role`'s grant branch refuses an agent before it
+# can look anything up, and `None` is passed for the session so the guard cannot reach a grant row
+# even by accident. Uploading a unit's photograph is a human act; promoting it into the rail would
+# need a vision-capable review of the file first, which does not exist here.
+ROLES_ASSET_MEDIA = ("admin", "manager")
+ACTION_UPLOAD_IMAGE = "upload_image"
+ACTION_APPLY_IMAGE_TO_MODEL = "apply_image_to_model"
+ACTION_SET_GRADE_TEMPLATE = "set_grade_template"
+
+# What may be stored, and how much. The migration carries the same two rules as CHECKs; these are
+# the copies that answer with a sentence instead of a 23514, and the 5 MB read below is capped by
+# `IMAGE_MAX_BYTES + 1` so an oversized upload is refused WITHOUT being held in memory first.
+# SVG is deliberately absent: it is a document format that can carry script, and this door serves
+# what it stores back to a browser, so the whitelist is raster-only.
+IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp", "image/gif")
+IMAGE_MAX_BYTES = 5 * 1024 * 1024
+GRADE_TEMPLATE_GRADES = ("A", "B", "C", "D")
+
+
+def _safe_filename(raw: str | None) -> str:
+    """The display name of an uploaded file: its basename, stripped of control characters.
+
+    The name is never used as a path or a key - the bytes go in a row and are addressed by id - so
+    this is about what the hub may RENDER and what a header may echo, not about traversal. A
+    browser sends a path for some clients and a NUL is legal in no filename worth keeping.
+    """
+    name = (raw or "").replace("\\", "/").split("/")[-1]
+    name = "".join(ch for ch in name if ch.isprintable()).strip()
+    return name[:120] or "image"
+
+
+async def _image_row(db, *, asset_id: int, image_id: int):
+    """One asset_images row joined to its file, or None. The asset id is part of the lookup: an
+    image id alone names an assignment, and an assignment belongs to exactly one unit."""
+    return (await db.execute(text("""
+        SELECT ai.id, ai.asset_id, ai.media_id, ai.applied_by_bulk, mo.filename, mo.content_type,
+               mo.byte_size
+        FROM asset_images ai JOIN media_objects mo ON mo.id = ai.media_id
+        WHERE ai.id = :i AND ai.asset_id = :a
+    """), {"i": image_id, "a": asset_id})).mappings().first()
+
+
+@router.post("/assets/{asset_id}/images", status_code=201)
+async def upload_asset_image(asset_id: int, file: UploadFile = File(...),
+                             staff: dict = Depends(require_roles(*ROLES_ASSET_MEDIA)),
+                             db=Depends(get_db)):
+    """Upload one photograph onto one unit.
+
+    The upload and the assignment are two rows and one transaction: the file is stored once in
+    `media_objects`, and `asset_images` says this unit shows it. Re-uploading the same bytes is a
+    new file (there is no de-duplication by content - two shots of the same unit are two facts),
+    but assigning a file twice to one asset is a no-op rather than a duplicate row.
+    """
+    await _require_role(staff, ROLES_ASSET_MEDIA, ACTION_UPLOAD_IMAGE, None)
+    asset = await db.get(Asset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+
+    # A multipart part may carry parameters ("image/jpeg; charset=..."); the type is the bare one.
+    ctype = (file.content_type or "").split(";")[0].strip().lower()
+    if ctype not in IMAGE_TYPES:
+        raise HTTPException(status_code=422,
+                            detail="only JPEG, PNG, WebP or GIF images can be attached")
+    blob = await file.read(IMAGE_MAX_BYTES + 1)
+    if not blob:
+        raise HTTPException(status_code=422, detail="that file is empty")
+    if len(blob) > IMAGE_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="images are capped at 5 MB")
+
+    try:
+        media = (await db.execute(text("""
+            INSERT INTO media_objects (filename, content_type, byte_size, bytes, uploaded_by)
+            VALUES (:f, :c, :n, :b, :u)
+            RETURNING id, public_id::text AS public_id
+        """), {"f": _safe_filename(file.filename), "c": ctype, "n": len(blob), "b": blob,
+               "u": staff["id"]})).mappings().one()
+        # No ON CONFLICT here, and no content de-duplication: every upload is a new file row and a
+        # new assignment, because two photographs of one unit are two things the unit's page
+        # should show. The unique key is an INVARIANT, not a de-duplicator - if it ever fires the
+        # IntegrityError below answers 409 through the standard translator.
+        row = (await db.execute(text("""
+            INSERT INTO asset_images (asset_id, media_id, applied_by)
+            VALUES (:a, :m, :u)
+            RETURNING id
+        """), {"a": asset_id, "m": media["id"], "u": staff["id"]})).mappings().one()
+        await _audit_execution(db, staff, None, entity="asset", entity_id=asset_id,
+                               action="image_upload",
+                               after={"image_id": row["id"], "media_id": media["id"],
+                                      "filename": _safe_filename(file.filename),
+                                      "byte_size": len(blob)})
+        await db.commit()
+    except HTTPException:
+        await db.rollback()
+        raise
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    return {"image_id": row["id"], "media_id": media["id"], "public_id": media["public_id"],
+            "filename": _safe_filename(file.filename), "content_type": ctype, "byte_size": len(blob),
+            "applied_by_bulk": False}
+
+
+@router.post("/assets/{asset_id}/images/{image_id}/apply-to-model")
+async def apply_image_to_model(asset_id: int, image_id: int,
+                               staff: dict = Depends(require_roles(*ROLES_ASSET_MEDIA)),
+                               db=Depends(get_db)):
+    """Apply one unit's image to every unit of the same BRAND AND MODEL in the same lot.
+
+    The match is the brief's own: same lot, and a product whose brand and model are the unit's.
+    Product ROWS are matched through brand+model rather than by `product_id` equality - the catalog
+    can hold two rows for one brand and model (a re-listed title, a different slug), and a
+    photographer applying a shot across a box means the model, not the row. The source unit is
+    matched too and skipped by the unique key, so pressing twice adds nothing.
+
+    The assignments are one row each against the SAME file: the bytes are not copied. That is the
+    whole reason `media_objects` and `asset_images` are separate tables - a 4 MB photo across a box
+    of twenty is twenty rows, not eighty megabytes.
+
+    Each unit that GAINS the image gets its own audit row, because the trail is read per entity and
+    its page is the unit's own: a grader opening one of those twenty has to be able to see the
+    image arriving on it. The source unit gains nothing, so it gets no row from this call.
+    """
+    await _require_role(staff, ROLES_ASSET_MEDIA, ACTION_APPLY_IMAGE_TO_MODEL, None)
+    img = await _image_row(db, asset_id=asset_id, image_id=image_id)
+    if img is None:
+        raise HTTPException(status_code=404, detail="image not found on that asset")
+    src = (await db.execute(text(
+        "SELECT id, lot_id, product_id FROM assets WHERE id = :i"), {"i": asset_id})).mappings().one()
+    if src["product_id"] is None:
+        raise HTTPException(status_code=409,
+                            detail="this unit has no product, so there is no model to match")
+
+    targets = (await db.execute(text("""
+        INSERT INTO asset_images (asset_id, media_id, applied_by, applied_by_bulk)
+        SELECT a.id, :m, :u, true
+        FROM assets a
+        WHERE a.lot_id = :l
+          AND a.product_id IN (SELECT p2.id FROM products p2
+                               WHERE p2.brand_id = (SELECT p1.brand_id FROM products p1 WHERE p1.id = :p)
+                                 AND p2.model = (SELECT p1.model FROM products p1 WHERE p1.id = :p))
+          AND a.id <> :a
+        ON CONFLICT (asset_id, media_id) DO NOTHING
+        RETURNING asset_id
+    """), {"m": img["media_id"], "u": staff["id"], "l": src["lot_id"], "p": src["product_id"],
+           "a": asset_id})).scalars().all()
+
+    for target_id in targets:
+        await _audit_execution(db, staff, None, entity="asset", entity_id=target_id,
+                               action="image_apply",
+                               after={"media_id": img["media_id"], "from_asset_id": asset_id,
+                                      "bulk": True})
+    try:
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+
+    matched = (await db.execute(text("""
+        SELECT count(*) FROM assets a
+        WHERE a.lot_id = :l
+          AND a.product_id IN (SELECT p2.id FROM products p2
+                               WHERE p2.brand_id = (SELECT p1.brand_id FROM products p1 WHERE p1.id = :p)
+                                 AND p2.model = (SELECT p1.model FROM products p1 WHERE p1.id = :p))
+    """), {"l": src["lot_id"], "p": src["product_id"]})).scalar_one()
+    others = int(matched) - 1
+    return {"media_id": img["media_id"], "applied": len(targets), "already_had_it": others - len(targets),
+            "matched_other_units": others}
+
+
+class GradeTemplateIn(BaseModel):
+    """`grade` is the rung; `image_id` is an asset_images id (not a media id) or null to clear it.
+
+    The field is REQUIRED and may be null, the same contract GradeIn carries: "clear this grade's
+    template" and "you forgot the field" are different requests and must not collapse into one.
+    """
+    grade: str
+    image_id: int | None = None
+
+
+@router.post("/lots/{lot_id}/grade-templates")
+async def set_grade_template(lot_id: int, body: GradeTemplateIn,
+                             staff: dict = Depends(require_roles(*ROLES_ASSET_MEDIA)),
+                             db=Depends(get_db)):
+    """Set (or clear) the reference image for one grade within one lot.
+
+    A grade template is a judgement about a BATCH - "this is what an A out of this lot looks like" -
+    so it hangs off the lot and is keyed (lot_id, grade): one per grade, and a second assignment
+    REPLACES the first rather than adding a second opinion the UI would have to choose between.
+    The image must already be ON a unit of this lot; a template is a pointer to a photo the lot
+    actually has, not a way to smuggle in a file from somewhere else.
+    """
+    await _require_role(staff, ROLES_ASSET_MEDIA, ACTION_SET_GRADE_TEMPLATE, None)
+    # `model_fields_set`, not a truth test: the field's DEFAULT is None, so a body that simply
+    # omits it would otherwise clear a template the caller never named - the same trap GradeIn
+    # documents one door up.
+    if "image_id" not in body.model_fields_set:
+        raise HTTPException(status_code=422, detail="image_id is required (send null to clear it)")
+    grade = body.grade.strip().upper()
+    if grade not in GRADE_TEMPLATE_GRADES:
+        raise HTTPException(status_code=422, detail="grade must be one of A, B, C, D")
+    if await db.get(Lot, lot_id) is None:
+        raise HTTPException(status_code=404, detail="lot not found")
+
+    before = (await db.execute(text(
+        "SELECT media_id FROM lot_grade_templates WHERE lot_id = :l AND grade = :g"),
+        {"l": lot_id, "g": grade})).mappings().first()
+    before_media = before["media_id"] if before is not None else None
+
+    if body.image_id is None:
+        await db.execute(text(
+            "DELETE FROM lot_grade_templates WHERE lot_id = :l AND grade = :g"),
+            {"l": lot_id, "g": grade})
+        await _audit_execution(db, staff, None, entity="lot", entity_id=lot_id,
+                               action="grade_template_clear",
+                               before={"grade": grade, "media_id": before_media}, after=None)
+        try:
+            await db.commit()
+        except SQLAlchemyError as e:
+            await db.rollback(); _409(e)
+        return {"lot_id": lot_id, "grade": grade, "media_id": None}
+
+    found = (await db.execute(text("""
+        SELECT ai.media_id FROM asset_images ai JOIN assets a ON a.id = ai.asset_id
+        WHERE ai.id = :i AND a.lot_id = :l
+    """), {"i": body.image_id, "l": lot_id})).mappings().first()
+    if found is None:
+        raise HTTPException(status_code=409, detail="that image is not on a unit of this lot")
+
+    await db.execute(text("""
+        INSERT INTO lot_grade_templates (lot_id, grade, media_id, set_by)
+        VALUES (:l, :g, :m, :u)
+        ON CONFLICT (lot_id, grade) DO UPDATE
+          SET media_id = EXCLUDED.media_id, set_at = now(), set_by = EXCLUDED.set_by
+    """), {"l": lot_id, "g": grade, "m": found["media_id"], "u": staff["id"]})
+    await _audit_execution(db, staff, None, entity="lot", entity_id=lot_id,
+                           action="grade_template_set",
+                           before={"grade": grade, "media_id": before_media},
+                           after={"grade": grade, "media_id": found["media_id"]})
+    try:
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    return {"lot_id": lot_id, "grade": grade, "media_id": found["media_id"]}

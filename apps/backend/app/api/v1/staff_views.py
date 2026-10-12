@@ -35,7 +35,7 @@ parameter". In a comparison (``o.status = :status``) the column supplies the typ
 null-test side needs the cast; both sides take one anyway, so the statement is type-complete on
 its own.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import text
 
 from app.api.v1.deps import require_roles
@@ -310,6 +310,25 @@ async def get_asset(asset_id: int, staff: dict = Depends(require_roles(*READ_ROL
         ORDER BY at DESC, id DESC LIMIT 20
     """), {"i": asset_id})).mappings().all()
 
+    # The image hub's two reads. Neither hands back `bytes`: the media is fetched one image at a
+    # time from the raw door below, so a unit's page does not carry its photographs in JSON (a
+    # 4 MB photo base64'd into this payload would be ~5.4 MB of the response).
+    images = (await db.execute(text("""
+        SELECT ai.id, ai.media_id, ai.applied_at, ai.applied_by, ai.applied_by_bulk,
+               mo.filename, mo.content_type, mo.byte_size
+        FROM asset_images ai JOIN media_objects mo ON mo.id = ai.media_id
+        WHERE ai.asset_id = :i ORDER BY ai.id
+    """), {"i": asset_id})).mappings().all()
+
+    template_rows = (await db.execute(text("""
+        SELECT grade, media_id FROM lot_grade_templates WHERE lot_id = :i
+    """), {"i": a["lot_id"]})).mappings().all()
+    # All four grades, always, with null where the lot has not set one: the hub renders a control
+    # per grade, and a missing key would make "no template" and "not loaded" look the same.
+    templates = {g: None for g in ("A", "B", "C", "D")}
+    for r in template_rows:
+        templates[r["grade"]] = r["media_id"]
+
     return {
         "asset": {
             "id": a["id"], "public_id": a["public_id"], "product_id": a["product_id"],
@@ -330,5 +349,40 @@ async def get_asset(asset_id: int, staff: dict = Depends(require_roles(*READ_ROL
         "reservations": [{"id": r["id"], "public_id": r["public_id"], "status": r["status"],
                           "expires_at": _iso(r["expires_at"]), "created_at": _iso(r["created_at"])}
                          for r in reservations],
+        "images": [{"id": r["id"], "media_id": r["media_id"], "filename": r["filename"],
+                    "content_type": r["content_type"], "byte_size": int(r["byte_size"]),
+                    "applied_at": _iso(r["applied_at"]), "applied_by": r["applied_by"],
+                    "applied_by_bulk": bool(r["applied_by_bulk"])}
+                   for r in images],
+        "grade_templates": templates,
         "audit": [_audit_row(r) for r in audit_rows],
     }
+
+
+@router.get("/assets/{asset_id}/images/{image_id}/raw")
+async def get_asset_image(asset_id: int, image_id: int,
+                          staff: dict = Depends(require_roles(*READ_ROLES)), db=Depends(get_db)):
+    """The bytes of one image, addressed by its ASSIGNMENT id and its unit.
+
+    A read, and it lives in this module because this module is the GET-only one. It serves through
+    the API rather than as a bucket URL for a reason the browser forces: the staff token is a
+    bearer header that no `<img src>` can carry, and the alternative - a public URL - would make
+    every unit photograph readable by anyone who ever sees one. The hub therefore fetches each
+    image through the same authenticated door as the page and shows it from a blob URL.
+
+    `nosniff` because this response hands back a content type that came from an upload: the door
+    already whitelists raster types, and this is the second lock on the same door. The asset id is
+    part of the lookup, so an image id from another unit is a 404 rather than a read.
+    """
+    row = (await db.execute(text("""
+        SELECT mo.content_type, mo.bytes
+        FROM asset_images ai JOIN media_objects mo ON mo.id = ai.media_id
+        WHERE ai.id = :i AND ai.asset_id = :a
+    """), {"i": image_id, "a": asset_id})).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="image not found on that asset")
+    # `bytes(...)` on purpose: asyncpg may hand a bytea back as a memoryview, and the response is
+    # built from whatever it is without asking.
+    return Response(content=bytes(row["bytes"]), media_type=row["content_type"],
+                    headers={"X-Content-Type-Options": "nosniff",
+                             "Cache-Control": "private, max-age=300"})
