@@ -1,0 +1,8 @@
+# Performance review, round 4 - job-20261012-195208-8171 (b979bf5, delta vs 5a12873)
+
+- Values only, so the emitted CSS is unchanged: `--surface-muted: 8 12 26` and `--surface-sunken: 2 6 23` (apps/backoffice/app/globals.css:70,71) sit behind unchanged utility names (`bg-surface-sunken` on the body, apps/backoffice/app/layout.tsx:9; `bg-surface-muted/70` on the palette scrim), and Tailwind's `rgb(var(--x) / <alpha-value>)` indirection (tailwind.config.ts:12) means a channel change cannot add, drop or resize a rule - zero effect on rule count and CSS bytes.
+- The rest is prose: the Button.tsx hunk is comment-only (lines 20-38; the VARIANTS map from line 39 is unchanged context) and the Input.tsx hunk is comment-only (lines 4-15; TONES at 17-19 is byte-identical to round 3), so nothing here is a hook, handler, effect, request or class-string change and nothing carries runtime cost.
+- Emission check, since these files are scanned as text: the only utility-looking strings the delta adds are inside that prose - `` `text-ink-inverse` `` (Button.tsx:34) and `bg-surface-sunken` (globals.css, which no content glob scans) - and the former is already a real class one line-family away (Button.tsx:39), so no dead rule is minted either.
+- Paint: a darker ground is a different fill value for the same paint operation - no new layer, image, filter or shadow - so there is no cost to name; the only observable consequences are that the sticky blurred chrome still blurs the same amount of scrolling content over a ground that is merely darker (identical blur work per frame, nothing new to repaint) and that a darker ground is less emissive on OLED. Still unmeasurable here: no browser, docker, npm or pytest, so no byte or frame measurement.
+
+VERDICT: PASS

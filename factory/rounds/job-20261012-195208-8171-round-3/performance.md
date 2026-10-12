@@ -1,0 +1,8 @@
+# Performance review, round 3 - job-20261012-195208-8171 (5a12873, delta vs a8db5cc)
+
+- Delta is presentational only, so there is no runtime cost to weigh: three files, all class strings - assistant/page.tsx:209,268 (`text-ink-400`->`text-ink-500`), Button.tsx:43 (onDark variant string) and Input.tsx:18 (dark tone string) - with no hook, handler, effect, request or data path in the diff; round-2's PASS on the chrome, palette and portal therefore stands untouched.
+- No new utility name, and the CSS can only shrink: `ring-line-strong` is already emitted via layout.tsx:69, CommandPalette.tsx:92 and assistant/page.tsx:259; `text-ink-600` and `hover:bg-surface-sunken` via Button.tsx:44 (`muted`) and many call sites; `text-ink-500` via assistant/page.tsx:206 - while `text-ink-300`, `ring-ink-700` and `hover:bg-ink-700` are now referenced nowhere (git grep at 5a12873 finds only the token declarations tailwind.config.ts:49,53), so three rules drop and none are added; the `content` glob is untouched (tailwind.config.ts:15).
+- The comment rewrite hid nothing: Input.tsx's only code change is the ring utility (18), the rest of that hunk is the block comment (4-13), which merely describes the change beside it (ink-700 is now 226 232 240, the near-white border it calls out); TONES keeps exactly three keys with the same fills and placeholders and the component body is byte-identical (15-18, 31).
+- Caveats unchanged: nothing in this delta animates, filters or shadows, so no added paint; no browser, docker, npm or pytest here, so no bundle/CSS byte measurement and no gate run.
+
+VERDICT: PASS
