@@ -11,7 +11,9 @@ import { aud } from "@/lib/format";
    an availability count and a price. The old page read three of those keys and showed none of
    them; this column reads the rest of the SAME response, so there is no second request, no extra
    endpoint and no field the API does not already send. The type in this file is what keeps that
-   honest - it names exactly the keys the handler returns, nothing more.
+   honest: every key it names is one the handler genuinely returns. It is not the whole payload -
+   two of the handler's keys, the image address and the featured marker, are left untyped because
+   nothing here reads them.
 
    Two things it deliberately does not draw, each named where a reader would look for it:
 

@@ -68,6 +68,11 @@ export default function GeneratedCopy({ draft, draftFor, busy, onSave }: {
                 <li key={i}><Badge colorClass="bg-surface-sunken text-ink-600">{k}</Badge></li>
               ))}
             </ul>
+            {(draft.keywords ?? []).length === 0 && (
+              <p className="mt-2 text-xs text-ink-500">
+                None came back with this draft.
+              </p>
+            )}
           </div>
 
           <div className="mt-4 border-t border-line pt-3">
