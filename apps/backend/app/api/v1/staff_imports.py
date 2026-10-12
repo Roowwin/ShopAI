@@ -26,6 +26,14 @@ column. Every header is accounted for in the report: mapped ones are listed with
 unmapped ones are listed by name. Nothing is dropped in silence - a column the operator expected to
 land and did not is the single most expensive way for an import to be wrong quietly.
 
+THE TRANSLATION LAYER. Column names are not the only thing the supplier spells differently: the
+VALUES do too, and two of those mismatches used to block a whole sheet. "Active" is the supplier
+word for a unit in service, which in this system is `received` (the bottom of the ladder, ready to
+be tested and graded); "Unassessed" states there is no grade, which is a null and not an error. Both
+are translated rather than refused - and every translation is REPORTED, aggregated, in the preview
+payload, because rewriting the operator's data without telling them is not a translation, it is a
+surprise. See the translation table below for the full list and the reasoning for each entry.
+
 WHERE THE MERGED TEXT GOES. The brief asks for a "technical_notes field for the AI Studio". No
 column named `technical_notes` exists (checked repo-wide), so the merged block is written to
 `assets.notes` - the asset free-text field - and the same three parts are ALSO kept structured in
@@ -86,7 +94,9 @@ MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 MAX_ROWS = 5000
 # How many parsed rows the preview returns. The SUMMARY always counts every row - this only caps
 # the sample, and the payload says so, so the number on screen can never be read as the total.
-PREVIEW_ROWS = 50
+# Raised 50 -> 200 at the owner's request: a corporate lot runs to a few hundred lines and 50 was
+# not enough of one to check the mapping against. Still a cap, and still reported as one.
+PREVIEW_ROWS = 200
 
 # Canonical field -> the header spellings that mean it, already normalised by _norm_header. The
 # FIRST alias is the canonical name the report prints.
@@ -127,6 +137,41 @@ _STATUS_VALUES = ("received", "tested", "in_repair", "graded", "listed", "reserv
 # flips its lot active), so it is called out in the report rather than performed quietly.
 _STATUS_BY_NORM = {re.sub(r"[^a-z0-9]+", "", s): s for s in _STATUS_VALUES}
 
+# ---------------------------------------------------------------------------
+# THE TRANSLATION LAYER: the supplier's vocabulary -> this system's vocabulary.
+#
+# The two gaps below are not malformed sheets. They are the supplier speaking their own language,
+# and a mapper that refuses them makes the importer useless on exactly the sheets it exists to
+# read. So it translates - and REPORTS every translation it made (the `translations` block in the
+# preview payload) instead of rewriting in silence. A data change the operator never sees is a
+# data change they never agreed to, and the second press on this screen is supposed to be an
+# informed one.
+#
+# 1. STATUS. The supplier calls an in-service unit "Active". There is no `active` in the ASSET
+#    status vocabulary at all - the ladder starts at `received`, which is precisely what an
+#    in-service unit is here: taken in, not yet tested, not yet graded. Landing it on `received`
+#    is what puts the unit on the first rung so the workbench can walk it up
+#    received -> tested -> graded -> listed. Note the collision hazard: the LOT vocabulary does
+#    have `active`, so this lookup is consulted for the asset-status column only and never shares
+#    a table with lot status.
+#
+# 2. GRADE. The supplier's "Unassessed" says there IS no grade yet. The column is nullable and
+#    only `listed` demands a grade, so the honest reading is a null - not a refusal, and above all
+#    not a guessed letter. The unit lands ungraded and the Asset Workbench grades it later, which
+#    is the flow the brief describes.
+# ---------------------------------------------------------------------------
+_STATUS_SYNONYMS: dict[str, str] = {
+    "active": "received",
+}
+# Words that MEAN "there is no grade here". Each is an ABSENCE, not a grade, so each resolves to a
+# null - the same result a blank cell gives - rather than to an issue. Kept a closed, spelled-out
+# list on purpose: a fuzzy match in this direction would silently swallow a grade the operator did
+# mean, which is the one error here that would reach a customer.
+_NO_GRADE_VALUES: frozenset[str] = frozenset({
+    "unassessed", "ungraded", "notassessed", "notgraded", "nograde", "gradeunassessed",
+    "na", "none", "nil", "tbd", "pending",
+})
+
 
 def _norm_header(value: object) -> str:
     """Fold a header to its comparable core: ascii, lowercase, letters and digits only.
@@ -152,29 +197,53 @@ def _slugify(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower()).strip("-")[:160]
 
 
-def _parse_grade(raw: str) -> tuple[str | None, str | None]:
-    """A grade cell -> one of A-D, or an issue. Accepts 'A', 'Grade A', 'A - Excellent'."""
+# A translation is carried as data, not as a sentence to be parsed back: (field, from, to). The
+# preview both lists them per row and counts them, and re-deriving either from a formatted string
+# would be a parser for output this module just generated.
+Translation = tuple[str, str, str]
+# What a translated-away grade becomes, in words, for the report. The COLUMN gets a null; this
+# label is only ever shown to a person.
+NO_GRADE_LABEL = "no grade"
+
+
+def _parse_grade(raw: str) -> tuple[str | None, str | None, Translation | None]:
+    """A grade cell -> (grade or None, issue or None, translation or None).
+
+    Three outcomes, and the third is the one this job added: a cell that STATES there is no grade
+    ("Unassessed") is an ABSENCE - it yields None with no issue, because it is neither an error nor
+    a grade. Accepts 'A', 'Grade A', 'A - Excellent'.
+    """
     s = _clean(raw).upper()
     if not s:
-        return None, None
+        return None, None, None
+    if _norm_header(s) in _NO_GRADE_VALUES:
+        return None, None, ("grade", _clean(raw), NO_GRADE_LABEL)
     m = re.match(r"^(?:GRADE\s*)?([ABCD])(?![A-Z0-9])", s)
     if m:
-        return m.group(1), None
+        return m.group(1), None, None
     m = re.search(r"\b([ABCD])\b", s)
     if m:
-        return m.group(1), None
-    return None, f"grade {raw!r} does not resolve to one of A, B, C, D"
+        return m.group(1), None, None
+    return None, f"grade {raw!r} does not resolve to one of A, B, C, D", None
 
 
-def _parse_status(raw: str) -> tuple[str | None, str | None]:
-    """A status cell -> a DB status value, or an issue. Blank means the intake default."""
+def _parse_status(raw: str) -> tuple[str | None, str | None, Translation | None]:
+    """A status cell -> (DB status, issue, translation). Blank means the intake default.
+
+    The canonical vocabulary is consulted BEFORE the translation table, so a synonym can never
+    shadow a real status value however the two are later edited.
+    """
     s = _clean(raw)
     if not s:
-        return "received", None
-    canonical = _STATUS_BY_NORM.get(_norm_header(s))
-    if canonical is None:
-        return None, f"status {raw!r} is not one of: " + ", ".join(_STATUS_VALUES)
-    return canonical, None
+        return "received", None, None
+    norm = _norm_header(s)
+    canonical = _STATUS_BY_NORM.get(norm)
+    if canonical is not None:
+        return canonical, None, None
+    translated = _STATUS_SYNONYMS.get(norm)
+    if translated is not None:
+        return translated, None, ("status", s, translated)
+    return None, f"status {raw!r} is not one of: " + ", ".join(_STATUS_VALUES), None
 
 
 def _parse_price(raw: str) -> tuple[int | None, str | None]:
@@ -389,12 +458,13 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
         if not lot_number:
             flag("lot", "lot is blank - every asset must belong to a lot")
 
-        grade, grade_err = _parse_grade(_cell(row, idx.get("grade")))
+        grade, grade_err, grade_note = _parse_grade(_cell(row, idx.get("grade")))
         if grade_err:
             flag("grade", grade_err)
-        status, status_err = _parse_status(_cell(row, idx.get("status")))
+        status, status_err, status_note = _parse_status(_cell(row, idx.get("status")))
         if status_err:
             flag("status", status_err)
+        row_translations = [n for n in (status_note, grade_note) if n]
         price, price_err = _parse_price(_cell(row, idx.get("price")))
         if price_err:
             flag("price", price_err)
@@ -426,6 +496,7 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
             "status": status, "sale_price_cents": price, "brand": brand, "category": category,
             "model": model, "asset_tag": _cell(row, idx.get("asset")),
             "technical_notes": technical_notes, "technical_parts": parts, "issues": row_issues,
+            "translations": [{"field": f, "from": s, "to": t} for f, s, t in row_translations],
         })
         if row_issues:
             issues.extend(row_issues)
@@ -443,12 +514,26 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
 
     blocked = [r for r in parsed if r["issues"]]
     report["issues"] = issues
+
+    # Every translation the mapper made, aggregated by (field, from, to) with its row count. The
+    # per-row translation stays on the row, but 200 rows all reading "Active -> received" is not a
+    # summary - it is noise. The operator needs the distinct list and how many rows each covers.
+    tally: dict[Translation, int] = {}
+    for record in parsed:
+        for made in record["translations"]:
+            key = (made["field"], made["from"], made["to"])
+            tally[key] = tally.get(key, 0) + 1
+    report["translations"] = [
+        {"field": field, "from": source, "to": target, "rows": n}
+        for (field, source, target), n in sorted(tally.items())
+    ]
     report["sample"] = [{k: v for k, v in r.items()} for r in parsed[:PREVIEW_ROWS]]
     report["truncated"] = len(parsed) > PREVIEW_ROWS
     report["summary"] = {
         "rows": len(parsed),
         "ready": len(parsed) - len(blocked),
         "blocked": len(blocked),
+        "translated": len([r for r in parsed if r["translations"]]),
         "lots": len({r["lot_number"] for r in parsed if r["lot_number"]}),
         "would_list": len([r for r in parsed if r["status"] == "listed" and not r["issues"]]),
         "issues": len(issues),
