@@ -6,11 +6,15 @@ import { kickerClass } from "@/lib/ui";
 
 /* The live activity record for the intake calls.
 
-   Every line in it is a real event from something this page actually did: the moment one of the
-   three calls is dispatched, the payload's own answer, or the API's own refusal detail, kept
-   verbatim - and, beside those request events, the two things the page decides on its own, which
-   are the refusals it makes before it ever sends anything (no lot selected, no serial entered, a
-   file that is not a photo) and the prefill that copies a draft's values into the scan-in fields.
+   Every line in it is a real event from something this page actually did. Nine of the fifteen
+   lines the page can write come off a request: the moment one of the three calls is dispatched,
+   the payload's own answer, or the API's own refusal detail, kept verbatim. The other six are the
+   page's own account of a request, which no payload can supply:
+     - the refusals it makes before it sends anything - no lot selected, no serial entered, a file
+       that is not a photo;
+     - the line it writes when a request could not be sent at all;
+     - the line it writes when an answer arrived but could not be read;
+     - the prefill that copies a draft's values into the scan-in fields.
    Nothing else is written: no line is generated on a timer and there is no progress bar, because
    this API reports no progress at all - a percentage here would be a number no payload produced.
    While a call is in flight the panel says what it is waiting on, and nothing more.
@@ -95,8 +99,9 @@ export default function ValidationStream({ events, pending, idle }: {
         )}
       </div>
       <p className="mt-2 text-xs text-ink-500">
-        Fed only by the calls this page makes. The API reports no progress mid-call, so the
-        record carries a call's start and its answer, and nothing in between.
+        Fed by this page's own calls, and by what it decides on its own - the refusals it makes, a
+        request that could not be sent or read, and the prefill. No progress is reported mid-call,
+        so the record carries a call's start and its answer, and nothing in between.
       </p>
     </section>
   );

@@ -160,36 +160,57 @@ export default function IntakePage() {
     log("AI", "POST /staff/ai/intake-draft - reading " + file.name + " (" + sizeText(file.size) + ").");
     const fd = new FormData();
     fd.append("image", file);
-    /* The call itself is the base's own expression, unchanged. Only the way a REJECTED request is
-       handled is new: it is reported and the door reopens, where the base let the rejection escape
-       and left its busy flag set for the rest of the session. */
-    let r: Response | null = null;
+    /* EVERY exit from here leaves through the finally below, and that block is the only place the
+       door is reopened and the two flags are cleared. Nothing between the try and the finally has
+       to remember to do it, and a path added later cannot forget: the parse used to sit outside
+       this block, so a 2xx whose body did not parse escaped with the door still shut and every
+       later photo was dropped in silence. */
     try {
-      r = await apiFetch("/staff/ai/intake-draft", { method: "POST", body: fd });
-    } catch {
-      r = null;
-    }
-    /* Only the newest call may touch the panel. A response that has been superseded writes
-       nothing - not the draft, not the waiting marker, not the busy flag. */
-    if (draftLive.current !== me) { return; }
-    draftLive.current = 0;
-    if (r === null) {
-      /* The request never landed - a transport failure, or the session gate tearing the page
-         away. Said out loud rather than leaving the zone shut. */
-      setErr("the draft request could not be sent");
-      log("WARN", "Draft not sent: the request could not be made.");
-    } else if (r.ok) {
-      const d: Draft = await r.json();
+      /* The call itself is the base's own expression, unchanged. Only the way a REJECTED request is
+         handled differs, and only so the door can reopen. */
+      let r: Response | null = null;
+      try {
+        r = await apiFetch("/staff/ai/intake-draft", { method: "POST", body: fd });
+      } catch {
+        r = null;
+      }
+      /* Only the newest call may touch the panel. A response that has been superseded writes
+         nothing - not the draft, not the waiting marker, not the busy flag. */
+      if (draftLive.current !== me) { return; }
+      if (r === null) {
+        /* The request never landed - a transport failure, or the session gate tearing the page
+           away. */
+        setErr("the draft request could not be sent");
+        log("WARN", "Draft not sent: the request could not be made.");
+        return;
+      }
+      if (!r.ok) {
+        const j: any = await r.json().catch(() => ({}));
+        setErr(j.detail ?? "AI draft failed");
+        log("WARN", "Draft refused (" + r.status + "): " + (j.detail ?? "no detail returned") + ".");
+        return;
+      }
+      /* An answer that arrived but cannot be read is an exit of its own. The call is over, so the
+         door reopens and the panel says the answer was unreadable rather than reporting a draft it
+         never received. */
+      const d: Draft | null = await r.json().catch(() => null);
+      if (d === null) {
+        setErr("the draft answer could not be read");
+        log("WARN", "Draft unreadable: the answer arrived, but it could not be read.");
+        return;
+      }
       setDraft(d);
       log("AI", "Draft back: " + d.brand + " " + d.model + " - grade " + d.suggested_grade
         + ", confidence " + d.confidence + ".");
-    } else {
-      const j: any = await r.json().catch(() => ({}));
-      setErr(j.detail ?? "AI draft failed");
-      log("WARN", "Draft refused (" + r.status + "): " + (j.detail ?? "no detail returned") + ".");
+    } finally {
+      /* The door closes on every path, a superseded one included - there the guard leaves the flags
+         to the newer call that owns them, and that call's own exit through here clears them. */
+      if (draftLive.current === me) {
+        draftLive.current = 0;
+        setPending(null);
+        setAiBusy(false);
+      }
     }
-    setPending(null);
-    setAiBusy(false);
   }
 
   /* A file arrived and this build cannot read it. The zone says what it established - a sheet or
@@ -254,10 +275,14 @@ export default function IntakePage() {
 
         <section>
           {/* A real heading, not a styled paragraph: these two label sections of the page, and the
-              heading structure a screen reader announces had lost them. The kicker look is kept,
-              and the important modifier is what keeps it - the primitive carries its own size in
-              the base and this app has no merge step, so without the modifier the built sheet would
-              decide between the two sizes, and in that sheet the primitive's class is the later one. */}
+              heading structure a screen reader announces had lost them. They carry the kicker's
+              size, tracking, case and ink - and the primitive's weight, so they are semibold where
+              a kicker label is regular. That is deliberate rather than missed: the page's other two
+              headings under this one are the same primitive at the same weight, so the heading set
+              now agrees with itself, and a weight reset would need a second important utility to
+              beat the primitive's deterministically. The one important utility here is what keeps
+              the kicker size, which the built sheet would otherwise decide - it emits the
+              primitive's size class later than the kicker's. */}
           <Heading level="h3" as="h2" className="!text-eyebrow uppercase text-ink-500">New lot</Heading>
           <div className="mt-2 flex flex-wrap gap-3">
             <div className="w-40">
