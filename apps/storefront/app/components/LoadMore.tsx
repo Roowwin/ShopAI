@@ -88,8 +88,11 @@ export default function LoadMore({ initial, applied, categories, brands }: {
       {applied && (
         // One line of dropdowns. On phones the row scrolls sideways rather than stacking (the
         // panels are viewport-anchored, so the scroll container cannot clip them); from sm up there
-        // is room for the whole toolbar and nothing needs to scroll at all.
-        <div className="flex items-center gap-2 mt-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible">
+        // is room for the whole toolbar and nothing needs to scroll at all. The py-1 is what keeps
+        // the scroll container from clipping the triggers' 2px focus ring and its 2px offset -
+        // padding sits inside the clip box, which is why the ring survives under sm and nowhere
+        // needs the padding above it.
+        <div className="flex items-center gap-2 mt-6 py-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible sm:py-0">
           {categories && categories.length > 1 && (
             <FacetDropdown label="Category" value={catValue}
               options={[ALL, ...categories.map((c) => ({ value: c.name, label: c.name + " (" + c.n + ")" }))]}

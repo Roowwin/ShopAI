@@ -17,16 +17,20 @@ import { cn } from "./ui";
    The panel is `fixed`, placed from the trigger's own rect. The toolbar scrolls sideways on phones,
    and a panel left inside a scroll container would be clipped by it (overflow-x: auto makes
    overflow-y compute to auto as well) - anchoring to the viewport escapes that clip entirely, and
-   lets the box clamp itself: never off the right edge, never hanging past the bottom of a short
-   screen, with its own scroll if the options outgrow the space below. */
+   lets the box clamp itself to the window on both axes: never off the right edge, and never past the
+   bottom, because a panel taller than the room beneath it would run off the screen where its options
+   cannot be reached at all. It takes exactly the room it has, scrolls its own overflow, and opens
+   upwards when the room below the trigger is too small to be useful. */
 
 export type FacetOption = { value: string | null; label: string };
 
-const PANEL_W = 320;
+const PANEL_W = 320;    // the panel's width on anything wider than a phone
+const SHEET_MAX = 480;  // at or below this viewport width the panel is a full-width sheet instead
 const EDGE = 8;
 const GAP = 4;
+const MIN_H = 176;      // the height below which we would rather open upwards than shrink
 
-type Panel = { w: number; left: number; top: number; maxH: number };
+type Panel = { w: number; left: number; top: number; bottom: number; maxH: number; flip: boolean };
 
 type Props = {
   /** The facet's name - "Grade". Shown alone at rest, and as "Grade: B" once a value is in force. */
@@ -44,7 +48,7 @@ export default function FacetDropdown({ label, value, options, onSelect, open, o
   const wrap = useRef<HTMLDivElement | null>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
   const opts = useRef<(HTMLDivElement | null)[]>([]);
-  const [panel, setPanel] = useState<Panel>({ w: PANEL_W, left: 0, top: 0, maxH: 320 });
+  const [panel, setPanel] = useState<Panel>({ w: PANEL_W, left: 0, top: 0, bottom: 0, maxH: 320, flip: false });
   // Whether this opening has already taken focus, so a re-render while open (the panel following a
   // scroll) cannot yank focus back off the option the shopper has arrowed onto.
   const focused = useRef(false);
@@ -61,15 +65,31 @@ export default function FacetDropdown({ label, value, options, onSelect, open, o
     const el = trigger.current;
     if (!el) { return; }
     const r = el.getBoundingClientRect();
-    const w = Math.min(PANEL_W, window.innerWidth - 2 * EDGE);
+    // Full-width sheet on a phone, a 320px column above that - and never wider than the window,
+    // which is also what keeps the horizontal clamp below well defined.
+    const w = window.innerWidth <= SHEET_MAX
+      ? window.innerWidth - 2 * EDGE
+      : Math.min(PANEL_W, window.innerWidth - 2 * EDGE);
+    const below = window.innerHeight - r.bottom - 2 * EDGE;
+    const above = r.top - 2 * EDGE;
+    /* The height is the room the panel actually has, with NO floor under it. A floor is what an
+       earlier cut of this file got wrong: it held the box at 176px even when the trigger sat near
+       the bottom of the window, so the panel ran off the screen - entirely off it at the extreme,
+       while `open` was true and every option was unreachable. When the room below cannot hold a
+       usable panel and there is more room above the trigger, it opens upwards instead. Both
+       offsets are viewport distances, which is what a fixed box needs. */
+    const flip = below < MIN_H && above > below;
     const next: Panel = {
       w,
       left: Math.max(EDGE, Math.min(r.left, window.innerWidth - w - EDGE)),
       top: r.bottom + GAP,
-      maxH: Math.max(176, window.innerHeight - r.bottom - 2 * EDGE),
+      bottom: window.innerHeight - r.top + GAP,
+      maxH: Math.max(0, flip ? above : below),
+      flip,
     };
     // Bail out when nothing moved: the scroll listener would otherwise re-render on every frame.
-    setPanel((p) => (p.w === next.w && p.left === next.left && p.top === next.top && p.maxH === next.maxH ? p : next));
+    setPanel((p) => (p.w === next.w && p.left === next.left && p.top === next.top
+      && p.bottom === next.bottom && p.maxH === next.maxH && p.flip === next.flip ? p : next));
   }
 
   function toggle() {
@@ -177,7 +197,8 @@ export default function FacetDropdown({ label, value, options, onSelect, open, o
 
       {open && (
         <div role="listbox" aria-labelledby={baseId + "-trigger"} tabIndex={-1} onKeyDown={onKey}
-          style={{ position: "fixed", width: panel.w, left: panel.left, top: panel.top, maxHeight: panel.maxH }}
+          style={{ position: "fixed", width: panel.w, left: panel.left, maxHeight: panel.maxH,
+            ...(panel.flip ? { bottom: panel.bottom } : { top: panel.top }) }}
           className="z-40 overflow-y-auto rounded-control bg-white text-ink-900 shadow-lg ring-1 ring-line py-1">
           {options.map((o, i) => {
             const isSel = o.value === value;
