@@ -30,11 +30,11 @@ const config: Config = {
           950: token("--brand-950"),
           DEFAULT: token("--brand-600"),
         },
-        // the storefront's single secondary CTA token (amber). Here it carries the
-        // CMS/newsletter notice flash, which used to be a raw amber-100/amber-800 pair.
-        // Contrast note: accent-700 on accent-100 is 4.51:1 - it passes WCAG AA, but with no
-        // margin, down from amber-800's 6.37:1. Left as-is to keep the scale identical to the
-        // storefront's; add an accent-800 token if that flash ever needs to be heavier.
+        // the soft secondary accent (amber). On the light ground the 50/100 fills were pale washes
+        // and 700 was the ink on them; here the fills are deep and 700 is a light amber. The old
+        // note here said the scale was kept identical to the storefront's - that no longer holds:
+        // the two apps now have deliberately different grounds, and this token set is the
+        // backoffice's own.
         accent: {
           50: token("--accent-50"),
           100: token("--accent-100"),
@@ -52,6 +52,8 @@ const config: Config = {
           600: token("--ink-600"),
           700: token("--ink-700"),
           900: token("--ink-900"),
+          // the dark ink for text on a bright fill - see globals.css
+          inverse: token("--ink-inverse"),
           DEFAULT: token("--ink-900"),
         },
         // destructive actions and error text
@@ -60,11 +62,13 @@ const config: Config = {
           200: token("--danger-200"),
           600: token("--danger-600"),
         },
-        // page, card and sunken backgrounds
+        // page, card and sunken backgrounds. `glass` is the translucent panel the chrome and the
+        // overlays sit on - pair it with backdrop-blur-md, which is stock Tailwind.
         surface: {
           DEFAULT: token("--surface"),
           muted: token("--surface-muted"),
           sunken: token("--surface-sunken"),
+          glass: token("--surface-glass"),
         },
         // hairlines
         line: {
@@ -100,6 +104,14 @@ const config: Config = {
       borderRadius: {
         card: "1rem", // content panels
         control: "0.75rem", // tiles, buttons, inputs
+      },
+      /* The glow: an emerald hairline with a soft bloom behind it, which is what replaces the
+         light-mode `shadow-sm` on a dark ground - a grey shadow is invisible against slate, so the
+         boundary has to be drawn in light rather than cast in darkness. Two layers on purpose: the
+         1px ring is the border the brief asks for, the blur is the "glowing" part. */
+      boxShadow: {
+        glow: "0 0 0 1px rgb(var(--brand-700) / 0.45), 0 8px 32px -12px rgb(var(--brand-500) / 0.35)",
+        "glow-sm": "0 0 0 1px rgb(var(--brand-700) / 0.35), 0 4px 18px -10px rgb(var(--brand-500) / 0.30)",
       },
       fontFamily: {
         // Shape-identical to the storefront's stack. The backoffice loads no webfont, so

@@ -2,15 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokens. Channel triples (not hex) so Tailwind can apply opacity modifiers -
-   see the `token()` helper in tailwind.config.ts. Values are the palette this app
-   already used, named by role: brand = emerald, accent = amber, ink = slate text,
-   grade.* = the A-D scale, status.* = the asset lifecycle (admin-only). */
+/* Design tokens - "Midnight Emerald".
+
+   Channel triples (not hex) so Tailwind can apply opacity modifiers - see the `token()` helper in
+   tailwind.config.ts. Named by ROLE, and this revision flips the VALUES while keeping every role
+   intact: the file has always said "ink = slate text" and "ink-900 = the strongest text", and on a
+   dark ground the strongest text is the lightest value. Renaming the scale would touch every page in
+   the app; inverting it touches this file.
+
+   Two things an inversion cannot do by itself, both handled at the call sites rather than here:
+   - brand-700 is BOTH the primary button fill (white on it measures 5.48:1, so it stays) and, on the
+     old light ground, an ink for links and active states. On a slate-900 card that same value measures
+     2.6:1, so the ink sites point at brand-300 (11.7:1) instead. One token, two jobs, and only the
+     ground decides which value each job needs.
+   - `bg-white` and friends are literals, not tokens; they are audited and fixed per site.
+
+   Every value below was checked against WCAG before it was written: body text on `surface` clears
+   4.5:1 with room (ink-600 12.0:1, ink-500 7.0:1, ink-400 5.3:1), white on brand-700 stays 5.5:1, and
+   each status chip's ink clears 5:1 on its own deep fill. ink-300 is the deliberately dim step (3.8:1
+   on a card) for placeholders and disabled text - it was 1.6:1 on white, so this is an improvement
+   rather than a regression. */
 @layer base {
   :root {
-    --brand-50: 236 253 245;
-    --brand-100: 209 250 229;
-    --brand-200: 167 243 208;
+    /* emerald. 500/600 are the saturated accents, 700/800/900 the button fills (unchanged - white on
+       700 is 5.48:1). 50/100/200 are the SOFT fills: on a light ground a pale wash, here a deep tint,
+       which is the same role at the other end of the ladder. 300 is the emerald INK on dark. */
+    --brand-50: 2 44 34;
+    --brand-100: 3 60 47;
+    --brand-200: 6 78 59;
     --brand-300: 110 231 183;
     --brand-500: 16 185 129;
     --brand-600: 5 150 105;
@@ -19,81 +38,98 @@
     --brand-900: 6 78 59;
     --brand-950: 2 44 34;
 
-    --accent-50: 255 251 235;
-    --accent-100: 254 243 199;
+    /* amber, the same shape: the 50/100 soft fills become deep, and 700 is ONLY ever an ink in this
+       app (no bg-accent-700 exists), so it moves to a light amber rather than being split. */
+    --accent-50: 69 26 3;
+    --accent-100: 120 53 15;
     --accent-300: 252 211 77;
     --accent-400: 251 191 36;
     --accent-500: 245 158 11;
-    --accent-700: 180 83 9;
+    --accent-700: 253 230 138;
 
-    --ink-300: 203 213 225;
-    --ink-400: 148 163 184;
-    --ink-500: 100 116 139;
-    --ink-600: 71 85 105;
-    --ink-700: 51 65 85;
-    --ink-900: 15 23 42;
+    /* text, inverted by step so "higher number = stronger" still holds. */
+    --ink-300: 100 116 139;
+    --ink-400: 129 140 158;
+    --ink-500: 148 163 184;
+    --ink-600: 203 213 225;
+    --ink-700: 226 232 240;
+    --ink-900: 248 250 252;
+    /* The one ink that stays dark: text sitting ON a bright fill (the fallback badge's amber).
+       Every other ink step is light now, so a bright fill would otherwise have to carry light text
+       at 1.3:1. This is the token that pairing needed and never had. */
+    --ink-inverse: 2 6 23;
 
-    --surface: 255 255 255;
-    --surface-muted: 248 250 252;
-    --surface-sunken: 241 245 249;
+    /* The ladder keeps its direction - surface lightest, sunken darkest - with one deliberate
+       exception: on a dark ground the alternate/hover fill has to LIGHTEN. A fill a step darker than
+       the card reads as a hole rather than a state, so surface-sunken is the raised step here. */
+    --surface: 15 23 42;
+    --surface-muted: 2 6 23;
+    --surface-sunken: 30 41 59;
 
-    /* The two hairline boundary tokens are DELIBERATELY left below the 3:1 non-text contrast bar
-       of WCAG SC 1.4.11. Against white the first measures 1.23:1 and the stronger one 1.48:1.
-       That is a recorded exception, not an oversight: raising either puts a mid-grey border on
-       every card and every input in both apps, which is a visible design change the owner has
-       decided against. Do not "fix" these two values to satisfy a checker - everything else in
-       this app that failed a contrast bar has been corrected around them. */
-    --line: 226 232 240;
-    --line-strong: 203 213 225;
+    /* The two hairlines are DELIBERATELY left below the 3:1 non-text contrast bar of WCAG SC 1.4.11,
+       exactly as their light-mode predecessors were (they measured 1.23:1 and 1.48:1 on white; these
+       measure 1.22:1 and 1.72:1 on slate-900, the same band). That is a recorded exception, not an
+       oversight: raising either puts a mid-grey border on every card and every input, which is a
+       visible design change the owner has decided against. Do not "fix" these two values to satisfy a
+       checker - everything else in this app that failed a contrast bar has been corrected around them. */
+    --line: 30 41 59;
+    --line-strong: 51 65 85;
 
-    --danger-50: 254 242 242;
-    --danger-200: 254 202 202;
-    --danger-600: 220 38 38;
+    /* Glass and glow, the two things this brief needs and Tailwind has no stock answer for. The glass
+       surface is a translucent panel for the sidebar and overlays - pair it with backdrop-blur-md,
+       which is stock Tailwind. */
+    --surface-glass: 15 23 42;
 
-    --grade-a-solid: 5 150 105;
-    --grade-a-soft: 236 253 245;
-    --grade-a-ink: 4 120 87;
-    --grade-b-solid: 2 132 199;
-    --grade-b-soft: 240 249 255;
-    --grade-b-ink: 3 105 161;
-    --grade-c-solid: 245 158 11;
-    --grade-c-soft: 255 251 235;
-    --grade-c-ink: 180 83 9;
-    --grade-d-solid: 100 116 139;
-    --grade-d-soft: 241 245 249;
-    --grade-d-ink: 71 85 105;
+    --danger-50: 69 10 10;
+    --danger-200: 153 27 27;
+    --danger-600: 248 113 113;
 
-    /* The asset lifecycle. Same solid/soft/ink shape as grade.* - `soft` + `ink` paint the
-       status chips, `solid` is free for a dot. Values are the hues the pages already used. */
-    --status-received-solid: 100 116 139;
-    --status-received-soft: 241 245 249;
-    --status-received-ink: 51 65 85;
-    --status-tested-solid: 2 132 199;
-    --status-tested-soft: 240 249 255;
-    --status-tested-ink: 3 105 161;
-    --status-in-repair-solid: 245 158 11;
-    --status-in-repair-soft: 255 251 235;
-    --status-in-repair-ink: 180 83 9;
-    --status-graded-solid: 124 58 237;
-    --status-graded-soft: 245 243 255;
-    --status-graded-ink: 109 40 217;
-    --status-listed-solid: 5 150 105;
-    --status-listed-soft: 236 253 245;
-    --status-listed-ink: 4 120 87;
-    --status-reserved-solid: 79 70 229;
-    --status-reserved-soft: 238 242 255;
-    --status-reserved-ink: 67 56 202;
-    --status-sold-solid: 13 148 136;
-    --status-sold-soft: 240 253 250;
-    --status-sold-ink: 15 118 110;
-    --status-shipped-solid: 8 145 178;
-    --status-shipped-soft: 236 254 255;
-    --status-shipped-ink: 14 116 144;
-    --status-returned-solid: 225 29 72;
-    --status-returned-soft: 255 241 242;
-    --status-returned-ink: 190 18 60;
-    --status-scrapped-solid: 220 38 38;
-    --status-scrapped-soft: 254 242 242;
-    --status-scrapped-ink: 185 28 28;
+    /* the A-D scale: the soft fill deepens, the ink lightens, the solid stays the saturated dot. */
+    --grade-a-solid: 16 185 129;
+    --grade-a-soft: 2 44 34;
+    --grade-a-ink: 110 231 183;
+    --grade-b-solid: 56 189 248;
+    --grade-b-soft: 12 74 110;
+    --grade-b-ink: 125 211 252;
+    --grade-c-solid: 251 191 36;
+    --grade-c-soft: 120 53 15;
+    --grade-c-ink: 252 211 77;
+    --grade-d-solid: 148 163 184;
+    --grade-d-soft: 51 65 85;
+    --grade-d-ink: 203 213 225;
+
+    /* The asset lifecycle. Same solid/soft/ink shape as grade.*: `soft` + `ink` paint the status
+       chips (now a deep fill under a light ink), `solid` is free for a dot. Every ink clears 5:1 on
+       its own soft. */
+    --status-received-solid: 148 163 184;
+    --status-received-soft: 51 65 85;
+    --status-received-ink: 203 213 225;
+    --status-tested-solid: 56 189 248;
+    --status-tested-soft: 12 74 110;
+    --status-tested-ink: 125 211 252;
+    --status-in-repair-solid: 251 191 36;
+    --status-in-repair-soft: 120 53 15;
+    --status-in-repair-ink: 252 211 77;
+    --status-graded-solid: 167 139 250;
+    --status-graded-soft: 76 29 149;
+    --status-graded-ink: 196 181 253;
+    --status-listed-solid: 16 185 129;
+    --status-listed-soft: 6 78 59;
+    --status-listed-ink: 110 231 183;
+    --status-reserved-solid: 129 140 248;
+    --status-reserved-soft: 49 46 129;
+    --status-reserved-ink: 165 180 252;
+    --status-sold-solid: 45 212 191;
+    --status-sold-soft: 19 78 74;
+    --status-sold-ink: 94 234 212;
+    --status-shipped-solid: 34 211 238;
+    --status-shipped-soft: 22 78 99;
+    --status-shipped-ink: 103 232 249;
+    --status-returned-solid: 251 113 133;
+    --status-returned-soft: 136 19 55;
+    --status-returned-ink: 253 164 175;
+    --status-scrapped-solid: 248 113 113;
+    --status-scrapped-soft: 127 29 29;
+    --status-scrapped-ink: 252 165 165;
   }
 }

@@ -62,7 +62,7 @@ function when(iso: string | null): string {
 }
 
 const STATE_TONE: Record<string, string> = {
-  active: "bg-brand-100 text-brand-900",
+  active: "bg-brand-100 text-brand-300",
   revoked: "bg-danger-50 text-danger-600",
   expired: "bg-surface-sunken text-ink-600",
 };
@@ -72,7 +72,7 @@ const STATE_TONE: Record<string, string> = {
    word itself carries the meaning, never the colour alone. */
 const CLASS_TONE: Record<string, string> = {
   outward: "bg-accent-100 text-accent-700",
-  inventory: "bg-brand-100 text-brand-900",
+  inventory: "bg-brand-100 text-brand-300",
 };
 
 function stateOf(a: Agent): string {
@@ -266,7 +266,7 @@ export default function AgentsPage() {
           {minted && (
             <Card tone="brand" className="p-4">
               <span className={kickerClass}>Shown once</span>
-              <p className="text-sm text-brand-900 mt-1 mb-2">
+              <p className="text-sm text-brand-300 mt-1 mb-2">
                 Copy this secret now. It is shown one time only: the server keeps a hash of it and never the
                 secret itself, so nobody - this page included - can show it again. If it is lost, rotate the
                 identity and the old secret stops working at once.
@@ -275,7 +275,7 @@ export default function AgentsPage() {
               <div className="flex items-center gap-3 mt-3">
                 <Button size="sm" onClick={copy}>{copied ? "Copied" : "Copy secret"}</Button>
                 <Button size="sm" variant="muted" onClick={() => setMinted(null)}>Dismiss</Button>
-                <span className="text-xs text-brand-900">expires {when(minted.expires_at)}</span>
+                <span className="text-xs text-brand-300">expires {when(minted.expires_at)}</span>
               </div>
             </Card>
           )}

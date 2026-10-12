@@ -121,7 +121,7 @@ export default function IntakePage() {
         </Table>
       </Card>
 
-      {msg && <p className="text-brand-700 text-sm">{msg}</p>}
+      {msg && <p className="text-brand-300 text-sm">{msg}</p>}
       {err && <p className="text-danger-600 text-sm">{err}</p>}
     </main>
   );

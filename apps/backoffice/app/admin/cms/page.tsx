@@ -85,7 +85,7 @@ export default function CmsPage() {
         <Heading level="h1">Website CMS</Heading>
         <span className="text-xs text-ink-400">hero content - offers - featured products (live on the storefront)</span>
       </div>
-      {msg && (<div className="rounded-control bg-brand-100 text-brand-900 px-3 py-2 mb-3 text-sm">{msg}</div>)}
+      {msg && (<div className="rounded-control bg-brand-100 text-brand-300 px-3 py-2 mb-3 text-sm">{msg}</div>)}
 
       <Card className="p-4 mb-4">
         <Heading level="h3" as="h2" className="mb-2">Homepage hero</Heading>
@@ -153,7 +153,7 @@ export default function CmsPage() {
             {prods.map((p, i) => (
               <TR key={p.id}>
                 <TD>
-                  <a className="text-brand-700" href={"/products/" + p.slug}>{p.title}</a>
+                  <a className="text-brand-300" href={"/products/" + p.slug}>{p.title}</a>
                   <p className="text-xs text-ink-500">{p.category}</p>
                 </TD>
                 <TD>{p.listed_units}</TD>

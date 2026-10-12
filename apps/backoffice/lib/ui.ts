@@ -79,4 +79,4 @@ export const kickerClass = "text-eyebrow uppercase text-ink-500";
 
    Written verbatim rather than composed, exactly as the tones above are: Tailwind scans source
    TEXT, so a built-up string would emit no rule at all. */
-export const linkClass = "text-brand-700 hover:underline";
+export const linkClass = "text-brand-300 hover:underline";

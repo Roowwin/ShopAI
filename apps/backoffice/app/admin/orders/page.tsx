@@ -141,7 +141,7 @@ export default function OrdersPage() {
                 {rows.map((o) => (
                   <TR key={o.id}>
                     <TD className="font-mono text-xs">
-                      <a href={"/admin/orders/" + o.id} className="text-brand-700 hover:underline">{o.public_id.slice(0, 8)}</a>
+                      <a href={"/admin/orders/" + o.id} className="text-brand-300 hover:underline">{o.public_id.slice(0, 8)}</a>
                     </TD>
                     <TD><Cell>{o.customer_email ?? "guest"}</Cell></TD>
                     <TD><Badge colorClass={statusTone(o.status)}>{o.status}</Badge></TD>
