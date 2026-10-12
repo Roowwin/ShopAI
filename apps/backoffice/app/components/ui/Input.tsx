@@ -6,7 +6,7 @@ import { cn } from "./cn";
    All three carry a focus highlight, which the pre-design-system inputs did not.
 
    The placeholder tone is picked against the tone's OWN fill, and on a dark ground the steps run the
-   other way: the card takes the middle ink (6.96:1), the raised band takes the stronger one (9.85:1),
+   other way: the card takes the middle ink (6.96:1), the page ground takes the stronger one (9.85:1),
    and the inverse fill takes the dim one (~5.8:1). All three clear 4.5:1 against the fill they sit on.
 
    The sunken tone has no call site in this app; it is kept in step with the storefront's header search.
