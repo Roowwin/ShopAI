@@ -1,38 +1,38 @@
 "use client";
 
-/* The Lot Process workbench: find a unit, grade it, correct it, and see the lot move.
+/* THE GRADING WORKSTATION. One search box, one table, six columns, and nothing else.
 
-   ONE SEARCH BOX, THREE HANDLES. The operator has a lot number, an asset id or a serial, and
-   which one they are holding depends on where they are standing. The box takes any of the three
-   and the SERVER decides, then tells us which rule matched (`match.resolved_by`) - shown under the
-   box, because a search that silently picks one reading of an ambiguous term is a search whose
-   answer nobody can check.
+   A SEARCH IS A DOOR INTO A LOT. Whichever handle the operator has - a lot number, an asset id, a
+   serial - the answer is the WHOLE LOT that handle belongs to. Searching a serial and getting one
+   row back hid the context a grader needs: a unit is almost never inspected alone, and the units
+   around it are usually in the same box. So an asset-id or serial match resolves to its lot and
+   comes back as the full list, with the unit that was actually named reported separately as
+   `highlight_asset_id` - the table marks that row so the eye lands on it without hunting.
 
-   TWO VIEWS, ONE QUEUE. "Unfinished" is the grading queue: units with no grade still on the
-   ladder. "All in lot" is the same lot with the finished units included, which is what correcting
-   a grade needs. A search that resolved to a single asset shows that asset either way - the
-   operator asked for it by name.
+   THE TABLE IS THE BRIEF'S, in the brief's order: Asset ID, Lot, Class, Model, Upgrade
+   Description, Grade. Nothing was added to it. Serial and status are not columns any more - the
+   serial the operator typed is echoed in the banner above the table, and the status is not
+   something the grader acts on.
 
-   CORRECTIONS ARE FIRST-CLASS. A grade can be replaced (pressing a different letter overwrites it)
-   and a description can be edited in place. Both go through the staff ops doors that already
-   audit: the grade through the grade handler - which writes the before/after pair - and the
-   description through the notes handler, which exists for exactly this. Nothing on this page
-   writes without a trail.
+   EVERY EDIT SAVES IMMEDIATELY, through the doors that already audit:
 
-   TAKING A GRADE BACK leaves the unit's status where it is, because the database has no legal
-   demotion from graded - so the row says "graded, no grade" rather than pretending otherwise, and
-   the unit returns to the unfinished queue, which is `grade IS NULL` and therefore true again the
-   moment the grade is cleared.
+   * the grade through the grade handler (with `test_first`, so a unit that has not been tested is
+     walked up the one rung the database requires, that step written to the trail as well);
+   * the description through the notes handler, which keeps a before/after pair.
 
-   EVERY NUMBER IS THE SERVER'S, and it is re-read after every change rather than adjusted
-   locally. A progress bar that counts its own edits is a bar that can disagree with the database
-   it is describing; one extra small request per press is a cheap price for never lying. */
+   There is no Save button because there is no state to forget to save: the description writes on
+   blur or on Enter, the grade writes on the press. A failed write puts the row back the way the
+   server has it rather than leaving the screen disagreeing with the database.
 
-import { useState } from "react";
+   KEYBOARD. A grader works down a list, so the keyboard does too: after a grade lands, focus moves
+   to the SAME grade button on the next row, which makes a pass down a lot one keypress per unit.
+   Up and Down arrows walk the same column between rows, and Tab reaches everything else. */
+
+import { useCallback, useRef, useState } from "react";
 
 import { Badge, Button, Card, Heading, Input, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
-import { gradeTone, kickerClass, statusTone } from "@/lib/ui";
+import { gradeTone, kickerClass } from "@/lib/ui";
 
 type WorkUnit = {
   id: number;
@@ -43,6 +43,7 @@ type WorkUnit = {
   product_id: number | null;
   product_title: string | null;
   product_model: string | null;
+  category: string | null;
   notes: string | null;
   gradable: boolean;
   ready_for_pricing: boolean;
@@ -50,6 +51,7 @@ type WorkUnit = {
 
 type Worklist = {
   match: { kind: "lot" | "asset"; resolved_by: string; term: string | null };
+  highlight_asset_id: number | null;
   lot: { id: number; lot_number: string; status: string; warehouse: string | null; received_at: string };
   progress: {
     total_units: number;
@@ -58,22 +60,18 @@ type Worklist = {
     awaiting_grade_units: number;
     ready_for_pricing_units: number;
   };
-  scope: Scope;
   assets: WorkUnit[];
   truncated: boolean;
   limit: number;
 };
 
-type Scope = "unfinished" | "all";
-
 const GRADES = ["A", "B", "C", "D"] as const;
 
-/* These buttons live inside the table's horizontal scroll region, which trims anything its
-   descendants paint outside its own box - so the cue is drawn INSIDE the button's edge, and an
-   inset cue carries no offset band. */
+/* The grade buttons sit inside the table's horizontal scroll region, which trims anything its
+   descendants paint outside its own box - so the cue is drawn INSIDE the button's edge. */
 const GRADE_FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-900";
 
-/* How the server says it read the search term, in words the operator used. */
+/* How the server says it read the term, in the operator's own words. */
 const RESOLVED_BY: Record<string, string> = {
   lot_number: "lot number",
   asset_id: "asset id",
@@ -83,24 +81,31 @@ const RESOLVED_BY: Record<string, string> = {
 
 export default function LotWorkbench() {
   const [text, setText] = useState("");
-  /* The submitted term, held apart from the box: changing the view re-runs the SAME search, and
-     it must not re-run whatever is currently half-typed in the field. */
   const [submitted, setSubmitted] = useState<string | null>(null);
-  const [scope, setScope] = useState<Scope>("unfinished");
   const [list, setList] = useState<Worklist | null>(null);
   const [busy, setBusy] = useState(false);
   const [inFlight, setInFlight] = useState<number | null>(null);
-  const [editing, setEditing] = useState<number | null>(null);
-  const [draft, setDraft] = useState("");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  /* Description drafts, keyed by unit id, seeded from the payload the first time a row is seen and
+     then owned by the field until it saves. Held across reloads on purpose: a save on one row must
+     not throw away what is half-typed on another. */
+  const [drafts, setDrafts] = useState<Record<number, string>>({});
+  const gradeRefs = useRef(new Map<string, HTMLButtonElement | null>());
 
-  async function load(term: string, nextScope: Scope) {
+  const seed = useCallback((units: WorkUnit[]) => {
+    setDrafts((prev) => {
+      const next = { ...prev };
+      for (const u of units) if (!(u.id in next)) next[u.id] = u.notes ?? "";
+      return next;
+    });
+  }, []);
+
+  async function load(term: string) {
     setBusy(true);
     setErr("");
     try {
-      const r = await apiFetch(
-        `/staff/lots/worklist?q=${encodeURIComponent(term)}&scope=${nextScope}`);
+      const r = await apiFetch(`/staff/lots/worklist?q=${encodeURIComponent(term)}`);
       const j: any = await r.json().catch(() => ({}));
       if (!r.ok) {
         setList(null);
@@ -109,6 +114,7 @@ export default function LotWorkbench() {
       }
       setList(j as Worklist);
       setSubmitted(term);
+      seed(j.assets as WorkUnit[]);
       setMsg("");
     } catch (e: any) {
       setErr(String(e?.message ?? e));
@@ -117,21 +123,35 @@ export default function LotWorkbench() {
     }
   }
 
-  /* Re-reads the same search after a change, so the queue and every counter come back from the
-     server rather than from this component's own arithmetic. */
-  function reload(nextScope: Scope = scope) {
-    if (submitted) return load(submitted, nextScope);
-    return Promise.resolve();
+  /* Re-reads the same search. Every counter and every row comes back from the server rather than
+     from this component's arithmetic, so the bar can never disagree with the database. */
+  async function reload() {
+    if (submitted) await load(submitted);
   }
 
-  async function quickGrade(unit: WorkUnit, grade: string | null) {
+  function focusGrade(unitId: number, grade: string) {
+    const el = gradeRefs.current.get(`${unitId}:${grade}`);
+    if (el) el.focus();
+  }
+
+  /* Walks the same grade column between rows, so the arrow keys and the post-save focus move both
+     land on a control that is there. */
+  function moveFocus(unitId: number, grade: string, delta: number) {
+    const order = (list?.assets ?? []).map((a) => a.id);
+    const to = order.indexOf(unitId) + delta;
+    if (to < 0 || to >= order.length) return;
+    focusGrade(order[to], grade);
+  }
+
+  async function quickGrade(unit: WorkUnit, grade: string) {
     if (inFlight !== null) return;
     setInFlight(unit.id);
     setErr("");
     setMsg("");
+    const order = (list?.assets ?? []).map((a) => a.id);
+    const at = order.indexOf(unit.id);
+    const nextId = at >= 0 && at + 1 < order.length ? order[at + 1] : null;
     try {
-      /* test_first walks the one rung the ladder requires for a unit that has not been tested;
-         the server records that step separately. `grade: null` is an explicit take-back. */
       const r = await apiFetch(`/staff/assets/${unit.id}/grade`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -142,12 +162,10 @@ export default function LotWorkbench() {
         setErr(typeof j.detail === "string" ? j.detail : "that grade was refused");
         return;
       }
-      setMsg(
-        grade === null
-          ? `${unit.serial_number ?? "unit " + unit.id} has no grade again - it is back in the unfinished queue.`
-          : `${unit.serial_number ?? "unit " + unit.id} graded ${grade}.`,
-      );
+      setMsg(`Asset ${unit.id} graded ${grade}.`);
       await reload();
+      // The next row, same grade button. One keypress per unit down the list.
+      if (nextId !== null) setTimeout(() => focusGrade(nextId, grade), 0);
     } catch (e: any) {
       setErr(String(e?.message ?? e));
     } finally {
@@ -156,6 +174,8 @@ export default function LotWorkbench() {
   }
 
   async function saveNotes(unit: WorkUnit) {
+    const draft = drafts[unit.id] ?? "";
+    if (draft === (unit.notes ?? "")) return;      // nothing changed: no request, no audit row
     if (inFlight !== null) return;
     setInFlight(unit.id);
     setErr("");
@@ -169,10 +189,12 @@ export default function LotWorkbench() {
       const j: any = await r.json().catch(() => ({}));
       if (!r.ok) {
         setErr(typeof j.detail === "string" ? j.detail : "that description was refused");
+        // The field goes back to what the server holds, rather than showing a save that did not happen.
+        setDrafts((prev) => ({ ...prev, [unit.id]: unit.notes ?? "" }));
         return;
       }
-      setEditing(null);
-      setMsg(`Description saved for ${unit.serial_number ?? "unit " + unit.id}.`);
+      setDrafts((prev) => ({ ...prev, [unit.id]: j.notes ?? "" }));
+      setMsg(`Description saved for asset ${unit.id}.`);
       await reload();
     } catch (e: any) {
       setErr(String(e?.message ?? e));
@@ -188,14 +210,11 @@ export default function LotWorkbench() {
 
   return (
     <div className="space-y-6">
-      {/* THE HERO. This is the view the page opens on and the one a grader lives in, so it is
-          first, widest and the only thing above the fold that asks for input. Stage 1 on this page
-          is Import, but Import is the occasional job - grading is the daily one. */}
       <Card className="p-6 shadow-glow-sm ring-brand-100">
         <Heading level="h3" as="h2">Find a lot, asset or serial</Heading>
         <p className="mt-1 pb-4 text-sm text-ink-500">
-          Type a lot number to open its grading queue, or an asset id or serial number to jump
-          straight to one unit inside its lot.
+          Any of the three opens the lot it belongs to, so the units you are working with stay
+          together. The one you searched for is marked in the table.
         </p>
         <div className="flex flex-wrap gap-3">
           <div className="min-w-[16rem] flex-1">
@@ -204,26 +223,15 @@ export default function LotWorkbench() {
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") { e.preventDefault(); if (text.trim()) load(text.trim(), scope); }
+                if (e.key === "Enter") { e.preventDefault(); if (text.trim()) load(text.trim()); }
               }}
               aria-label="Lot number, asset id or serial number"
             />
           </div>
-          <Button size="lg" onClick={() => load(text.trim(), scope)} disabled={busy || !text.trim()}>
+          <Button size="lg" onClick={() => load(text.trim())} disabled={busy || !text.trim()}>
             {busy ? "Searching..." : "Open"}
           </Button>
         </div>
-
-        {list && (
-          <p className="mt-3 text-xs text-ink-500">
-            Matched on{" "}
-            <span className="font-semibold text-ink-600">
-              {RESOLVED_BY[list.match.resolved_by] ?? list.match.resolved_by}
-            </span>
-            {list.match.term ? <> - <span className="font-mono">{list.match.term}</span></> : null}
-            {list.match.kind === "asset" ? ", showing that unit." : `, showing lot ${list.lot.lot_number}.`}
-          </p>
-        )}
       </Card>
 
       {msg && <p className="text-brand-300 text-sm">{msg}</p>}
@@ -233,7 +241,7 @@ export default function LotWorkbench() {
         <>
           <Card className="p-6">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <Heading level="h3" as="h2">Processing Lot #{list.lot.lot_number}</Heading>
+              <Heading level="h3" as="h2">Lot {list.lot.lot_number}</Heading>
               <p className="text-sm text-ink-500">
                 {progress.awaiting_grade_units} still to grade
                 {list.lot.warehouse ? ` - ${list.lot.warehouse}` : ""}
@@ -243,8 +251,6 @@ export default function LotWorkbench() {
             <p className="mt-3 text-sm font-semibold text-ink-700">
               {graded} of {total} units graded
             </p>
-            {/* A progress bar needs all three of its values, and its label has to survive being
-                read aloud on its own - the heading above is a separate element. */}
             <div
               role="progressbar"
               aria-valuenow={graded}
@@ -259,9 +265,7 @@ export default function LotWorkbench() {
               />
             </div>
 
-            {/* The split the brief asks for, plus the flag the pricing stage will read. Each is a
-                server field; none of them is derived here. */}
-            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-4">
+            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
               <div>
                 <dt className={kickerClass}>Received</dt>
                 <dd className="mt-1 text-lg font-semibold text-ink-900">{progress.received_units}</dd>
@@ -271,190 +275,130 @@ export default function LotWorkbench() {
                 <dd className="mt-1 text-lg font-semibold text-ink-900">{progress.graded_units}</dd>
               </div>
               <div>
-                <dt className={kickerClass}>Awaiting a grade</dt>
-                <dd className="mt-1 text-lg font-semibold text-ink-900">{progress.awaiting_grade_units}</dd>
-              </div>
-              <div>
                 <dt className={kickerClass}>Ready for pricing</dt>
                 <dd className="mt-1 text-lg font-semibold text-ink-900">{progress.ready_for_pricing_units}</dd>
               </div>
             </dl>
+
+            {list.highlight_asset_id !== null && (
+              <p className="mt-4 text-xs text-ink-500">
+                Matched on{" "}
+                <span className="font-semibold text-ink-600">
+                  {RESOLVED_BY[list.match.resolved_by] ?? list.match.resolved_by}
+                </span>
+                {list.match.term ? <> - <span className="font-mono">{list.match.term}</span></> : null}
+                {" "}- asset {list.highlight_asset_id} is marked below.
+              </p>
+            )}
           </Card>
 
           <Card className="p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <Heading level="h3" as="h2">
-                {list.match.kind === "asset" ? "The matching unit" : "Grading queue"}
-              </Heading>
-              {/* A segmented control, not a tablist: both options show the same table under one
-                  heading, and there are no panels to wire. */}
-              <div className="inline-flex gap-1 rounded-control bg-surface-sunken p-1 ring-1 ring-line">
-                {([["unfinished", "Show Only Unfinished"], ["all", "Show All in Lot"]] as [Scope, string][]).map(
-                  ([id, label]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      aria-pressed={scope === id}
-                      onClick={() => { setScope(id); reload(id); }}
-                      className={cn(
-                        "rounded-control px-3 py-1.5 text-xs font-semibold",
-                        "transition-colors duration-fast ease-out motion-reduce:transition-none",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2",
-                        scope === id ? "bg-brand-700 text-white" : "text-ink-600 hover:bg-surface",
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ),
-                )}
-              </div>
-            </div>
-
+            <Heading level="h3" as="h2">Units</Heading>
             {list.assets.length === 0 ? (
-              <p className="mt-2 text-sm text-ink-500">
-                {list.match.kind === "asset"
-                  ? "That unit was not found in this view."
-                  : "Every unit in this lot has a grade. Switch to Show All in Lot to correct one."}
-              </p>
+              <p className="mt-2 text-sm text-ink-500">This lot has no units in it.</p>
             ) : (
               <>
                 <p className="mt-1 pb-3 text-xs text-ink-500">
-                  One press grades one unit and it leaves this list immediately, ready for the
-                  store manager to price. Pressing a different letter replaces a grade the unit
-                  already has. A unit that has not been tested is marked tested on the way through -
-                  the database will not let a unit skip that step, and both steps are written to the
-                  audit trail.
+                  A grade saves on the press. A description saves when you leave the field or press
+                  Enter. A unit that has not been tested is marked tested on the way through - the
+                  database will not let a unit skip that step, and both steps reach the audit trail.
                 </p>
                 <Table label={`Units in lot ${list.lot.lot_number}`}>
                   <THead>
-                    <TH>Serial</TH>
+                    <TH>Asset ID</TH>
+                    <TH>Lot</TH>
+                    <TH>Class</TH>
                     <TH>Model</TH>
-                    <TH>Status</TH>
+                    <TH>Upgrade Description</TH>
                     <TH>Grade</TH>
-                    <TH>Description</TH>
                   </THead>
                   <TBody>
-                    {list.assets.map((u) => (
-                      <TR key={u.id} className={inFlight === u.id ? "opacity-50" : undefined}>
-                        <TD className="font-mono text-xs">
-                          {u.serial_number ?? "-"}
-                          {u.ready_for_pricing && (
-                            <div className="mt-1">
-                              <Badge colorClass="bg-brand-50 text-brand-300">Ready for pricing</Badge>
-                            </div>
+                    {list.assets.map((u) => {
+                      const matched = u.id === list.highlight_asset_id;
+                      return (
+                        <TR
+                          key={u.id}
+                          className={cn(
+                            inFlight === u.id ? "opacity-60" : "",
+                            matched ? "bg-brand-50 ring-2 ring-inset ring-brand-500" : "",
                           )}
-                        </TD>
-                        {/* The model, falling back to the product's title: an imported product is
-                            created with both set to the sheet's Model column, so one of them is
-                            always there for a unit that has a product at all. */}
-                        <TD className="text-ink-600">{u.product_model ?? u.product_title ?? "-"}</TD>
-                        <TD><Badge colorClass={statusTone(u.status)}>{u.status}</Badge></TD>
-                        <TD>
-                          {u.gradable ? (
-                            <div className="flex items-center gap-1">
-                              {GRADES.map((g) => (
-                                <button
-                                  key={g}
-                                  type="button"
-                                  disabled={inFlight !== null}
-                                  onClick={() => quickGrade(u, g)}
-                                  aria-label={`Grade ${u.serial_number ?? "unit " + u.id} as ${g}`}
-                                  aria-pressed={u.grade === g}
-                                  className={cn(
-                                    "h-7 w-7 rounded-control text-xs font-semibold",
-                                    "transition-colors duration-fast ease-out motion-reduce:transition-none",
-                                    "hover:opacity-80 disabled:opacity-40 disabled:pointer-events-none",
-                                    GRADE_FOCUS,
-                                    gradeTone(g),
-                                    u.grade === g ? "ring-2 ring-inset ring-brand-900" : "",
-                                  )}
-                                >
-                                  {g}
-                                </button>
-                              ))}
-                              {u.grade && (
-                                <button
-                                  type="button"
-                                  disabled={inFlight !== null}
-                                  onClick={() => quickGrade(u, null)}
-                                  aria-label={`Remove the grade from ${u.serial_number ?? "unit " + u.id}`}
-                                  className={cn(
-                                    "h-7 rounded-control px-2 text-xs font-semibold text-ink-600",
-                                    "ring-1 ring-line hover:bg-surface-sunken",
-                                    "transition-colors duration-fast ease-out motion-reduce:transition-none",
-                                    "disabled:opacity-40 disabled:pointer-events-none",
-                                    GRADE_FOCUS,
-                                  )}
-                                >
-                                  Clear
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-ink-500">
-                              {u.grade ?? "no grade"} - not gradable at {u.status}
-                            </span>
-                          )}
-                        </TD>
-                        <TD className="max-w-[18rem]">
-                          {editing === u.id ? (
-                            <div className="space-y-2">
-                              <textarea
-                                value={draft}
-                                onChange={(e) => setDraft(e.target.value)}
-                                rows={3}
-                                aria-label={`Description for ${u.serial_number ?? "unit " + u.id}`}
-                                className={cn(
-                                  "w-full rounded-control bg-surface px-3 py-2 text-xs text-ink-700",
-                                  "ring-1 ring-line-strong outline-none focus-visible:ring-2 focus-visible:ring-brand-700",
-                                )}
-                              />
-                              <div className="flex gap-2">
-                                <Button size="sm" disabled={inFlight !== null} onClick={() => saveNotes(u)}>
-                                  Save
-                                </Button>
-                                <Button size="sm" variant="muted" onClick={() => setEditing(null)}>
-                                  Cancel
-                                </Button>
+                        >
+                          <TD className="font-mono text-xs">
+                            {u.id}
+                            {matched && (
+                              <div className="mt-1">
+                                <Badge colorClass="bg-brand-700 text-white">matched</Badge>
                               </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-start gap-2">
-                              {/* The description is whitespace-pre-line because the import writes
-                                  one labelled line per source column; collapsing them would hide
-                                  which column said what. */}
-                              <p className="whitespace-pre-line text-xs text-ink-600">
-                                {u.notes ?? <span className="text-ink-500">no description</span>}
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => { setEditing(u.id); setDraft(u.notes ?? ""); }}
-                                aria-label={`Edit the description for ${u.serial_number ?? "unit " + u.id}`}
-                                className={cn(
-                                  "shrink-0 rounded-control p-1 text-ink-500 hover:text-brand-300",
-                                  "transition-colors duration-fast ease-out motion-reduce:transition-none",
-                                  GRADE_FOCUS,
-                                )}
-                              >
-                                {/* A pencil, drawn inline: this repo has no icon package and the
-                                    chrome's glyphs are all hand-rolled SVG. */}
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                                     stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-                                     strokeLinejoin="round" aria-hidden="true">
-                                  <path d="M12 20h9" />
-                                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                                </svg>
-                              </button>
-                            </div>
-                          )}
-                        </TD>
-                      </TR>
-                    ))}
+                            )}
+                          </TD>
+                          <TD className="font-mono text-xs text-ink-600">{list.lot.lot_number}</TD>
+                          <TD className="text-ink-600">{u.category ?? "-"}</TD>
+                          <TD className="text-ink-600">{u.product_model ?? u.product_title ?? "-"}</TD>
+                          <TD className="min-w-[16rem]">
+                            {/* Always a field, never a read-mode text with an edit mode behind it:
+                                the brief asks for an editable description, and a control that has
+                                to be revealed first is a click the grader should not have to make. */}
+                            <textarea
+                              value={drafts[u.id] ?? ""}
+                              rows={2}
+                              disabled={inFlight !== null}
+                              onChange={(e) => setDrafts((prev) => ({ ...prev, [u.id]: e.target.value }))}
+                              onBlur={() => saveNotes(u)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur(); }
+                              }}
+                              placeholder="What did you find?"
+                              aria-label={`Upgrade description for asset ${u.id}`}
+                              className={cn(
+                                "w-full rounded-control bg-surface px-3 py-2 text-xs text-ink-700",
+                                "ring-1 ring-line outline-none focus-visible:ring-2 focus-visible:ring-brand-700",
+                                "disabled:opacity-50",
+                              )}
+                            />
+                          </TD>
+                          <TD>
+                            {u.gradable ? (
+                              <div className="flex gap-1">
+                                {GRADES.map((g) => (
+                                  <button
+                                    key={g}
+                                    type="button"
+                                    ref={(el) => { gradeRefs.current.set(`${u.id}:${g}`, el); }}
+                                    disabled={inFlight !== null}
+                                    onClick={() => quickGrade(u, g)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "ArrowDown") { e.preventDefault(); moveFocus(u.id, g, 1); }
+                                      if (e.key === "ArrowUp") { e.preventDefault(); moveFocus(u.id, g, -1); }
+                                    }}
+                                    aria-label={`Grade asset ${u.id} as ${g}`}
+                                    aria-pressed={u.grade === g}
+                                    className={cn(
+                                      "h-7 w-7 rounded-control text-xs font-semibold",
+                                      "transition-colors duration-fast ease-out motion-reduce:transition-none",
+                                      "hover:opacity-80 disabled:opacity-40 disabled:pointer-events-none",
+                                      GRADE_FOCUS,
+                                      gradeTone(g),
+                                      u.grade === g ? "ring-2 ring-inset ring-brand-900" : "",
+                                    )}
+                                  >
+                                    {g}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-ink-500">
+                                {u.grade ?? "no grade"} - not gradable at {u.status}
+                              </span>
+                            )}
+                          </TD>
+                        </TR>
+                      );
+                    })}
                   </TBody>
                 </Table>
                 {list.truncated && (
                   <p className="mt-3 text-xs text-ink-500">
-                    Showing the first {list.limit} units. Narrow the search to see the rest.
+                    Showing the first {list.limit} units of this lot.
                   </p>
                 )}
               </>

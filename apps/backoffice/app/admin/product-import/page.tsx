@@ -9,6 +9,7 @@
    that drifted would be the one nobody was looking at. */
 
 import { Heading } from "@/app/components/ui";
+import IntakeTools from "@/app/admin/intake/IntakeTools";
 import ProductImportPanel from "./ProductImportPanel";
 
 export default function ProductImportPage() {
@@ -17,14 +18,18 @@ export default function ProductImportPage() {
       <div>
         <Heading level="h1">Product import</Heading>
         <p className="mt-1 text-sm text-ink-500">
-          Read a product stock sheet, check the column mapping it found, then create the lots and
-          units. Reading a sheet writes nothing - creating stock takes a second, deliberate press.
-          This is the Import stage of the stock pipeline; the same panel sits on
-          Lot Process, under the grading workbench.
+          Bring stock in: read a product stock sheet, or take one unit at a time from a photo and a
+          serial. Reading a sheet writes nothing - creating stock takes a second, deliberate press.
         </p>
       </div>
 
       <ProductImportPanel />
+
+      {/* The photo/scan and lot tools, moved here from Lot Process when that page became a
+          grading workstation. */}
+      <div className="border-t border-line pt-6">
+        <IntakeTools />
+      </div>
     </main>
   );
 }
