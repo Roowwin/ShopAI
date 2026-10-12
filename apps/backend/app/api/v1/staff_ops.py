@@ -458,7 +458,7 @@ _GRADABLE_SQL = ", ".join("'" + s + "'" for s in _GRADABLE_STATUSES)
 
 @router.get("/lots/worklist")
 async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_id: int | None = None,
-                       scope: str = Query("unfinished"),
+                       scope: str = Query("all"),
                        staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
     """One lot's grading progress, and the units to show for it.
 
@@ -471,10 +471,15 @@ async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_
       lot number first (the operator's own handle), then a bare number as an asset id (a numeric
       serial is rare; a numeric id is not), then the serial itself (CITEXT, so case-insensitive).
 
-    `scope` decides which units come back: `unfinished` (the default) is the grading queue -
-    units with no grade that are still on the ladder - while `all` is every unit in the lot, for
-    correcting a grade that was already given. A search that resolved to ONE asset always returns
-    that asset whatever the scope, because the operator asked for it by name.
+    **A MATCH IS A DOOR INTO ITS LOT, not a filter.** Whichever of the three rules matches - a lot
+    number, an asset id, a serial - the payload carries the WHOLE lot the match belongs to, and a
+    term that resolved to one unit is reported separately as `highlight_asset_id` so the caller can
+    point at it inside that list. Searching a serial used to return that single unit; that hid the
+    context a grader needs, and an operator correcting one unit almost always has the units around
+    it in their hands too.
+
+    `scope` filters the list: `all` (the default) is every unit in the lot - the workstation view -
+    while `unfinished` narrows to the grading queue (no grade, still on the ladder).
 
     Progress is counted over the WHOLE lot in every case: "3 of 10 units graded" has to mean the
     lot, not the slice on screen. `ready_for_pricing` is derived, never stored - `status='graded'`
@@ -487,7 +492,9 @@ async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_
         raise HTTPException(status_code=422, detail="provide exactly one of q / lot_id / lot_number")
 
     match = {"kind": "lot", "resolved_by": "lot_id" if lot_id is not None else "lot_number", "term": None}
-    focus_asset_id: int | None = None
+    # The unit the term NAMED, if it named one. It does not filter anything - it goes back in the
+    # payload so the caller can highlight it in the lot it was found in.
+    highlight_asset_id: int | None = None
     lot = None
     if lot_id is not None:
         lot = (await db.execute(select(Lot).where(Lot.id == lot_id))).scalars().first()
@@ -520,7 +527,7 @@ async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_
                     status_code=404,
                     detail="nothing matches that lot number, asset id or serial")
             match["kind"] = "asset"
-            focus_asset_id = row["id"]
+            highlight_asset_id = row["id"]
             lot = (await db.execute(select(Lot).where(Lot.id == row["lot_id"]))).scalars().first()
     if lot is None:
         raise HTTPException(status_code=404, detail="lot not found")
@@ -537,10 +544,7 @@ async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_
     # The WHERE is assembled from constants only - no caller text reaches this string, and the
     # values ride as bound parameters.
     params: dict = {"i": lot.id, "lim": WORKLIST_MAX + 1}
-    if focus_asset_id is not None:
-        where = "a.lot_id = :i AND a.id = :aid"
-        params["aid"] = focus_asset_id
-    elif scope == "unfinished":
+    if scope == "unfinished":
         where = ("a.lot_id = :i AND a.grade IS NULL AND a.status IN (" + _GRADABLE_SQL + ")")
     else:
         where = "a.lot_id = :i"
@@ -548,8 +552,9 @@ async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_
     rows = (await db.execute(text("""
         SELECT a.id, a.public_id::text AS public_id, a.serial_number::text AS serial_number,
                a.status, a.grade, a.product_id, a.notes,
-               p.title AS product_title, p.model AS product_model
+               p.title AS product_title, p.model AS product_model, c.name AS category_name
         FROM assets a LEFT JOIN products p ON p.id = a.product_id
+                     LEFT JOIN categories c ON c.id = p.category_id
         WHERE """ + where + """
         ORDER BY a.id LIMIT :lim
     """), params)).mappings().all()
@@ -558,6 +563,7 @@ async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_
 
     return {
         "match": match,
+        "highlight_asset_id": highlight_asset_id,
         "lot": {"id": lot.id, "lot_number": lot.lot_number, "status": lot.status,
                 "warehouse": lot.warehouse, "received_at": lot.received_at.isoformat()},
         "progress": {"total_units": int(counts["total"]), "received_units": int(counts["received"]),
@@ -568,7 +574,7 @@ async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_
         "assets": [{"id": r["id"], "public_id": r["public_id"], "serial_number": r["serial_number"],
                     "status": r["status"], "grade": r["grade"], "product_id": r["product_id"],
                     "product_title": r["product_title"], "product_model": r["product_model"],
-                    "notes": r["notes"],
+                    "category": r["category_name"], "notes": r["notes"],
                     "gradable": r["status"] in _GRADABLE_STATUSES,
                     "ready_for_pricing": r["grade"] is not None and r["status"] == "graded"}
                    for r in rows],

@@ -85,10 +85,17 @@ async def test_worklist_reports_progress_and_the_awaiting_queue(client):
     g = await client.post(f"/staff/assets/{ids[0]}/grade",
                           json={"grade": "B", "test_first": True}, headers=_h(tok))
     assert g.status_code == 200, g.text
+    # The default scope is the WHOLE lot - the workstation view - so the graded unit stays in the
+    # list, carrying its grade. Only `unfinished` drops it.
     after = (await client.get(f"/staff/lots/worklist?lot_id={lot_id}", headers=_h(tok))).json()
     assert after["progress"] == {"total_units": 3, "received_units": 2, "graded_units": 1,
                                  "awaiting_grade_units": 2, "ready_for_pricing_units": 1}
-    assert ids[0] not in [a["id"] for a in after["assets"]]
+    assert sorted(a["id"] for a in after["assets"]) == sorted(ids)
+    assert next(a for a in after["assets"] if a["id"] == ids[0])["grade"] == "B"
+    queue = (await client.get(f"/staff/lots/worklist?lot_id={lot_id}&scope=unfinished",
+                              headers=_h(tok))).json()
+    assert ids[0] not in [a["id"] for a in queue["assets"]]
+    assert len(queue["assets"]) == 2
 
 
 async def test_worklist_needs_exactly_one_of_id_or_number(client):
@@ -213,39 +220,60 @@ async def test_the_grading_queue_carries_the_model_the_grader_reads(client):
     body = (await client.get(f"/staff/lots/worklist?q={lot['lot_number']}", headers=_h(tok))).json()
     row = body["assets"][0]
     assert row["product_model"] == model
+    assert row["category"] == "Phones", "the Class column the workstation shows"
     assert row["status"] == "received" and row["grade"] is None, "it is in the queue, ungraded"
     assert row["gradable"] is True and row["ready_for_pricing"] is False
 
 
-async def test_universal_search_resolves_lot_serial_and_asset_id(client):
-    """One box, three handles - and the payload says which rule matched."""
+async def test_search_expands_to_the_whole_lot_and_marks_the_match(client):
+    """One box, three handles - and EVERY handle opens the lot, not the single unit.
+
+    Searching a serial used to return that unit alone. The brief corrected it: a unit is graded in
+    the company of the units it arrived with, so an asset-id or serial match now resolves to its
+    lot and the matched unit comes back as a highlight instead of as a filter.
+    """
     tag = _tag()
     tok = await _staff(client, "admin")
-    _, lot_number, ids = await _lot_with_units(client, tok, tag, 2)
+    _, lot_number, ids = await _lot_with_units(client, tok, tag, 3)
 
     by_lot = (await client.get(f"/staff/lots/worklist?q={lot_number}", headers=_h(tok))).json()
     assert by_lot["match"]["resolved_by"] == "lot_number"
     assert by_lot["match"]["kind"] == "lot"
     assert [a["id"] for a in by_lot["assets"]] == ids
+    assert by_lot["highlight_asset_id"] is None, "a lot number names no single unit"
 
     # `_lot_with_units` numbers its units from S0, so S1 is the SECOND asset in the lot.
     by_serial = (await client.get(f"/staff/lots/worklist?q={tag}-S1", headers=_h(tok))).json()
     assert by_serial["match"] == {"kind": "asset", "resolved_by": "serial", "term": f"{tag}-S1"}
-    assert [a["id"] for a in by_serial["assets"]] == [ids[1]]
-    # An asset match still carries its lot's progress, so the workbench has context either way.
+    assert [a["id"] for a in by_serial["assets"]] == ids, "the WHOLE lot, not the one unit"
+    assert by_serial["highlight_asset_id"] == ids[1], "and the unit that was named, marked"
     assert by_serial["lot"]["lot_number"] == lot_number
-    assert by_serial["progress"]["total_units"] == 2
 
-    by_id = (await client.get(f"/staff/lots/worklist?q={ids[0]}", headers=_h(tok))).json()
+    by_id = (await client.get(f"/staff/lots/worklist?q={ids[2]}", headers=_h(tok))).json()
     assert by_id["match"]["resolved_by"] == "asset_id"
-    assert [a["id"] for a in by_id["assets"]] == [ids[0]]
+    assert [a["id"] for a in by_id["assets"]] == ids
+    assert by_id["highlight_asset_id"] == ids[2]
 
     # A serial is matched case-insensitively (the column is CITEXT).
     upper = (await client.get(f"/staff/lots/worklist?q={tag.upper()}-S1", headers=_h(tok))).json()
-    assert [a["id"] for a in upper["assets"]] == [ids[1]]
+    assert upper["highlight_asset_id"] == ids[1]
 
     nothing = await client.get("/staff/lots/worklist?q=pytest-nothing-matches-this", headers=_h(tok))
     assert nothing.status_code == 404, nothing.text
+
+
+async def test_a_highlighted_unit_stays_marked_after_it_is_graded(client):
+    """The highlight is a property of the SEARCH, not of the queue - grading does not clear it."""
+    tag = _tag()
+    tok = await _staff(client, "admin")
+    _, _, ids = await _lot_with_units(client, tok, tag, 2)
+    await client.post(f"/staff/assets/{ids[0]}/grade",
+                      json={"grade": "C", "test_first": True}, headers=_h(tok))
+
+    body = (await client.get(f"/staff/lots/worklist?q={tag}-S0", headers=_h(tok))).json()
+    assert body["highlight_asset_id"] == ids[0]
+    row = next(a for a in body["assets"] if a["id"] == ids[0])
+    assert row["grade"] == "C" and row["ready_for_pricing"] is True
 
 
 async def test_scope_all_shows_graded_units_and_unfinished_hides_them(client):
