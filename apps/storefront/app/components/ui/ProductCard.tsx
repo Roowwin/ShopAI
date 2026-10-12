@@ -11,8 +11,7 @@ import { cn } from "./cn";
    called aud() unguarded, so a null price rendered as "$0.00".
 
    - full    catalog tile: art, eco badge, brand-category eyebrow, price, muted stock pill, and the
-             card's one primary action - the name stretched over the whole tile, "View product" at
-             the foot
+             card's one action - the name stretched over the whole tile, "View product" at the foot
    - compact art + title + price (home arrivals, best sellers)
    - text    brand eyebrow + title + price, no art (search results, related products)
 
@@ -74,9 +73,9 @@ function Initials({ brand, large }: { brand?: string | null; large?: boolean }) 
   );
 }
 
-/* Small and quiet: the count is information, not the card's action. The emerald is spent once per
-   card, on the CTA - which is why a live count and a zero one share a tint and are told apart by
-   their own wording. */
+/* Small and quiet: the count is information, not the card's action, and the card already has the
+   one control that competes for the eye. A live count and a zero one share the tint and are told
+   apart by their own wording. */
 function StockPill({ stock }: { stock: Stock }) {
   return (
     <Badge colorClass="bg-surface-sunken text-ink-500">
