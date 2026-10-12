@@ -1,12 +1,12 @@
-"""Corporate spreadsheet import: read a supplier/vendor sheet, map it onto the asset model, write.
+"""Product import: read a supplier's product sheet, map it onto the asset model, write.
 
 WHY THIS FILE EXISTS. The backoffice could take one photo and one serial at a time
 (`staff_ops.scan_in`), and its intake drop zone deliberately REFUSED spreadsheets - no parser
-dependency existed and no service took a sheet. A corporate refresh lot arrives as one workbook of
+dependency existed and no service took a sheet. A supplier refresh lot arrives as one workbook of
 hundreds of rows, so the intake screen had nothing to offer the one flow that actually carries
 volume. This module is the reader that was missing.
 
-THE COLUMN CONTRACT. A corporate sheet names its columns the way the supplier's system does:
+THE COLUMN CONTRACT. A product sheet names its columns the way the supplier's system does:
 Asset, Status, Lot, Class, Mfg, Model, Grade, Serial#, Resale, plus the three free-text condition
 columns (Audit, Cosmetic, Functional). We map:
 
@@ -75,12 +75,12 @@ router = APIRouter(prefix="/staff", tags=["staff-imports"])
 # rather than with single-unit intake: admin and manager only. The tuple is declared here and NOT
 # in staff_ops.py because that file's tuples are the chat rail's authorization surface; this action
 # has no chat door, so putting it there would invite a grant for something the rail cannot run.
-ROLES_CORPORATE_IMPORT = ("admin", "manager")
+ROLES_PRODUCT_IMPORT = ("admin", "manager")
 # Deliberately NOT a key in staff_ops.GUARDED_ACTIONS. It is passed to _require_role only so the
 # refusal path is shared; with `db=None` the grant lookup is unreachable either way.
-ACTION_CORPORATE_IMPORT = "corporate_import"
+ACTION_PRODUCT_IMPORT = "product_import"
 
-# Bounds. A corporate workbook is hundreds of rows, not a database dump; refusing early beats
+# Bounds. A product workbook is hundreds of rows, not a database dump; refusing early beats
 # spending a transaction on a file that was never meant for this door.
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 MAX_ROWS = 5000
@@ -489,7 +489,7 @@ async def _resolve_category(db, name: str) -> int:
 async def _resolve_product(db, brand: str, category: str, model: str) -> tuple[int, bool]:
     """Find a product by (brand, category, model) or create it. Returns (id, created).
 
-    The identity of a product here is the triple the corporate sheet supplies, matched
+    The identity of a product here is the triple the product sheet supplies, matched
     case-insensitively, so re-importing the same sheet - or a later lot of the same model - lands on
     the product that already exists instead of minting a near-duplicate the storefront would then
     show twice. Products created this way are 'active' like `staff_ops.create_product`'s: the
@@ -531,7 +531,7 @@ async def _run_import(db, staff: dict, parsed: list[dict], filename: str) -> dic
             lot_ids[number] = existing.id
             lots_reused.append(number)
             continue
-        lot = Lot(lot_number=number, status="intake", notes="corporate import")
+        lot = Lot(lot_number=number, status="intake", notes="product import")
         db.add(lot)
         await db.flush()
         lot_ids[number] = lot.id
@@ -570,16 +570,16 @@ async def _run_import(db, staff: dict, parsed: list[dict], filename: str) -> dic
     await db.flush()
 
     for asset, record in assets:
-        db.add(StockMovement(asset_id=asset.id, qty=1, reason="corporate_import",
+        db.add(StockMovement(asset_id=asset.id, qty=1, reason="product_import",
                              actor_staff_id=staff["id"]))
-        await audit(db, "staff", entity="asset", entity_id=asset.id, action="corporate_import",
+        await audit(db, "staff", entity="asset", entity_id=asset.id, action="product_import",
                     actor_id=staff["id"],
                     after={"serial": record["serial_number"], "lot": record["lot_number"],
                            "status": record["status"], "row": record["row"]})
-    await audit(db, "staff", entity="import", action="corporate_import", actor_id=staff["id"],
+    await audit(db, "staff", entity="import", action="product_import", actor_id=staff["id"],
                 after={"file": filename, "rows": len(parsed), "lots": len(lot_ids),
                        "listed": len([r for r in parsed if r["status"] == "listed"])},
-                meta={"source": "corporate", "products_created": len(products_created)})
+                meta={"source": "product_import", "products_created": len(products_created)})
     return {"lots_created": lots_created, "lots_reused": lots_reused,
             "products_created": products_created,
             "assets": [{"row": r["row"], "asset_id": a.id, "serial_number": a.serial_number,
@@ -597,19 +597,19 @@ def _condition_report(record: dict) -> dict | None:
     structured = record.get("technical_parts") or {}
     report = {k: _clean(structured.get(k, "")) for k in ("audit", "cosmetic", "functional")}
     if record.get("asset_tag"):
-        report["corporate_asset_tag"] = record["asset_tag"]
+        report["asset_tag"] = record["asset_tag"]
     if record.get("technical_notes"):
         report["technical_notes"] = record["technical_notes"]
     report = {k: v for k, v in report.items() if v}
     return report or None
 
 
-@router.post("/imports/corporate/preview")
-async def preview_corporate_import(file: UploadFile = File(...),
-                                   staff: dict = Depends(require_roles(*ROLES_CORPORATE_IMPORT)),
+@router.post("/imports/products/preview")
+async def preview_product_import(file: UploadFile = File(...),
+                                   staff: dict = Depends(require_roles(*ROLES_PRODUCT_IMPORT)),
                                    db=Depends(get_db)):
     """Read the sheet and report what WOULD happen. Writes nothing, ever."""
-    await _require_role(staff, ROLES_CORPORATE_IMPORT, ACTION_CORPORATE_IMPORT, None)
+    await _require_role(staff, ROLES_PRODUCT_IMPORT, ACTION_PRODUCT_IMPORT, None)
     data = await _read_upload(file)
     outcome = await parse_and_validate(db, data, file.filename or "")
     report = outcome["report"]
@@ -617,12 +617,12 @@ async def preview_corporate_import(file: UploadFile = File(...),
     return report
 
 
-@router.post("/imports/corporate/commit")
-async def commit_corporate_import(file: UploadFile = File(...),
-                                  staff: dict = Depends(require_roles(*ROLES_CORPORATE_IMPORT)),
+@router.post("/imports/products/commit")
+async def commit_product_import(file: UploadFile = File(...),
+                                  staff: dict = Depends(require_roles(*ROLES_PRODUCT_IMPORT)),
                                   db=Depends(get_db)):
     """Write the sheet's rows. Refuses the whole file if any row is blocked."""
-    await _require_role(staff, ROLES_CORPORATE_IMPORT, ACTION_CORPORATE_IMPORT, None)
+    await _require_role(staff, ROLES_PRODUCT_IMPORT, ACTION_PRODUCT_IMPORT, None)
     data = await _read_upload(file)
     outcome = await parse_and_validate(db, data, file.filename or "")
     if outcome["blocked"]:

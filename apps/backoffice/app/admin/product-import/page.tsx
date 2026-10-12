@@ -1,9 +1,9 @@
 "use client";
 
-/* Corporate import: a supplier workbook in, lots and units out.
+/* Product import: a supplier workbook in, lots and units out.
 
    THREE STATES, ONE PAGE. Upload -> mapping preview -> summary. The middle state is the whole
-   point of the screen: a corporate sheet names its columns the way the supplier's system does
+   point of the screen: a product sheet names its columns the way the supplier's system does
    (Class, Mfg, Model, Serial#, Resale), and the operator's question before any stock is created
    is "did it read my columns the way I meant them?". So the preview shows the mapping the server
    actually found - source header to target field - and lists the headers it did NOT use, by name.
@@ -84,7 +84,7 @@ const ACCEPT = ".csv,.tsv,.xlsx,.xlsm";
    the list - so a reader always knows how many there are. */
 const ISSUE_SHOWN = 12;
 
-export default function CorporateImportPage() {
+export default function ProductImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [report, setReport] = useState<Preview | null>(null);
   const [result, setResult] = useState<Commit | null>(null);
@@ -110,7 +110,7 @@ export default function CorporateImportPage() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const r = await apiFetch(`/staff/imports/corporate/${phase}`, { method: "POST", body: fd });
+      const r = await apiFetch(`/staff/imports/products/${phase}`, { method: "POST", body: fd });
       const j: any = await r.json().catch(() => ({}));
       if (phase === "preview") {
         if (!r.ok) {
@@ -145,9 +145,9 @@ export default function CorporateImportPage() {
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 pt-8 pb-16">
       <div>
-        <Heading level="h1">Corporate import</Heading>
+        <Heading level="h1">Product import</Heading>
         <p className="mt-1 text-sm text-ink-500">
-          Read a corporate stock sheet, check the column mapping it found, then create the lots and
+          Read a product stock sheet, check the column mapping it found, then create the lots and
           units. Reading a sheet writes nothing - creating stock takes a second, deliberate press.
         </p>
       </div>
@@ -155,7 +155,7 @@ export default function CorporateImportPage() {
       <Card className="p-6">
         <Heading level="h3" as="h2">1. The sheet</Heading>
         <p className="mt-1 pb-4 text-xs text-ink-500">
-          A CSV, TSV or XLSX export with the corporate headers: Asset, Status, Lot, Class, Mfg,
+          A CSV, TSV or XLSX export with the product headers: Asset, Status, Lot, Class, Mfg,
           Model, Grade, Serial#, Resale, and the Audit / Cosmetic / Functional description columns.
           Columns are matched by name, so their order does not matter.
         </p>
@@ -172,7 +172,7 @@ export default function CorporateImportPage() {
             setMsg("");
             setErr("");
           }}
-          aria-label="Choose a corporate stock sheet"
+          aria-label="Choose a product stock sheet"
           className={cn(
             "block w-full max-w-md text-sm text-ink-500",
             "file:mr-3 file:rounded-control file:border-0 file:bg-brand-700 file:px-4 file:py-2",
