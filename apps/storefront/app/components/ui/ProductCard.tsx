@@ -24,9 +24,10 @@ import { cn } from "./cn";
    shopper's cart keep the stored wording, which is deliberate and not an oversight to "fix".
 
    The brand repeats itself when the title already opens with it ("ASUS ZenBook 14 UX425", brand
-   ASUS): 41 of 57 today. But 16 do not - every Samsung, Apple and Lenovo title - and for those the
-   eyebrow is the only place the brand is said, so the rule is conditional rather than a blanket
-   "category only", which would delete the brand from those cards. */
+   ASUS): 41 of 57 today. But 16 do not - 4 Samsung, 7 Apple and 5 Lenovo, so most Samsung titles and
+   every Apple and Lenovo one (a fifth Samsung title does start with its brand, and correctly loses it
+   from the eyebrow) - and for those 16 the eyebrow is the only place the brand is said. So the rule is
+   conditional rather than a blanket "category only", which would delete the brand from those cards. */
 type Stock = { n: number; label?: string };
 
 type Props = {
@@ -109,11 +110,13 @@ export default function ProductCard({ href, title, brand, category, slug, imageU
               whitespace around the text are all part of the same target, and the focus ring is drawn
               on that overlay rather than around four words. Its accessible name is the product.
               The ring is INSET: the overlay is a descendant of the card, and the card's own
-              overflow-hidden clips a descendant's ring, so an outset one would never be seen. */}
+              overflow-hidden clips a descendant's ring, so an outset one would never be seen - and the
+              overlay carries the card's own radius so the ring traces the rounded corners instead of
+              being squared off by them. */}
           <a href={href}
             className={cn(
               "font-medium mt-2 block truncate rounded-control",
-              "after:absolute after:inset-0 after:content-['']",
+              "after:absolute after:inset-0 after:rounded-2xl after:content-['']",
               "focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-brand-700 focus-visible:after:ring-inset",
             )}>
             {name}
@@ -123,8 +126,10 @@ export default function ProductCard({ href, title, brand, category, slug, imageU
             {stock && <StockPill stock={stock} />}
           </div>
           {/* Above the overlay (z-10), so it stays a control of its own: hover, keyboard and
-              middle-click all behave like a button rather than being swallowed by the tile link. */}
-          <Button variant="primary" href={href} className="relative z-10 mt-3 w-full">View product</Button>
+              middle-click all behave like a button rather than being swallowed by the tile link.
+              Secondary, not primary: a grid of tiles puts one CTA per card on screen, and the design
+              system spends emerald on the page's one real action - see Button.tsx's own comment. */}
+          <Button variant="secondary" href={href} className="relative z-10 mt-3 w-full">View product</Button>
         </div>
       </Card>
     );
