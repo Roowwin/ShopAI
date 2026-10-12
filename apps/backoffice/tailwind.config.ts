@@ -105,6 +105,20 @@ const config: Config = {
         card: "1rem", // content panels
         control: "0.75rem", // tiles, buttons, inputs
       },
+      /* Motion. The storefront maps two durations and its own easing curve to CSS custom properties
+         in globals.css; this app has neither those properties nor the keys that would read them -
+         and yet its own chrome already writes `duration-fast ease-out` in four places. An undefined
+         class is not an error in Tailwind, it simply emits nothing, so those sites have been
+         animating on the duration the transition utilities set for themselves while the source
+         named a token that did not exist.
+
+         `fast` is therefore defined at that same figure: the class becomes real, and every site
+         that already wrote it behaves exactly as it did. The easing key is deliberately NOT added -
+         Tailwind's own `ease-out` already emits, and re-pointing it at the storefront's curve would
+         change the motion of four existing surfaces under cover of a new page. */
+      transitionDuration: {
+        fast: "150ms",
+      },
       /* The glow: an emerald hairline with a soft bloom behind it, which is what replaces the
          light-mode `shadow-sm` on a dark ground - a grey shadow is invisible against slate, so the
          boundary has to be drawn in light rather than cast in darkness. Two layers on purpose: the

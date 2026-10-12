@@ -10,7 +10,10 @@ import { cn } from "./ui";
 
    It is a FILTER over the sidebar's own GROUPS (app/components/nav.ts), not a second list of routes.
    The chrome's rule is that every entry has a page behind it, and a palette carrying its own copy of
-   the thirteen would be free to break that rule unnoticed.
+   the sixteen would be free to break that rule unnoticed.
+
+   The category printed beside each hit is the taxonomy's own heading, so regrouping the sidebar
+   regroups this list in the same edit and the two surfaces cannot name one route differently.
 
    Keyboard only, deliberately: the trigger is the shortcut's affordance, not its equal. Opening
    remembers where focus was and closing puts it back, because a palette that drops focus on the
