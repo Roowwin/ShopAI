@@ -184,6 +184,12 @@ export default function NavDropdown({ label, links, open, onOpenChange }: Props)
     };
   }, [open]);
 
+  // Its own effect, because the timer outlives the open/close cycle: a mouseleave in the last 200ms
+  // before the header unmounts would otherwise fire on a component that is gone.
+  useEffect(() => () => {
+    if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
+  }, []);
+
   useEffect(() => {
     if (!open) { return; }
     const onDown = (e: MouseEvent) => {
@@ -299,6 +305,7 @@ export default function NavDropdown({ label, links, open, onOpenChange }: Props)
                 </div>
                 {kids.length > 0 && subOpen && (
                   <ul onKeyDown={(e) => onSubKey(l.href, e)}
+                    aria-label={"Sub-categories of " + l.label}
                     style={{ position: "fixed", width: subBox.w, left: subBox.left, top: subBox.top,
                       maxHeight: subBox.maxH }}
                     className="z-40 overflow-y-auto rounded-control bg-white text-ink-900 shadow-lg ring-1 ring-line py-1">

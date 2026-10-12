@@ -4,9 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { API, aud } from "@/lib/api";
 import { cartGet } from "@/lib/cart";
-import NavDropdown from "./NavDropdown";
 import NavDropdown, { type NavLink } from "./NavDropdown";
-import { NAV_SHORTCUTS, shortcutHref } from "./navMenu";
+import { shortcutHref, shortcutsFor } from "./navMenu";
 import { Button, cn, Input, navLinkClass } from "./ui";
 
 type SItem = { slug: string; title: string; units_available: number; price_from_cents: number | null };
@@ -16,7 +15,7 @@ type SItem = { slug: string; title: string; units_available: number; price_from_
    second level off them, so a category with no entry there stays a single link. */
 function catLink(c: { name: string }): NavLink {
   const href = "/category/" + encodeURIComponent(c.name);
-  const sub = NAV_SHORTCUTS[c.name];
+  const sub = shortcutsFor(c.name);
   return sub
     ? { href, label: c.name,
         children: sub.map((s) => ({ href: shortcutHref(c.name, s.term), label: s.label })) }
@@ -134,7 +133,7 @@ export default function Header() {
               to be able to tap it - and the chevron opens the same shortcuts the desktop fly-out shows,
               so both levels of the menu lead to the same places either way. */}
           {cats.map((c) => {
-            const sub = NAV_SHORTCUTS[c.name];
+            const sub = shortcutsFor(c.name);
             const isOpen = openCat === c.name;
             return (
               <div key={c.name}>

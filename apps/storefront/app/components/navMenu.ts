@@ -36,6 +36,17 @@ export const NAV_SHORTCUTS: Record<string, NavShortcut[]> = {
   ],
 };
 
+/* The shortcuts for one category, or undefined when it has none - which is what keeps a category
+   without an entry a single link.
+
+   An own-property check rather than a plain index: NAV_SHORTCUTS is an object literal, so a category
+   named "constructor", "toString" or "__proto__" - names a staff member can create through the
+   catalog API - would otherwise come back as an inherited function. That is truthy and not an array,
+   and the menu would crash rendering it. */
+export function shortcutsFor(categoryName: string): NavShortcut[] | undefined {
+  return Object.hasOwn(NAV_SHORTCUTS, categoryName) ? NAV_SHORTCUTS[categoryName] : undefined;
+}
+
 /* The catalog URL for one shortcut. The category goes in as its slug - every category's name is its
    slug capitalised, which the endpoint's own note says - and the term goes in as ?q=, which is the
    filter rather than free text: the server scopes it to the category, so "Routers" under Networking
