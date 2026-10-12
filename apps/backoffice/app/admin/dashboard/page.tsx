@@ -2,14 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Card, Heading, Stat } from "@/app/components/ui";
+import { Card, Heading } from "@/app/components/ui";
 import { requireRole, useMe } from "@/lib/session";
 import { aud } from "@/lib/format";
 import { NOTICE_TONE } from "@/app/components/dashboard/tokens";
-import { GradeBars, StatusDonut, type Slice } from "./charts";
+import { GradeBars, Sparkline, StatusDonut, type Slice } from "./charts";
+import AttentionFeed, { type FeedItem } from "./attention";
+import KpiTile from "./kpi";
+import PipelineMap, { type PipelineStage } from "./pipeline";
 
-/* /admin/dashboard - the operations view: four headline numbers, the three backlogs that need a
-   human, two hand-rolled SVG charts and the week's leaderboard.
+/* /admin/dashboard - the operations view: the lifecycle pipeline, four glass headline numbers,
+   two hand-rolled SVG charts, the week's leaderboard, and the attention feed.
 
    ONE read. This page calls the SAME `GET /staff/overview` the home page calls - there is no
    second summary endpoint. The dashboard is one screen, so it is one guarded surface and one
@@ -36,24 +39,48 @@ type Overview = {
   };
 };
 
-/* The three backlogs, each pointing at the page that can act on it. The counts come from the
-   payload; only the route and the wording live here. */
-type Alert = { label: string; count: number; href: string; detail?: string };
+/* The four lifecycle stages the pipeline map draws, in the order a unit walks them. `count` is
+   read from `inventory.by_status` (the same zero-filled map the donut draws, so the two can never
+   disagree) and a `backlog` is set only where the payload attributes work to ONE stage:
+   Received -> lots_stuck (lots in intake past 14 days), Graded -> pricing_pending. Tested and
+   Listed have none, because the payload's `stuck_assets.count` covers received AND tested
+   together and nothing in it flags listed stock; that shared figure is printed under the map
+   rather than split in half here. A key the payload omits renders "not reported by the API". */
+function stagesFor(byStatus: Record<string, number>, d: Overview["dashboard"]): PipelineStage[] {
+  const count = (key: string): number | null => {
+    const n = byStatus[key];
+    return typeof n === "number" ? n : null;
+  };
+  return [
+    { key: "received", label: "Received", count: count("received"),
+      backlog: d.lots_stuck.count > 0
+        ? { count: d.lots_stuck.count, label: "lots awaiting activation" } : undefined },
+    { key: "tested", label: "Tested", count: count("tested") },
+    { key: "graded", label: "Graded", count: count("graded"),
+      backlog: d.pricing_pending > 0
+        ? { count: d.pricing_pending, label: "unpriced, cannot be listed" } : undefined },
+    { key: "listed", label: "Listed", count: count("listed") },
+  ];
+}
 
-function AlertRow({ a }: { a: Alert }) {
-  return (
-    <a href={a.href}
-       className="flex items-center gap-3 rounded-control px-3 py-2 -mx-1 hover:bg-surface-sunken">
-      <span className={`text-lg font-semibold tabular-nums ${a.count > 0 ? "text-accent-700" : "text-ink-400"}`}>
-        {a.count}
-      </span>
-      <span className="min-w-0">
-        <span className="block text-sm text-ink-900">{a.label}</span>
-        {a.detail && <span className="block text-xs text-ink-500">{a.detail}</span>}
-      </span>
-      <span className="ml-auto shrink-0 text-xs text-ink-500">Open &rarr;</span>
-    </a>
-  );
+/* The attention feed's rows, each pointing at the page that can act on it. The counts are the
+   payload's; only the route, the wording and the severity live here. Severity is this page's
+   judgement and it is written beside the count it judges: critical = the storefront path is
+   blocked (a graded unit with no price can never be listed), warning = work ageing without
+   blocking anything. A zero row is neither - see attention.tsx. */
+function feedFor(d: Overview["dashboard"]): FeedItem[] {
+  return [
+    { label: "Units graded but not priced", count: d.pricing_pending, href: "/admin/assets",
+      severity: "critical",
+      detail: "A graded unit with no price cannot reach the storefront." },
+    { label: "Units stuck in intake/received", count: d.stuck_assets.count, href: "/admin/assets",
+      severity: "warning",
+      detail: d.stuck_assets.oldest_serial_number
+        ? `Oldest: ${d.stuck_assets.oldest_serial_number}` : "Nothing older than 7 days." },
+    { label: "Lots in intake over 14 days", count: d.lots_stuck.count, href: "/admin/intake",
+      severity: "warning",
+      detail: "Received but never activated." },
+  ];
 }
 
 export default function DashboardPage() {
@@ -89,15 +116,18 @@ export default function DashboardPage() {
     ? Object.entries(d.grade_mix).map(([key, value]) => ({ key, label: key, value }))
     : [];
 
-  const alerts: Alert[] = d ? [
-    { label: "Units graded but not priced", count: d.pricing_pending, href: "/admin/assets",
-      detail: "A graded unit with no price cannot reach the storefront." },
-    { label: "Units stuck in intake/received", count: d.stuck_assets.count, href: "/admin/assets",
-      detail: d.stuck_assets.oldest_serial_number
-        ? `Oldest: ${d.stuck_assets.oldest_serial_number}` : "Nothing older than 7 days." },
-    { label: "Lots in intake over 14 days", count: d.lots_stuck.count, href: "/admin/intake",
-      detail: "Received but never activated." },
-  ] : [];
+  const pipeline = data && d ? stagesFor(data.inventory.by_status, d) : [];
+  const alerts: FeedItem[] = d ? feedFor(d) : [];
+
+  /* The one thing the map cannot say per node: the payload's stuck count spans two stages. */
+  const pipelineNote = d
+    ? "A stage counts the units currently in it, from the same inventory.by_status the donut " +
+      "draws. " +
+      (d.stuck_assets.count > 0
+        ? `${d.stuck_assets.count} units have sat in Received or Tested for over 7 days - the ` +
+          "API reports those two stages together, so the count is not attributed to either node."
+        : "No unit has sat in Received or Tested for over 7 days.")
+    : undefined;
 
   const categories = d ? Object.entries(d.category_mix) : [];
 
@@ -122,20 +152,30 @@ export default function DashboardPage() {
       {checked && allowed && data && d && (
         <>
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label="Listed inventory" value={data.stock_value.listed_units}
-                  sub={`of ${data.inventory.total_units} units on hand`} />
-            <Stat label="Pricing pending" value={d.pricing_pending} sub="graded, no price set" />
-            <Stat label="Revenue (7 days)" value={aud(d.revenue_last_7d_cents)}
-                  sub={`${d.orders_last_7d} paid ${d.orders_last_7d === 1 ? "order" : "orders"}`} />
-            <Stat label="Stuck assets" value={d.stuck_assets.count} sub="received/tested over 7 days" />
+            <KpiTile label="Listed inventory" value={data.stock_value.listed_units}
+                     sub={`of ${data.inventory.total_units} units on hand`}>
+              <Sparkline series={null} label="Listed units" unavailable="7-day trend not available" />
+            </KpiTile>
+            <KpiTile label="Pricing pending" value={d.pricing_pending} sub="graded, no price set" />
+            <KpiTile label="Revenue (7 days)" value={aud(d.revenue_last_7d_cents)}
+                     sub={`${d.orders_last_7d} paid ${d.orders_last_7d === 1 ? "order" : "orders"}`}>
+              <Sparkline series={null} label="Revenue" unavailable="7-day trend not available" />
+            </KpiTile>
+            <KpiTile label="Stuck assets" value={d.stuck_assets.count} sub="received/tested over 7 days" />
           </section>
+
+          <Card className="p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+              <Heading level="h3" as="h2">Lifecycle pipeline</Heading>
+              <span className="text-xs text-ink-500">units on hand, by the stage each has reached</span>
+            </div>
+            <PipelineMap stages={pipeline} note={pipelineNote} />
+          </Card>
 
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="p-4 lg:col-span-1">
               <Heading level="h3" as="h2" className="mb-2">Needs attention</Heading>
-              <div className="space-y-0.5">
-                {alerts.map((a) => <AlertRow key={a.label} a={a} />)}
-              </div>
+              <AttentionFeed items={alerts} />
             </Card>
 
             <Card className="p-4 lg:col-span-2">

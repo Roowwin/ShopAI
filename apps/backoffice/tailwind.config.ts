@@ -108,10 +108,19 @@ const config: Config = {
       /* The glow: an emerald hairline with a soft bloom behind it, which is what replaces the
          light-mode `shadow-sm` on a dark ground - a grey shadow is invisible against slate, so the
          boundary has to be drawn in light rather than cast in darkness. Two layers on purpose: the
-         1px ring is the border the brief asks for, the blur is the "glowing" part. */
+         1px ring is the border the brief asks for, the blur is the "glowing" part.
+
+         `glow-danger` / `glow-warning` are the same two layers in the attention feed's own
+         colours. They are a separate pair rather than a parameter because the two glows above are
+         emerald by value: the feed's critical node wearing `shadow-glow-sm` would draw an emerald
+         halo around a red dot, and a hue that contradicts its own state is worse than no halo.
+         Neither is offset - they are a tight bloom on a 10px timeline node, restrained on
+         purpose. */
       boxShadow: {
         glow: "0 0 0 1px rgb(var(--brand-700) / 0.45), 0 8px 32px -12px rgb(var(--brand-500) / 0.35)",
         "glow-sm": "0 0 0 1px rgb(var(--brand-700) / 0.35), 0 4px 18px -10px rgb(var(--brand-500) / 0.30)",
+        "glow-danger": "0 0 0 1px rgb(var(--danger-600) / 0.40), 0 0 12px -2px rgb(var(--danger-600) / 0.55)",
+        "glow-warning": "0 0 0 1px rgb(var(--accent-400) / 0.40), 0 0 12px -2px rgb(var(--accent-400) / 0.55)",
       },
       fontFamily: {
         // Shape-identical to the storefront's stack. The backoffice loads no webfont, so
