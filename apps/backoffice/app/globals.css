@@ -68,12 +68,16 @@
 
     /* The two hairlines are DELIBERATELY left below the 3:1 non-text contrast bar of WCAG SC 1.4.11,
        exactly as their light-mode predecessors were (they measured 1.23:1 and 1.48:1 on white; these
-       measure 1.22:1 and 1.72:1 on slate-900, the same band). That is a recorded exception, not an
+       measure 1.50:1 and 1.75:1 on slate-900, the same band). That is a recorded exception, not an
        oversight: raising either puts a mid-grey border on every card and every input, which is a
        visible design change the owner has decided against. Do not "fix" these two values to satisfy a
-       checker - everything else in this app that failed a contrast bar has been corrected around them. */
-    --line: 30 41 59;
-    --line-strong: 51 65 85;
+       checker - everything else in this app that failed a contrast bar has been corrected around them.
+
+       `line` must also stay DISTINCT from `surface-sunken`: the first cut of this palette made them
+       the same three channels, which made `ring-line` on a sunken panel a provable 1.00:1 - a border
+       that cannot be seen exactly where a recessed panel needs one. */
+    --line: 45 55 72;
+    --line-strong: 55 68 88;
 
     /* Glass and glow, the two things this brief needs and Tailwind has no stock answer for. The glass
        surface is a translucent panel for the sidebar and overlays - pair it with backdrop-blur-md,

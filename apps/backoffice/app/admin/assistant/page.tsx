@@ -212,7 +212,7 @@ export default function AssistantPage() {
               {msgs.map((m, i) => (
                 m.role === "you" ? (
                   <div key={i} className="flex justify-end">
-                    <div className="max-w-[80%] rounded-2xl rounded-br-md bg-status-reserved-solid text-ink-900 px-4 py-2.5 text-sm">{m.text}</div>
+                    <div className="max-w-[80%] rounded-2xl rounded-br-md bg-status-reserved-solid text-ink-inverse px-4 py-2.5 text-sm">{m.text}</div>
                   </div>
                 ) : (
                   <div key={i} className="max-w-[92%] rounded-2xl rounded-bl-md bg-surface ring-1 ring-line px-4 py-3 text-sm">
@@ -229,7 +229,7 @@ export default function AssistantPage() {
                           <p className="text-xs text-accent-700">Proposed on the fallback model - Execute is disabled server-side.</p>
                         )}
                         <div className="flex gap-2">
-                          <button className="rounded-lg bg-brand-700 px-3.5 py-1.5 text-xs font-medium text-ink-900 hover:bg-brand-500 disabled:opacity-50"
+                          <button className="rounded-lg bg-brand-700 px-3.5 py-1.5 text-xs font-medium text-ink-900 hover:bg-brand-800 disabled:opacity-50"
                             onClick={() => void confirm(i)} disabled={busy || m.executed || !!m.proposal.fallback}>Confirm executes</button>
                           <button className="rounded-lg border border-line-strong px-3.5 py-1.5 text-xs text-ink-600 hover:bg-surface-sunken" onClick={() => dismiss(i)}>Cancel</button>
                         </div>
@@ -262,7 +262,7 @@ export default function AssistantPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendNow(); } }} />
-                <button className="rounded-xl bg-status-reserved-solid text-ink-900 px-4 py-2 text-sm font-medium hover:bg-status-reserved-solid disabled:opacity-50"
+                <button className="rounded-xl bg-status-reserved-solid text-ink-inverse px-4 py-2 text-sm font-medium hover:bg-status-reserved-solid disabled:opacity-50"
                   onClick={sendNow} disabled={busy || !input.trim()}>Send</button>
               </div>
               <p className="text-[10px] text-ink-400 mt-1.5 px-2">Pending proposals: {pending} - nothing executes without your confirmation.</p>

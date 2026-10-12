@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { flatNav } from "./nav";
 import { cn } from "./ui";
@@ -55,9 +56,11 @@ export default function CommandPalette() {
     document.addEventListener("mousedown", onDown);
     return () => {
       document.removeEventListener("mousedown", onDown);
-      // Focus goes back where it came from - the pill if that is what opened this, otherwise wherever
-      // the keyboard shortcut was pressed.
-      (back ?? pill.current)?.focus?.();
+      // Focus goes back where it came from. A Cmd+K press leaves the body as the active element, and
+      // focusing the body is a no-op that strands the keyboard - so in that case the pill, which is
+      // this component's own affordance, is where focus belongs.
+      const target = back && back !== document.body ? back : pill.current;
+      target?.focus?.();
     };
   }, [open]);
 
@@ -69,7 +72,7 @@ export default function CommandPalette() {
     router.push(href);
   }
 
-  function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key === "Escape") { e.preventDefault(); setOpen(false); return; }
     if (hits.length === 0) { return; }
     if (e.key === "ArrowDown") { e.preventDefault(); setI((v) => Math.min(v + 1, hits.length - 1)); return; }
@@ -94,15 +97,23 @@ export default function CommandPalette() {
         <kbd className="rounded border border-line px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-ink-400">{"⌘"}K</kbd>
       </button>
 
-      {open && (
+      {/* The panel is PORTALED to the body, and that is structural rather than tidiness. The pill sits
+          in a strip carrying backdrop-blur-md, and a backdrop-filter other than `none` makes that
+          strip the containing block for its fixed-position descendants - so `fixed inset-0` inside it
+          would be clipped to a 40px band instead of covering the window, and on a narrow screen the
+          strip is display:none and Cmd+K would open the palette inside a hidden ancestor and appear
+          to do nothing. A portal leaves the strip's context entirely.
+
+          It is role="dialog" and NOT aria-modal: nothing traps focus here, and claiming modality
+          would be a lie to a screen reader. The outside click and Escape are the exits. */}
+      {open && createPortal(
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-surface-muted/70 px-4 pt-24 backdrop-blur-sm">
-          <div ref={box} role="dialog" aria-modal="true" aria-label="Command palette"
+          <div ref={box} role="dialog" aria-label="Command palette" onKeyDown={onKeyDown}
             className="w-full max-w-xl overflow-hidden rounded-card bg-surface-glass/90 shadow-glow ring-1 ring-line backdrop-blur-md">
             <input
               ref={input}
               value={q}
               onChange={(e) => { setQ(e.target.value); setI(0); }}
-              onKeyDown={onKeyDown}
               placeholder="Type a page, or part of one..."
               aria-label="Filter admin pages"
               aria-controls="palette-list"
@@ -134,8 +145,8 @@ export default function CommandPalette() {
               )}
             </ul>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body)}
     </>
   );
 }

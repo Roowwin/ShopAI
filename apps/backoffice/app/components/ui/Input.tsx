@@ -15,7 +15,7 @@ import { cn } from "./cn";
 const TONES: Record<"light" | "sunken" | "dark", string> = {
   light: "bg-surface text-ink-900 ring-1 ring-line placeholder:text-ink-500",
   sunken: "bg-surface-sunken text-ink-900 ring-1 ring-line placeholder:text-ink-600",
-  dark: "bg-ink-900/60 text-white ring-1 ring-ink-700 placeholder:text-ink-400",
+  dark: "bg-ink-inverse/80 text-ink-900 ring-1 ring-ink-700 placeholder:text-ink-400",
 };
 
 type Props = ComponentPropsWithoutRef<"input"> & { tone?: "light" | "sunken" | "dark" };

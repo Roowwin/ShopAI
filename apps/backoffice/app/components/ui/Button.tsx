@@ -32,7 +32,7 @@ const BASE =
    utility spelled in prose would emit a real rule. */
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-brand-700 text-white hover:bg-brand-800",
-  accent: "bg-accent-400 text-ink-900 hover:bg-accent-300",
+  accent: "bg-accent-400 text-ink-inverse hover:bg-accent-300",
   secondary: "bg-surface text-brand-300 ring-1 ring-line hover:bg-brand-50",
   ghost: "text-brand-300 hover:bg-brand-50",
   danger: "bg-surface text-danger-600 ring-1 ring-danger-200 hover:bg-danger-50",

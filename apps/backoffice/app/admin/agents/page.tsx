@@ -233,7 +233,7 @@ export default function AgentsPage() {
 
   return (
     <main className="max-w-6xl mx-auto p-4 min-h-screen">
-      <div className="bg-ink-900 text-white rounded-card px-5 py-3 mb-4 flex items-center gap-3">
+      <div className="bg-surface-muted text-ink-900 rounded-card px-5 py-3 mb-4 flex items-center gap-3">
         <Heading level="h1">Agents</Heading>
         <span className="text-xs text-ink-400">machine identities for the assistant - created, rotated and revoked here</span>
       </div>
