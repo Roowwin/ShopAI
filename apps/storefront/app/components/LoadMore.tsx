@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { API } from "@/lib/api";
-import { Button, EmptyState, ProductCard } from "./ui";
+import { Button, cn, EmptyState, ProductCard } from "./ui";
 import FacetDropdown from "./FacetDropdown";
 import {
   activeFilters, bandLabel, catalogPath, EMPTY_FILTERS, filterQuery, Filters, GRADES, hasFilters,
@@ -102,6 +102,23 @@ export default function LoadMore({ initial, applied, categories, brands }: {
         // the padding above it. The negative margins cancel the padding so the row's first trigger
         // still lines up with the heading above it.
         <div className="flex items-center gap-2 mt-6 py-1 px-1 -mx-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible sm:py-0 sm:px-0 sm:mx-0">
+          {/* A term in force reads as a pill, not a dropdown: free text has no option list to open,
+              and the Shop menu's shortcuts arrive as exactly this - a category plus a term. It is
+              dressed like a facet that is in force, so a glance down the row says what is filtering,
+              and it removes itself the same way one does. */}
+          {filters.q && (
+            <button type="button" onClick={() => apply({ ...filters, q: null })}
+              aria-label={"Remove search: " + filters.q}
+              className={cn(
+                "shrink-0 min-h-[44px] inline-flex items-center gap-1.5 rounded-control px-3 text-xs font-semibold",
+                "bg-brand-50 text-brand-800 ring-1 ring-brand-700 hover:bg-brand-100",
+                "transition-colors duration-fast ease-out motion-reduce:transition-none",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2",
+              )}>
+              Search: {filters.q}
+              <span aria-hidden="true">✕</span>
+            </button>
+          )}
           {categories && categories.length > 1 && (
             <FacetDropdown label="Category" value={catValue}
               options={[ALL, ...categories.map((c) => ({ value: c.name, label: c.name + " (" + c.n + ")" }))]}

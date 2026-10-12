@@ -207,6 +207,83 @@ async def test_the_filters_compose_and_the_url_is_the_state(client):
         await _drop_staff(email)
 
 
+async def test_the_term_searches_only_inside_the_category_it_is_asked_for(client):
+    """The Shop menu's shortcuts are category + term, so the term must never leak across categories.
+
+    The same word is put in TWO categories - one product each - and the point is the pair of
+    assertions: on its own the term finds both, and inside a category it finds only that one's. The
+    word is a token of the fixture's own title (search_vec is built from title + model, migration
+    0007), and carries a fresh stamp, so no other row in the shop can match it.
+    """
+    h, email = await _staff(client)
+    stamp = uuid.uuid4().hex[:8]
+    term = "qterm" + stamp
+    in_acc = "pytest-q-" + term + "-acc"
+    in_lap = "pytest-q-" + term + "-lap"
+    products: list[int] = []
+    try:
+        products.append(await _staged(client, h, in_acc, KINGSTON, "accessories", [("B", 9900)]))
+        products.append(await _staged(client, h, in_lap, KINGSTON, "laptops", [("B", 19900)]))
+
+        both = await _items(client, "q=" + term)
+        assert {i["slug"] for i in both} == {in_acc, in_lap}, [i["slug"] for i in both]
+
+        acc = await _items(client, "category=accessories&q=" + term)
+        assert [i["slug"] for i in acc] == [in_acc], [i["slug"] for i in acc]
+
+        lap = await _items(client, "category=laptops&q=" + term)
+        assert [i["slug"] for i in lap] == [in_lap], [i["slug"] for i in lap]
+
+        # the category alone is a wider net than the category plus the term - the shortcut narrows,
+        # which is the only reason the shortcut is worth having
+        assert len(await _items(client, "category=accessories")) > 1
+    finally:
+        await _archive(products)
+        await _drop_staff(email)
+
+
+async def test_the_term_composes_with_the_other_filters_and_a_blank_one_is_no_term(client):
+    h, email = await _staff(client)
+    stamp = uuid.uuid4().hex[:8]
+    term = "qterm" + stamp
+    slug = "pytest-q-" + term + "-mix"
+    products: list[int] = []
+    try:
+        products.append(await _staged(client, h, slug, KINGSTON, "parts", [("B", 9900), ("D", 4900)]))
+
+        composed = _row(await _items(client, f"q={term}&brand=kingston&grade=B&max_cents=10000&sort=price_asc"), slug)
+        assert composed is not None, "the term composes with brand, grade, price and sort"
+        assert composed["units_available"] == 1 and composed["price_from_cents"] == 9900, composed
+
+        # the term is one filter among the rest, not a way around them
+        assert _row(await _items(client, f"q={term}&grade=A"), slug) is None
+        assert _row(await _items(client, f"q={term}&brand=" + SEAGATE), slug) is None
+        assert _row(await _items(client, f"q={term}&min_cents=20000"), slug) is None
+
+        # a blank or whitespace-only term is not a term at all: the view is the unfiltered one
+        without = await _items(client, "")
+        assert _row(without, slug) is not None, "the fixture is in the unfiltered view"
+        for blank in ("q=", "q=%20%20"):
+            assert [i["slug"] for i in await _items(client, blank)] == [i["slug"] for i in without], blank
+    finally:
+        await _archive(products)
+        await _drop_staff(email)
+
+
+async def test_the_term_adds_its_clause_and_only_its_clause():
+    """The additive promise again, held for the term: unset it is absent, set it is one AND."""
+    unfiltered = store_catalog._catalog_sql(None, None, None, None, None, "featured")
+    assert "search_vec" not in unfiltered and "tsquery" not in unfiltered
+
+    with_term = store_catalog._catalog_sql(None, None, None, None, None, "featured", q="dock")
+    assert "AND p.search_vec @@ websearch_to_tsquery('english', :q)" in with_term
+    assert with_term.replace("AND p.search_vec @@ websearch_to_tsquery('english', :q)", "") == unfiltered, \
+        "the term must add its clause and change nothing else"
+    # the value never reaches the statement - it is a bound parameter
+    assert "dock" not in with_term
+    assert "%" not in unfiltered and "%" not in with_term
+
+
 async def test_the_response_envelope_is_opt_in_and_echoes_the_applied_filters(client):
     """`with_filters=1` adds the applied set and the brand options; without it, the same array."""
     h, email = await _staff(client)
@@ -224,10 +301,14 @@ async def test_the_response_envelope_is_opt_in_and_echoes_the_applied_filters(cl
         assert [i["slug"] for i in body["items"]] == [i["slug"] for i in bare], \
             "the envelope must not change which rows come back"
         # The applied set is the SERVER's normalisation, not the caller's spelling.
-        assert body["applied"] == {"category": None, "brand": "kingston", "grade": "C",
+        assert body["applied"] == {"category": None, "brand": "kingston", "grade": "C", "q": None,
                                    "min_cents": None, "max_cents": None, "sort": "featured"}
         brands = {b["slug"]: b for b in body["brands"]}
         assert KINGSTON in brands and brands[KINGSTON]["n"] >= 1 and brands[KINGSTON]["name"], brands
+
+        # the term is echoed too, so the toolbar can show the search a shortcut arrived with
+        r = await client.get("/store/catalog?limit=100&q=pytest&with_filters=1")
+        assert r.json()["applied"]["q"] == "pytest", r.json()["applied"]
 
         r = await client.get("/store/catalog?limit=100&sort=nonsense&with_filters=1")
         assert r.json()["applied"]["sort"] == "featured", "an unknown sort falls back, as it always did"
@@ -238,9 +319,12 @@ async def test_the_response_envelope_is_opt_in_and_echoes_the_applied_filters(cl
 
 async def test_a_malformed_filter_is_refused(client):
     for query in ("grade=Z", "grade=AA", "brand=Not%20A%20Slug", "min_cents=-1",
-                  "min_cents=100&max_cents=50", "min_cents=999999999999"):
+                  "min_cents=100&max_cents=50", "min_cents=999999999999",
+                  # a term longer than the cap. The cap is the only bound on it: websearch_to_tsquery
+                  # takes any syntax, so length is the one thing this parameter can be abused with.
+                  "q=" + ("a" * (store_catalog.MAX_Q + 1))):
         r = await client.get("/store/catalog?" + query)
-        assert r.status_code == 422, (query, r.status_code, r.text)
+        assert r.status_code == 422, (query[:40], r.status_code, r.text)
 
 
 def test_the_unfiltered_query_is_the_one_this_endpoint_has_always_run():

@@ -18,14 +18,23 @@ export type Filters = {
   category: string | null;
   brand: string | null;
   grade: string | null;
+  /** A free-text term, searched inside whatever else is selected - see MAX_Q below. */
+  q: string | null;
   min_cents: number | null;
   max_cents: number | null;
   sort: string;
 };
 
 export const EMPTY_FILTERS: Filters = {
-  category: null, brand: null, grade: null, min_cents: null, max_cents: null, sort: "featured",
+  category: null, brand: null, grade: null, q: null,
+  min_cents: null, max_cents: null, sort: "featured",
 };
+
+/* The term's cap, mirroring the endpoint's (store_catalog.py MAX_Q). The endpoint REFUSES a longer
+   one with 422 - and this page has to render for a shopper who typed it - so the URL layer drops it
+   instead, exactly as it drops a malformed brand: the reading of a link that asks for something
+   impossible is "no such filter", never a dead page. */
+export const MAX_Q = 100;
 
 export const GRADES = ["A", "B", "C", "D"];
 
@@ -88,6 +97,7 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
   const category = one(sp.category);
   const rawBrand = (one(sp.brand) ?? "").toLowerCase();
   const rawGrade = (one(sp.grade) ?? "").toUpperCase();
+  const rawQ = one(sp.q);
   const sort = one(sp.sort);
   let min = cents(one(sp.min_cents));
   let max = cents(one(sp.max_cents));
@@ -96,6 +106,7 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
     category,
     brand: BRAND_SLUG.test(rawBrand) ? rawBrand : null,
     grade: GRADES.includes(rawGrade) ? rawGrade : null,
+    q: rawQ !== null && rawQ.length <= MAX_Q ? rawQ : null,
     min_cents: min,
     max_cents: max,
     sort: SORTS.some((s) => s.value === sort) ? (sort as string) : "featured",
@@ -109,6 +120,7 @@ export function filterQuery(f: Filters): string {
   if (f.category) p.set("category", f.category);
   if (f.brand) p.set("brand", f.brand);
   if (f.grade) p.set("grade", f.grade);
+  if (f.q) p.set("q", f.q);
   if (f.min_cents !== null) p.set("min_cents", String(f.min_cents));
   if (f.max_cents !== null) p.set("max_cents", String(f.max_cents));
   if (f.sort && f.sort !== "featured") p.set("sort", f.sort);
@@ -131,6 +143,7 @@ export function activeFilters(f: Filters): string[] {
   if (f.category) out.push("category " + f.category);
   if (f.brand) out.push("brand " + f.brand);
   if (f.grade) out.push("grade " + f.grade);
+  if (f.q) out.push("search \"" + f.q + "\"");
   const band = bandLabel(f.min_cents, f.max_cents);
   if (band) out.push(band.toLowerCase());
   if (f.sort !== "featured") out.push("sorted by " + (SORTS.find((s) => s.value === f.sort)?.label ?? f.sort));
