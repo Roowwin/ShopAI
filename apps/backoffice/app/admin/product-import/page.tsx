@@ -16,6 +16,13 @@
    rule the intake screen's absence panel follows, in the other direction: the panel refuses to
    draw rows it does not have, and this page refuses to compute a number it was not given.
 
+   SUPPLIER WORDING IS TRANSLATED, AND THE TRANSLATION IS SHOWN. The sheet's own vocabulary does
+   not always match the system's: the supplier's "Active" is this system's "received" (taken in,
+   ready to be tested and graded), and "Unassessed" means there is no grade, which is a null rather
+   than an error. The server rewrites those, and this page prints the distinct rewrites with a row
+   count above the grid. A translation the operator cannot see would be a silent edit to their
+   data, which is worse than the mismatch it fixes.
+
    THE TWO PRESSES ARE DIFFERENT. "Read the sheet" is a preview and writes nothing, ever - it is
    safe on a file nobody has checked. "Import" is the write. A refused import comes back with the
    same preview payload it was refused from, so the blocking rows are re-rendered in place rather
@@ -34,6 +41,8 @@ import { gradeTone, kickerClass, statusTone } from "@/lib/ui";
 
 type ColumnHit = { header: string; field: string; label: string; index: number };
 type Issue = { row: number; field: string; message: string };
+type Translation = { field: string; from: string; to: string; rows: number };
+type RowTranslation = { field: string; from: string; to: string };
 
 type PreviewRow = {
   row: number;
@@ -48,6 +57,7 @@ type PreviewRow = {
   asset_tag: string;
   technical_notes: string;
   issues: Issue[];
+  translations: RowTranslation[];
 };
 
 type Preview = {
@@ -55,11 +65,12 @@ type Preview = {
   file: { name: string; sheet: string; rows: number };
   columns: { detected: ColumnHit[]; unmapped: string[]; missing: string[]; missing_labels: string[] };
   issues: Issue[];
+  translations: Translation[];
   sample: PreviewRow[];
   sample_limit: number;
   truncated: boolean;
   detail?: string;
-  summary: { rows: number; ready: number; blocked: number; lots: number; would_list: number; issues: number };
+  summary: { rows: number; ready: number; blocked: number; lots: number; would_list: number; issues: number; translated: number };
 };
 
 type Commit = {
@@ -157,7 +168,9 @@ export default function ProductImportPage() {
         <p className="mt-1 pb-4 text-xs text-ink-500">
           A CSV, TSV or XLSX export with the product headers: Asset, Status, Lot, Class, Mfg,
           Model, Grade, Serial#, Resale, and the Audit / Cosmetic / Functional description columns.
-          Columns are matched by name, so their order does not matter.
+          Columns are matched by name, so their order does not matter. Supplier wording is
+          translated where it differs - "Active" is imported as received, "Unassessed" as no grade -
+          and every translation is listed in the preview before anything is created.
         </p>
         <input
           ref={inputRef}
@@ -224,8 +237,40 @@ function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boole
         <Stat label="Rows read" value={summary.rows} sub="data rows, header excluded" />
         <Stat label="Ready" value={summary.ready} sub="rows that would import" />
         <Stat label="Blocked" value={summary.blocked} sub={blocked ? "these stop the whole import" : "none - the file is clean"} />
-        <Stat label="Lots" value={summary.lots} sub="grouped by the Lot column" />
+        <Stat label="Translated" value={summary.translated} sub={summary.translated ? "rows rewritten - see below" : "no supplier wording needed translating"} />
       </div>
+
+      {report.translations.length > 0 && (
+        <section>
+          <Heading level="h3" as="h2" className="!text-eyebrow uppercase text-ink-500">
+            Translated values
+          </Heading>
+          <p className="mt-2 mb-3 text-xs text-ink-500">
+            Your sheet says these; the system will record the right-hand value. The wording differs,
+            the unit does not.
+          </p>
+          <Table label="Supplier wording translated by this import">
+            <THead>
+              <TR>
+                <TH>Column</TH>
+                <TH>Your value</TH>
+                <TH>Recorded as</TH>
+                <TH>Rows</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {report.translations.map((t) => (
+                <TR key={`${t.field}-${t.from}`}>
+                  <TD className="text-ink-600">{t.field}</TD>
+                  <TD className="font-mono text-xs">{t.from}</TD>
+                  <TD className="font-mono text-xs text-brand-300">{t.to}</TD>
+                  <TD>{t.rows}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </section>
+      )}
 
       {blocked && (
         <div className="rounded-card bg-danger-50 ring-1 ring-danger-200 p-4">

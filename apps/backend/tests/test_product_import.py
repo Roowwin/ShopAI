@@ -19,6 +19,7 @@ import uuid
 from openpyxl import Workbook
 from sqlalchemy import text
 
+from app.api.v1 import staff_imports
 from app.bootstrap_staff import bootstrap
 from app.core.db import get_engine
 
@@ -382,6 +383,140 @@ async def test_import_requires_admin_or_manager(client):
                                  files={"file": ("c.csv", data)})
         assert anon.status_code in (401, 403), anon.text
         assert (await _counts(tag))["assets"] == 0
+    finally:
+        await _purge(tag)
+
+
+async def test_translates_active_to_received_and_reports_it(client):
+    """The supplier's 'Active' imports as `received` - the first rung - and the preview says so."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        rows = [
+            _row(tag, tag + "-S1", **{"Status": "Active"}),
+            _row(tag, tag + "-S2", **{"Status": "Active"}),
+            _row(tag, tag + "-S3", **{"Status": "received"}),
+        ]
+        r = await _post(client, tok, _csv(rows))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        # Not blocked: this is the case that used to refuse the whole sheet.
+        assert body["summary"]["blocked"] == 0
+        assert [row["status"] for row in body["sample"]] == ["received", "received", "received"]
+        assert body["summary"]["translated"] == 2, "only the two Active rows were translated"
+        assert body["translations"] == [
+            {"field": "status", "from": "Active", "to": "received", "rows": 2}]
+    finally:
+        await _purge(tag)
+
+
+async def test_translates_unassessed_to_no_grade_and_imports_ungraded(client):
+    """'Unassessed' is an absence, not an error: the unit lands with a null grade, importable."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        rows = [_row(tag, tag + "-S1", **{"Grade": "Unassessed", "Status": "Active"})]
+        r = await _post(client, tok, _csv(rows), phase="commit")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["summary"]["assets_created"] == 1
+        assert body["assets"][0]["grade"] is None
+        assert body["assets"][0]["status"] == "received"
+
+        eng = get_engine()
+        async with eng.begin() as c:
+            grade = (await c.execute(text(
+                "SELECT grade FROM assets WHERE serial_number::text = :s"),
+                {"s": tag + "-S1"})).scalar_one()
+        assert grade is None, "the column really is null, not an empty string"
+    finally:
+        await _purge(tag)
+
+
+async def test_other_no_grade_spellings_also_resolve_to_no_grade(client):
+    """The other spellings that state the same absence, so one supplier's wording is not a cliff."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        rows = [_row(tag, tag + f"-S{i}", **{"Grade": g}) for i, g in
+                enumerate(["Unassessed", "ungraded", "N/A", "None", "TBD"])]
+        r = await _post(client, tok, _csv(rows))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert [row["grade"] for row in body["sample"]] == [None] * 5
+        assert body["summary"]["blocked"] == 0
+        assert body["summary"]["translated"] == 5
+    finally:
+        await _purge(tag)
+
+
+async def test_a_grade_that_is_neither_is_still_refused(client):
+    """The list is CLOSED, and this is the guard that keeps it closed.
+
+    A cell that is neither a grade nor a stated absence ("-", a typo, a stray note) is still an
+    issue. Without this the translation layer would be a fuzzy catch-all that quietly swallows
+    whatever it cannot read - which is the one way it could lose a real grade.
+    """
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        rows = [_row(tag, tag + "-S1", **{"Grade": "-"}),
+                _row(tag, tag + "-S2", **{"Grade": "see attached note"})]
+        r = await _post(client, tok, _csv(rows))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["summary"]["blocked"] == 2
+        assert [i["field"] for i in body["issues"]] == ["grade", "grade"]
+    finally:
+        await _purge(tag)
+
+
+async def test_a_real_grade_is_never_translated_away(client):
+    """The guard on the other side: a grade the operator DID mean must survive the new paths."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        rows = [_row(tag, tag + "-S1", **{"Grade": "A"}),
+                _row(tag, tag + "-S2", **{"Grade": "Grade C"}),
+                _row(tag, tag + "-S3", **{"Grade": "D - parts only"})]
+        r = await _post(client, tok, _csv(rows))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert [row["grade"] for row in body["sample"]] == ["A", "C", "D"]
+        assert body["translations"] == []
+        assert body["summary"]["translated"] == 0
+    finally:
+        await _purge(tag)
+
+
+async def test_a_listed_unassessed_row_is_still_blocked(client):
+    """Translation must not become a way past the DB's own rule: listed needs a real grade."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        rows = [_row(tag, tag + "-S1", **{"Status": "listed", "Grade": "Unassessed", "Resale": "99.00"})]
+        r = await _post(client, tok, _csv(rows), phase="commit")
+        assert r.status_code == 422, r.text
+        assert any("no grade" in i["message"] for i in r.json()["detail"]["issues"])
+        assert (await _counts(tag))["assets"] == 0
+    finally:
+        await _purge(tag)
+
+
+async def test_preview_returns_up_to_two_hundred_rows(client):
+    """The preview cap the owner raised: 200 rows come back whole, and the cap is still reported."""
+    tag = _tag()
+    try:
+        tok = await _staff(client, "admin")
+        assert staff_imports.PREVIEW_ROWS == 200
+        rows = [_row(tag, f"{tag}-S{i:04d}") for i in range(205)]
+        r = await _post(client, tok, _csv(rows))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["summary"]["rows"] == 205
+        assert body["sample_limit"] == 200
+        assert len(body["sample"]) == 200
+        assert body["truncated"] is True
     finally:
         await _purge(tag)
 
