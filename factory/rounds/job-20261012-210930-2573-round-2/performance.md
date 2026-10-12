@@ -1,0 +1,8 @@
+# PERFORMANCE review (round 2) — job-20261012-210930-2573 at 4743ae9
+
+- **The delta is CSS-free, provably.** The sheet rebuilt at 21:43 is byte-identical at **30,556 B** under the same content hash `apps/backoffice/.next/static/css/8e51a916a9ba028a.css` (a content-addressed name that did not change, so nothing in it changed); the added comment's words match no utility, so `.duration-fast`, `.grow`, `.shadow` and `.invisible` are still 0 occurrences and `.accent-brand-600` (1) / `translate-x-full` (2) are untouched. Trend: 29,679 B (J2) → 30,556 B (r1) → **30,556 B (r2), +0**.
+- **No listener and no render work added.** The delta is one early-return (`if (e.target !== e.currentTarget) { return; }`) inside the row's *existing* inline JSX `onKeyDown` prop (`page.tsx:134-136`); `git show 4743ae9` contains no `addEventListener`, no new state, effect, memo or element — per keydown it is one identity compare, and the row/closure counts are unchanged.
+- **Bundle is unchanged in kind.** The route chunk is now `app/admin/assets/page-724d5011cc698df8.js` at **26,060 B** (+28 B over r1's 26,032 B — the minified guard only; the source comment does not ship), and `app-build-manifest.json` still lists that one chunk and nothing else route-specific for `/admin/assets/page`, so there is no shared-chunk leak.
+- **Round 1 stands on everything else** (serial one-request-per-unit fan-out capped at the 50-row page, the motion/blur compositing cost named as unmeasurable, the dead `duration-fast` class a runtime no-op). Still unmeasurable here: no browser/GPU, no docker/npm/pytest — the guard's real keyboard behaviour and the panel's frame timing are unverified.
+
+VERDICT: PASS
