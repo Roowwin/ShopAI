@@ -279,7 +279,7 @@ export default function AdminHome() {
               <Card className="p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
                   <Heading level="h3" as="h2">Units by status</Heading>
-                  <span className="text-xs text-ink-500">{data.inventory.total_units} on hand</span>
+                  <span className="text-xs text-ink-500">every unit on hand, by lifecycle stage</span>
                 </div>
                 <StatusDonut slices={statusSlices} total={data.inventory.total_units} centerLabel="units" />
               </Card>
