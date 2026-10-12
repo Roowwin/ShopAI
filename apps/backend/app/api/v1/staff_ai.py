@@ -800,8 +800,23 @@ async def suggestions(staff: dict = Depends(require_roles("admin", "manager", "t
     return {"role": staff["role"], "can_do": [a for a, rs in TOOL_ROLES.items() if staff["role"] in rs], "items": items}
 
 
+# The three vibes the listing studio's switcher offers, and the instruction each one adds to the
+# prompt. A CLOSED set, and the reason is that the value is concatenated into an LLM prompt: a
+# free-text tone would be a way for a client to steer the model, and the switcher has exactly
+# three positions. The keys are the chips' own labels lowercased, so the UI and this map cannot
+# drift into two spellings of the same vibe.
+DESC_TONES = {
+    "professional": "Write for a procurement-minded buyer: precise, factual, spec-led, no slang.",
+    "enthusiast": "Write for a tech enthusiast: warm and knowledgeable about the hardware, still no exaggeration.",
+    "budget": "Write for a value-focused shopper: lead with what the unit still does well for the money, plainly.",
+}
+
+
 class DescribeIn(BaseModel):
     product_id: int
+    # Optional, and absent is the request this endpoint has always taken. `tone` only selects one of
+    # DESC_TONES; nothing else about the draft changes, and no tone leaves the prompt as it was.
+    tone: str | None = None
 
 
 DESC_SCHEMA = {
@@ -815,10 +830,33 @@ DESC_SCHEMA = {
 }
 
 
+def _desc_prompt(facts: str, tone: str | None) -> str:
+    """The draft prompt for a product's facts, with the chosen vibe appended when there is one.
+
+    A pure function so the tone's effect on the prompt is testable WITHOUT an AI round trip: a test
+    can assert that each vibe produces a different prompt carrying its own instruction, which is a
+    deterministic claim about this code, where asserting on returned copy would only be a claim
+    about the model's mood that day. `tone=None` returns the base prompt byte for byte - that is
+    what keeps every existing caller's request unchanged.
+    """
+    prompt = ("Write a store listing (title <= 90 chars, description, and 5 keywords) from these "
+              "verified facts: " + facts)
+    if tone is not None:
+        prompt += "\n\nTone: " + DESC_TONES[tone]
+    return prompt
+
+
 @router.post("/description-draft")
 async def description_draft(body: DescribeIn,
                             staff: dict = Depends(require_roles("admin", "manager", "sales")),
                             db=Depends(get_db)):
+    # Blank is no tone (the original request); anything else must name a vibe. Checked BEFORE the
+    # product read and before any model call, so a bad tone costs nothing and can never reach the
+    # prompt as free text.
+    tone = (body.tone or "").strip().lower() or None
+    if tone is not None and tone not in DESC_TONES:
+        raise HTTPException(status_code=422,
+                            detail="tone must be one of " + ", ".join(sorted(DESC_TONES)))
     p = (await db.execute(text("""
         SELECT pr.id, pr.title, pr.model, b.name AS brand, c.name AS category, pr.specs
         FROM products pr JOIN brands b ON b.id = pr.brand_id JOIN categories c ON c.id = pr.category_id
@@ -834,7 +872,7 @@ async def description_draft(body: DescribeIn,
                                     "price_from_cents": int(g["minp"])} for g in graders]})
     try:
         draft = await ai_json(
-            "Write a store listing (title <= 90 chars, description, and 5 keywords) from these verified facts: " + facts,
+            _desc_prompt(facts, tone),
             schema=DESC_SCHEMA,
             system="You write listings for certified refurbished electronics, Australia/New Zealand, Australian English. Clear, honest, no exaggeration; do not invent specs not provided.")
     except AIError as e:

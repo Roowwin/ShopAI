@@ -3,144 +3,300 @@
 import { useEffect, useState } from "react";
 import { API, apiFetch } from "@/lib/api";
 import { Card, Heading } from "@/app/components/ui";
-import ProductContext, { type CatalogItem } from "./ProductContext";
-import GeneratedCopy, { type Draft } from "./GeneratedCopy";
+import SearchEntry from "./SearchEntry";
+import SourcePanel from "./SourcePanel";
+import AiWorkspace from "./AiWorkspace";
+import LivePreview from "./LivePreview";
+import type { AssetDetail, CatalogItem, Vibe, Worklist, WorklistAsset } from "./types";
 
-/* The AI listing studio: the product and its own facts on one side, the copy the model wrote on
-   the other.
+/* The AI Listing Studio: a search-first entry into a three-panel workspace.
 
-   THE TWO WORKING CALLS ARE UNCHANGED. `draftIt` and `approve` below are the ones this page has
-   always had - the same bodies, the same guard clauses, the same message strings, the same
-   endpoints. The two columns wrap them; nothing re-wires them:
+   THE SHAPE. The old page was a catalogue dropdown beside a read-only copy card. Neither half
+   matched the work: the operator has a UNIT in their hand (a serial, an asset id, a lot), not a
+   product title they can recognise from a list, and the copy a human approves is copy they are
+   allowed to correct. So the entry is a universal search, and the workspace puts the unit's facts
+   (left) beside the drafting controls (centre) beside the storefront page as it will read (right).
 
-     POST /staff/ai/description-draft    body { product_id }         -> { title, description, keywords }
-     POST /staff/products/{pid}/listing  body { title, description }  -> replaces the product's copy
+   THE FOUR CALLS, ALL PRE-EXISTING. Nothing here is re-wired; three of the four are the doors this
+   page already used, and the fourth is the universal search the Lot Process workstation uses:
 
-   Both shapes are read off the handlers rather than inferred. The draft call takes a product id
-   and nothing else - there is no tone parameter on it anywhere - and it writes nothing at all: it
-   reads the product and its grades and returns a draft. The publish call updates the product row
-   in place, so an existing title and description IS overwritten, and the values it replaces plus
-   the new title go into the audit record in the same transaction.
+     GET  /staff/lots/worklist?q=<term>   serial, asset id or lot number -> the lot, and the unit
+     GET  /staff/assets/{id}              the unit's full record: notes and sale price
+     POST /staff/ai/description-draft     { product_id, tone? }        -> { title, description, keywords }
+     POST /staff/products/{pid}/listing   { title, description }       -> replaces the product's copy
+     POST /staff/assets/{aid}/status      { status: "listed" }         -> the unit goes live
 
-   WHAT CHANGED IS THE FRAME. The old page was one narrow column with a picker, a press and a
-   result card under it. This one puts the product's facts beside the copy, which is the pair a
-   reader actually has to compare - and that is why each column names the product it is about
-   rather than letting a split view imply the two are always one record.
+   The only backend change this page needed was the optional `tone` on the description draft - the
+   one thing the vibe switcher could not be built against otherwise. Everything else is a
+   rearrangement of doors that already existed.
 
-   NOTHING ELSE MOVED: no route, no request, no parameter, no dependency, and no change anywhere
-   under apps/backend.
+   PUBLISH IS TWO WRITES AND IS REPORTED AS TWO. The copy belongs to the PRODUCT and the listing
+   belongs to the UNIT, so the press performs both and prints each one's own result rather than a
+   single word that would hide a half-done press. The copy is attempted first and a failure there
+   stops the sequence: the listing is the thing being approved, and walking a unit to `listed`
+   without the approved copy on its product is not what the press meant. If the copy lands and the
+   status is refused (a `sales` identity has no listing rights on the status door; a unit with no
+   sale price is refused by the database; a unit that is not `graded` is refused by the ladder) the
+   operator is told exactly that, and the panel re-reads the unit so it shows its real state.
 
-   ONE DOOR IN, AND IT IS THE ASSET STUDIO'S. `?asset=<id>` is how the unit page hands a unit over:
-   the studio's Generate Listing CTA links here with the unit it was pressed on, and this page
-   resolves that unit to its PRODUCT - this page drafts about products, because that is what the
-   two AI calls above take. The resolution is one read of the same asset door the studio just read,
-   and it only ever PRESELECTS: no draft is written, nothing is published, and the picker stays
-   usable, so a bad or stale id costs a pick rather than a page.
+   THE `?asset=` HANDOFF STILL WORKS, and it is now the same code path as a typed search. The asset
+   studio's Generate Listing CTA arrives with a unit id; this page feeds that id to the SAME
+   resolution rule the search box uses and opens the studio on the unit it names. One rule, so a
+   handoff and a hand-typed id can never resolve differently.
 
    It reads `window.location.search` in an effect rather than `useSearchParams()` on purpose: this
    page is statically rendered, and the hook would require a Suspense boundary it has no use for.
-   Read once, at mount - the query string is an arrival, not state, and re-reading it on every
-   render would be a way for a later navigation to yank the picker out from under a draft. */
+   Read once, at mount - the query string is an arrival, not state. */
+
+/** The API's own sentence for a refusal, so a 409 reads as the database's reason and not "409". */
+async function refusal(r: Response): Promise<string> {
+  const j: any = await r.json().catch(() => null);
+  const d = j?.detail;
+  return typeof d === "string" && d !== "" ? d : String(r.status);
+}
 
 export default function ListingsPage() {
+  /* The catalogue is the PRODUCT side of every panel: brand, model, specs, category. Read once -
+     it is the same public door the old picker was filled from, and nothing on this page writes it. */
   const [cat, setCat] = useState<CatalogItem[]>([]);
-  const [pid, setPid] = useState<number | null>(null);
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [msg, setMsg] = useState("");
-  const [busy, setBusy] = useState(false);
-  /* The unit that handed over, kept as the picker's opening move and as the reason line above the
-     columns. A label, not a guard: nothing here depends on it. */
-  const [handoff, setHandoff] = useState<number | null>(null);
 
-  /* WHICH PRODUCT THE SHOWN DRAFT BELONGS TO. The draft body carries the id chosen when that press
-     was made, while the picker beside it shows the id chosen NOW - the picker stays usable while a
-     call is out and after one lands. Recording the product at the press is what lets the copy
-     column name the product its draft came from instead of assuming it is whatever the picker
-     shows later.
+  /* Entry state. */
+  const [term, setTerm] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchErr, setSearchErr] = useState("");
+  const [result, setResult] = useState<Worklist | null>(null);
 
-     This is a LABEL, not a guard: it reads nothing, blocks nothing, and no request, guard or
-     message on this page depends on it. */
-  const [draftFor, setDraftFor] = useState<CatalogItem | null>(null);
+  /* Studio state. `unit` non-null is what puts the page in the studio rather than the entry. */
+  const [unit, setUnit] = useState<WorklistAsset | null>(null);
+  const [detail, setDetail] = useState<AssetDetail | null>(null);
+
+  /* The editable copy. `drafted` distinguishes "nothing asked for yet" from "a draft came back
+     empty", which the two would otherwise share a representation. */
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [keywords, setKeywords] = useState<string[]>([]);
+  const [vibe, setVibe] = useState<Vibe | null>(null);
+  const [drafted, setDrafted] = useState(false);
+
+  const [generating, setGenerating] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [messages, setMessages] = useState<string[]>([]);
 
   useEffect(() => {
-    fetch(API + "/store/catalog", { credentials: "include" }).then(async (r) => { if (r.ok) setCat(await r.json()); });
+    fetch(API + "/store/catalog?limit=100", { credentials: "include" })
+      .then(async (r) => { if (r.ok) setCat(await r.json()); })
+      .catch(() => { /* the panels fall back to the worklist's own product fields */ });
   }, []);
 
-  /* The handoff. The asset id arrives in the query string; the product the page works with is
-     resolved through the same /staff/assets door the studio reads. A 403 or a stale id leaves the
-     picker exactly as it was - this is an opening move, not a wall. */
-  useEffect(() => {
-    const raw = new URLSearchParams(window.location.search).get("asset");
-    if (!raw) return;
-    const assetId = Number(raw);
-    if (!Number.isInteger(assetId) || assetId <= 0) return;
-    setHandoff(assetId);
-    apiFetch("/staff/assets/" + assetId)
+  async function runSearch(raw: string): Promise<Worklist | null> {
+    const t = raw.trim();
+    if (t === "") return null;
+    setSearching(true); setSearchErr(""); setResult(null);
+    try {
+      const r = await apiFetch("/staff/lots/worklist?q=" + encodeURIComponent(t));
+      if (r.ok) {
+        const j: Worklist = await r.json();
+        setResult(j);
+        return j;
+      }
+      if (r.status === 404) setSearchErr("Nothing matches that lot number, asset ID or serial.");
+      else if (r.status === 403) setSearchErr("Searching stock needs the admin or manager role.");
+      else setSearchErr("Search failed: " + (await refusal(r)));
+      return null;
+    } catch {
+      setSearchErr("Search failed - the API did not answer.");
+      return null;
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  /** Open the studio on one unit. The product is resolved from the catalogue already in memory. */
+  function openStudio(u: WorklistAsset, wl: Worklist) {
+    setUnit(u);
+    setDetail(null);
+    setDrafted(false);
+    setVibe(null);
+    setKeywords([]);
+    setMessages([]);
+    /* The title starts as the product's CURRENT title rather than blank: it is a real fact about
+       the record, and starting from it means the preview reads like the real page from the first
+       keystroke. The description has no such fact available without a second read, so it starts
+       empty and the preview says so. */
+    const p = cat.find((c) => c.id === u.product_id) ?? null;
+    setTitle(p?.title ?? "");
+    setDescription("");
+    setResult(wl);
+    apiFetch("/staff/assets/" + u.id)
       .then(async (r) => {
         if (!r.ok) return;
         const j: any = await r.json().catch(() => null);
-        if (j?.asset?.product_id != null) setPid(j.asset.product_id);
+        if (j?.asset) setDetail(j.asset);
       })
-      .catch(() => { /* the picker is still there; that is the fallback */ });
+      .catch(() => { /* the worklist row carries enough for the panels to stand */ });
+  }
+
+  /* The handoff. `?asset=<id>` is a unit id, and it is resolved through the SAME rule the search box
+     uses (the worklist door reads a bare number as an asset id), so a handoff and a typed id cannot
+     resolve differently. A refused or stale id leaves the entry as it was - this is an opening move,
+     not a wall - and a handoff that resolves opens the studio on the unit it named. */
+  useEffect(() => {
+    const raw = new URLSearchParams(window.location.search).get("asset");
+    if (!raw) return;
+    const id = Number(raw);
+    if (!Number.isInteger(id) || id <= 0) return;
+    setTerm(String(id));
+    void runSearch(String(id)).then((wl) => {
+      if (!wl) return;
+      const u = wl.highlight_asset_id != null
+        ? wl.assets.find((a) => a.id === wl.highlight_asset_id) ?? null
+        : null;
+      if (u) openStudio(u, wl);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function draftIt() {
-    if (pid == null) return;
-    setBusy(true); setMsg(""); setDraft(null);
-    const r = await apiFetch("/staff/ai/description-draft", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product_id: pid }) });
-    if (r.ok) setDraft(await r.json()); else { const j: any = await r.json().catch(() => ({})); setMsg("error: " + (j.detail ?? r.status)); }
-    setBusy(false);
+  async function generate(v: Vibe | null) {
+    if (unit?.product_id == null) return;
+    setVibe(v); setGenerating(true); setMessages([]);
+    try {
+      const r = await apiFetch("/staff/ai/description-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(v ? { product_id: unit.product_id, tone: v } : { product_id: unit.product_id }),
+      });
+      if (r.ok) {
+        const d: any = await r.json();
+        setTitle(d.title ?? "");
+        setDescription(d.description ?? "");
+        setKeywords(Array.isArray(d.keywords) ? d.keywords : []);
+        setDrafted(true);
+      } else {
+        setMessages(["Draft failed: " + (await refusal(r))]);
+      }
+    } catch {
+      setMessages(["Draft failed - the API did not answer."]);
+    } finally {
+      setGenerating(false);
+    }
   }
 
-  async function approve() {
-    if (!draft || pid == null) return;
-    setBusy(true);
-    const r = await apiFetch("/staff/products/" + pid + "/listing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: draft.title, description: draft.description }) });
-    setMsg(r.ok ? "PUBLISHED (audit-logged). Refresh the storefront product page to see it." : ("error: " + r.status));
-    setBusy(false);
+  async function publish() {
+    if (unit == null) return;
+    setPublishing(true); setMessages([]);
+    const out: string[] = [];
+    try {
+      if (unit.product_id == null) {
+        out.push("No copy written: this unit has no product linked, so there is nothing to title.");
+      } else {
+        const r1 = await apiFetch("/staff/products/" + unit.product_id + "/listing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, description }),
+        });
+        if (!r1.ok) {
+          out.push("Copy not written: " + (await refusal(r1)));
+          setMessages(out);
+          return;   // the approved copy is the point of the press - do not list without it
+        }
+        out.push("Listing copy written to product " + unit.product_id + " (replaced values are in the audit record).");
+      }
+
+      const r2 = await apiFetch("/staff/assets/" + unit.id + "/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "listed" }),
+      });
+      if (r2.ok) {
+        out.push("Unit " + unit.id + " is now listed - the storefront shows it while its lot is active.");
+        // Re-read the unit so the panels report the state the database actually holds now.
+        const rr = await apiFetch("/staff/assets/" + unit.id);
+        if (rr.ok) {
+          const j: any = await rr.json().catch(() => null);
+          if (j?.asset) setDetail(j.asset);
+        }
+      } else {
+        out.push("Unit not listed: " + (await refusal(r2)) +
+                 " - the copy above is written, but the unit is not on the storefront.");
+      }
+    } catch {
+      out.push("Publish failed - the API did not answer. Check the unit before pressing again.");
+    } finally {
+      setMessages(out);
+      setPublishing(false);
+    }
   }
 
-  const selected = cat.find((c) => c.id === pid) ?? null;
+  const product = unit ? cat.find((c) => c.id === unit.product_id) ?? null : null;
+
+  if (unit === null || result === null) {
+    return (
+      <main className="mx-auto max-w-5xl px-4 pt-8 pb-16">
+        <SearchEntry
+          term={term}
+          onTerm={setTerm}
+          onSearch={() => { void runSearch(term); }}
+          searching={searching}
+          error={searchErr}
+          result={result}
+          onOpen={(u) => openStudio(u, result as Worklist)}
+        />
+      </main>
+    );
+  }
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 px-4 pt-8 pb-16">
+    <main className="mx-auto max-w-[1600px] space-y-6 px-4 pt-8 pb-16">
       <div>
-        <Heading level="h1">AI listings (human-approved)</Heading>
+        <Heading level="h1">AI Listing Studio</Heading>
         <p className="mt-1 text-sm text-ink-500">
-          Drafts use verified product facts only - you approve before anything publishes (ACCC-safe
-          wording rule).
+          Drafting about{" "}
+          <span className="text-ink-700">{product?.title ?? unit.product_title ?? "unit " + unit.id}</span>{" "}
+          <span className="font-mono text-xs">({unit.serial_number ?? unit.public_id})</span> - from lot{" "}
+          <span className="font-mono text-xs">{result.lot.lot_number}</span>.
         </p>
-        {handoff !== null && (
-          <p className="mt-1 text-xs text-ink-500">
-            Handed over from asset <span className="font-mono">{handoff}</span>
-            {selected ? <> &middot; drafting about <span className="text-ink-600">{selected.title}</span></>
-                       : " - pick the product it belongs to below."}
-          </p>
-        )}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 xl:grid-cols-3">
         <Card className="p-6">
-          <ProductContext
-            items={cat}
-            pid={pid}
-            onPick={setPid}
-            onGenerate={() => { setDraftFor(selected); draftIt(); }}
-            busy={busy}
+          <SourcePanel
+            unit={unit}
+            detail={detail}
+            product={product}
+            lot={result}
+            onBack={() => { setUnit(null); setDetail(null); setMessages([]); }}
           />
         </Card>
 
         <Card className="p-6">
-          <GeneratedCopy
-            draft={draft}
-            draftFor={draftFor}
-            busy={busy}
-            onSave={approve}
+          <AiWorkspace
+            productId={unit.product_id}
+            title={title}
+            description={description}
+            keywords={keywords}
+            vibe={vibe}
+            generating={generating}
+            publishing={publishing}
+            drafted={drafted}
+            onTitle={setTitle}
+            onDescription={setDescription}
+            onGenerate={(v) => { void generate(v); }}
+            onPublish={() => { void publish(); }}
+            messages={messages}
+          />
+        </Card>
+
+        <Card className="p-6">
+          <LivePreview
+            title={title}
+            description={description}
+            product={product}
+            unit={unit}
+            detail={detail}
+            lot={result}
           />
         </Card>
       </div>
-
-      {msg && <p className="text-sm text-ink-600">{msg}</p>}
     </main>
   );
 }

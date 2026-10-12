@@ -55,3 +55,48 @@ async def test_description_draft(client):
     assert r.status_code == 200, r.text
     d = r.json()
     assert all(k in d for k in ("title", "description", "keywords"))
+
+
+def test_desc_prompt_carries_the_vibe_and_none_leaves_it_alone():
+    """The studio's vibe switcher reaches the model THROUGH THIS PROMPT, so that is what is pinned.
+
+    A pure-function test on purpose: "each vibe produces a different prompt carrying its own
+    instruction" is a claim about this code and is deterministic, where asserting on the returned
+    copy would only be a claim about the model's mood that day. `tone=None` must return the base
+    prompt byte for byte - that is the guarantee that every pre-existing caller is unaffected.
+    """
+    from app.api.v1.staff_ai import DESC_TONES, _desc_prompt
+
+    base = _desc_prompt("FACTS", None)
+    assert base.endswith("FACTS")
+    assert "Tone:" not in base
+    prompts = {_desc_prompt("FACTS", t) for t in DESC_TONES}
+    assert len(prompts) == len(DESC_TONES), "two vibes produced the same prompt"
+    for t, instruction in DESC_TONES.items():
+        p = _desc_prompt("FACTS", t)
+        assert p.startswith(base), "the base prompt must be unchanged, with the vibe appended"
+        assert instruction in p
+
+
+async def test_description_draft_rejects_an_unknown_vibe(client):
+    """A tone that is not one of the three is refused 422 BEFORE the product read or any model call.
+
+    That ordering is the point: the value would otherwise be concatenated into an LLM prompt, and
+    this test proves the refusal happens without a round trip (it passes with no AI endpoint up).
+    """
+    tok = await _staff_and_token(client, "manager")
+    r = await client.post("/staff/ai/description-draft",
+                          json={"product_id": 2, "tone": "shouty"},
+                          headers=_h(tok))
+    assert r.status_code == 422, r.text
+    assert "tone must be one of" in r.json()["detail"]
+
+
+async def test_description_draft_accepts_a_known_vibe(client):
+    """A known vibe is a normal draft request: same contract, plus the tone in the prompt."""
+    tok = await _staff_and_token(client, "sales")
+    r = await client.post("/staff/ai/description-draft",
+                          json={"product_id": 2, "tone": "professional"},
+                          headers=_h(tok))
+    assert r.status_code == 200, r.text
+    assert all(k in r.json() for k in ("title", "description", "keywords"))
