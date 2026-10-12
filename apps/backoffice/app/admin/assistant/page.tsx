@@ -206,7 +206,7 @@ export default function AssistantPage() {
               {msgs.length === 0 && (
                 <div className="text-center py-10">
                   <p className="text-ink-500">Ask anything about your stock - or open a Quick action.</p>
-                  <p className="text-xs text-ink-400 mt-1">Actions always require your confirmation before touching the data.</p>
+                  <p className="text-xs text-ink-500 mt-1">Actions always require your confirmation before touching the data.</p>
                 </div>
               )}
               {msgs.map((m, i) => (
@@ -265,7 +265,7 @@ export default function AssistantPage() {
                 <button className="rounded-xl bg-status-reserved-solid text-ink-inverse px-4 py-2 text-sm font-medium hover:bg-status-reserved-solid disabled:opacity-50"
                   onClick={sendNow} disabled={busy || !input.trim()}>Send</button>
               </div>
-              <p className="text-[10px] text-ink-400 mt-1.5 px-2">Pending proposals: {pending} - nothing executes without your confirmation.</p>
+              <p className="text-[10px] text-ink-500 mt-1.5 px-2">Pending proposals: {pending} - nothing executes without your confirmation.</p>
             </div>
           </section>
 

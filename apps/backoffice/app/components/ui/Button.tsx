@@ -40,7 +40,7 @@ const VARIANTS: Record<Variant, string> = {
      that sits ON the dark nav/banner surface, which the storefront never has (it is what the
      hand-rolled ~28px nav Sign out became); `muted` is a quiet neutral text action, for a state
      toggle that is not the primary action. Keep these two here and nowhere else. */
-  onDark: "text-ink-300 ring-1 ring-ink-600 hover:bg-ink-700",
+  onDark: "text-ink-600 ring-1 ring-ink-600 hover:bg-surface-sunken",
   muted: "text-ink-600 hover:bg-surface-sunken",
 };
 

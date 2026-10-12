@@ -1,21 +1,21 @@
 import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "./cn";
 
-/* light = white fill, the default for form rows; sunken = slate fill, for a field that sits on
-   a white bar and needs the contrast; dark = a field on a dark surface. All three carry a focus
-   highlight, which the pre-design-system inputs did not.
+/* light = the card fill, the default for form rows; sunken = the raised fill, for a field that sits
+   on the page ground and needs to lift off it; dark = the inverse fill, a well on a dark surface. All
+   three carry a focus highlight, which the pre-design-system inputs did not.
 
-   The placeholder tone is picked against the tone's OWN fill, and the three fills do not all
-   take the same step: white takes the middle ink step (4.76:1), the slate fill takes the
-   heavier one (6.92:1 - the middle step only reaches 4.34:1 over it), and the dark fill takes
-   the pale one (6.96:1 on the ink-900 it sits on). The set used before was inverted and all
-   three were under 4.5:1 (2.56:1 light, 2.34:1 sunken, 3.75:1 dark). The sunken tone has no
-   call site in this app, but the storefront's header search is the one that needs it to clear,
-   so it is corrected here rather than recorded as an exception - keep the two copies in step. */
+   The placeholder tone is picked against the tone's OWN fill, and on a dark ground the steps run the
+   other way: the card takes the middle ink (6.96:1), the raised fill takes the stronger one (9.85:1),
+   and the inverse fill takes the dim one (5.80:1) - which is the one place that dim step is the right
+   answer rather than a compromise. All three clear 4.5:1 against the fill they sit on.
+
+   The dark tone's ring is a hairline like the other two: it used to be ink-700, which on the old
+   palette was a subtle slate border and is now near-white - a 17:1 border on a near-black field. */
 const TONES: Record<"light" | "sunken" | "dark", string> = {
   light: "bg-surface text-ink-900 ring-1 ring-line placeholder:text-ink-500",
   sunken: "bg-surface-sunken text-ink-900 ring-1 ring-line placeholder:text-ink-600",
-  dark: "bg-ink-inverse/80 text-ink-900 ring-1 ring-ink-700 placeholder:text-ink-400",
+  dark: "bg-ink-inverse/80 text-ink-900 ring-1 ring-line-strong placeholder:text-ink-400",
 };
 
 type Props = ComponentPropsWithoutRef<"input"> & { tone?: "light" | "sunken" | "dark" };
