@@ -32,6 +32,7 @@ STAFF_READS = (
     ("/staff/me", {}),
     ("/staff/admin/ping", {}),
     ("/staff/lots", {"limit": 1, "offset": 1_000_000}),
+    ("/staff/lots/worklist", {"lot_number": "pytest-no-such-lot"}),
     ("/staff/assets", {"lot_number": "pytest-no-such-lot"}),
     ("/staff/movements", {"asset_id": 999_999_999_999}),
     ("/staff/cms/home", {}),

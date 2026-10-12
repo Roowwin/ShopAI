@@ -7,6 +7,7 @@ import { statusTone } from "@/lib/ui";
 import ValidationStream, { type Level, type StreamEvent } from "./ValidationStream";
 import AiReview, { type Draft, type Photo, type RawField } from "./AiReview";
 import DropZone from "./DropZone";
+import LotWorkbench from "./LotWorkbench";
 
 /* The intake screen.
 
@@ -51,7 +52,43 @@ function sizeText(bytes: number): string {
   return bytes < 1024 ? bytes + " B" : Math.round(bytes / 1024) + " KB";
 }
 
+/* The two areas of this screen. "Process Lot" is the workbench and is where the screen opens:
+   grading an existing lot is the daily job, and taking stock in is the occasional one. */
+type Tab = "process" | "intake";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "process", label: "Process Lot" },
+  { id: "intake", label: "New Intake" },
+];
+
+/* A segmented control rather than a tablist: both panels are always mounted in the tree's
+   routing sense (there is one page), and these buttons toggle which is rendered. Reported to
+   assistive technology as pressed-or-not, which is what they are, instead of as tabs whose
+   panels are not wired. */
+function TabBar({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
+  return (
+    <div className="inline-flex gap-1 rounded-control bg-surface-sunken p-1 ring-1 ring-line">
+      {TABS.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          aria-pressed={tab === t.id}
+          onClick={() => onTab(t.id)}
+          className={
+            "rounded-control px-4 py-2 text-sm font-semibold transition-colors duration-fast ease-out motion-reduce:transition-none " +
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 " +
+            (tab === t.id ? "bg-brand-700 text-white" : "text-ink-600 hover:bg-surface")
+          }
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function IntakePage() {
+  const [tab, setTab] = useState<Tab>("process");
   const [lots, setLots] = useState<Lot[]>([]);
   const [warehouse, setWarehouse] = useState("WH-A");
   const [notes, setNotes] = useState("");
@@ -242,12 +279,18 @@ export default function IntakePage() {
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 pt-8 pb-16">
       <div>
-        <Heading level="h1">Intake</Heading>
+        <Heading level="h1">Lot Process</Heading>
         <p className="mt-1 text-sm text-ink-500">
-          Read a photo with the model, then scan units into a lot. Everything is confirmed by you.
+          Grade a lot's units, or take new stock in. Everything is confirmed by you.
         </p>
       </div>
 
+      <TabBar tab={tab} onTab={setTab} />
+
+      {tab === "process" && <LotWorkbench />}
+
+      {tab === "intake" && (
+        <>
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="p-6 lg:col-span-2">
           <Heading level="h3" as="h2">Photo intake</Heading>
@@ -351,6 +394,8 @@ export default function IntakePage() {
 
       {msg && <p className="text-brand-300 text-sm">{msg}</p>}
       {err && <p className="text-danger-600 text-sm">{err}</p>}
+        </>
+      )}
     </main>
   );
 }
