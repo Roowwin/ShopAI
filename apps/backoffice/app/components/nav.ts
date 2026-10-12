@@ -42,7 +42,7 @@ export const GROUPS: NavGroup[] = [
      about who goes there. */
   { id: "inventory", heading: "Inventory & Logistics", icon: "crate", items: [
     { href: "/admin/intake", label: "Lots & intake" },
-    { href: "/admin/corporate-import", label: "Corporate Import" },
+    { href: "/admin/product-import", label: "Product Import" },
     { href: "/admin/assets", label: "Assets" },
     { href: "/admin/ai/listings", label: "AI listings" },
   ] },

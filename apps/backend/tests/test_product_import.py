@@ -1,4 +1,4 @@
-"""The corporate spreadsheet importer: read a supplier sheet, map it, refuse it or write it.
+"""The product spreadsheet importer: read a supplier sheet, map it, refuse it or write it.
 
 Unlike the other intake suites this one CANNOT leave its rows behind: the importer mints lots,
 products and hundreds of assets per call, and a dev DB that accumulates them would drift the
@@ -22,9 +22,9 @@ from sqlalchemy import text
 from app.bootstrap_staff import bootstrap
 from app.core.db import get_engine
 
-# The corporate sheet's header, as the brief spells it. Order is deliberately not the mapping
+# The product sheet's header, as the brief spells it. Order is deliberately not the mapping
 # order, so a test that passes proves the mapping is by NAME and not by position.
-CORPORATE_HEADER = ["Asset", "Status", "Lot", "Class", "Mfg", "Model", "Grade", "Serial#",
+PRODUCT_HEADER = ["Asset", "Status", "Lot", "Class", "Mfg", "Model", "Grade", "Serial#",
                     "Resale", "Audit", "Cosmetic", "Functional"]
 
 
@@ -81,14 +81,14 @@ def _tag() -> str:
 def _csv(rows, header=None) -> bytes:
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(header or CORPORATE_HEADER)
+    writer.writerow(header or PRODUCT_HEADER)
     for row in rows:
         writer.writerow(row)
     return buf.getvalue().encode("utf-8")
 
 
 def _row(tag: str, serial: str, **over) -> list:
-    """One corporate row, all twelve columns in the header's order."""
+    """One product row, all twelve columns in the header's order."""
     values = {
         "Asset": "TAG-" + serial,
         "Status": "received",
@@ -104,18 +104,18 @@ def _row(tag: str, serial: str, **over) -> list:
         "Functional": "functional notes",
     }
     values.update(over)
-    return [values[c] for c in CORPORATE_HEADER]
+    return [values[c] for c in PRODUCT_HEADER]
 
 
-async def _post(client, tok, data, name="corporate.csv", phase="preview"):
-    return await client.post(f"/staff/imports/corporate/{phase}",
+async def _post(client, tok, data, name="products.csv", phase="preview"):
+    return await client.post(f"/staff/imports/products/{phase}",
                              files={"file": (name, data)}, headers=_h(tok))
 
 
 async def _xlsx(rows, header=None) -> bytes:
     wb = Workbook()
     ws = wb.active
-    ws.append(header or CORPORATE_HEADER)
+    ws.append(header or PRODUCT_HEADER)
     for row in rows:
         ws.append(row)
     buf = io.BytesIO()
@@ -206,8 +206,8 @@ async def test_preview_reports_a_missing_required_column(client):
     tag = _tag()
     try:
         tok = await _staff(client, "admin")
-        header = [c for c in CORPORATE_HEADER if c != "Serial#"]
-        row = [v for c, v in zip(CORPORATE_HEADER, _row(tag, tag + "-S1")) if c != "Serial#"]
+        header = [c for c in PRODUCT_HEADER if c != "Serial#"]
+        row = [v for c, v in zip(PRODUCT_HEADER, _row(tag, tag + "-S1")) if c != "Serial#"]
         data = _csv([row], header=header)
         r = await _post(client, tok, data)
         assert r.status_code == 200, r.text
@@ -226,10 +226,10 @@ async def test_preview_reads_an_xlsx_workbook(client):
     try:
         tok = await _staff(client, "admin")
         data = await _xlsx([_row(tag, tag + "-S1")])
-        r = await _post(client, tok, data, name="corporate.xlsx")
+        r = await _post(client, tok, data, name="products.xlsx")
         assert r.status_code == 200, r.text
         body = r.json()
-        assert body["file"]["name"] == "corporate.xlsx"
+        assert body["file"]["name"] == "products.xlsx"
         assert body["summary"]["ready"] == 1
         assert body["sample"][0]["serial_number"] == tag + "-S1"
     finally:
@@ -238,7 +238,7 @@ async def test_preview_reads_an_xlsx_workbook(client):
 
 async def test_preview_refuses_an_unsupported_file_type(client):
     tok = await _staff(client, "admin")
-    r = await _post(client, tok, b"not a sheet", name="corporate.xls")
+    r = await _post(client, tok, b"not a sheet", name="products.xls")
     assert r.status_code == 422, r.text
     assert "xls" in r.json()["detail"].lower()
 
@@ -290,7 +290,7 @@ async def test_commit_creates_lots_products_and_assets(client):
             # One ledger movement per unit, labelled with this door's reason.
             movements = (await c.execute(text("""
                 SELECT count(*) FROM stock_movements m JOIN assets a ON a.id = m.asset_id
-                WHERE a.serial_number::text LIKE :p AND m.reason = 'corporate_import' AND m.qty = 1
+                WHERE a.serial_number::text LIKE :p AND m.reason = 'product_import' AND m.qty = 1
             """), {"p": tag + "%"})).scalar_one()
             assert movements == 3
     finally:
@@ -378,7 +378,7 @@ async def test_import_requires_admin_or_manager(client):
             tok = await _staff(client, role)
             r = await _post(client, tok, data)
             assert r.status_code == 403, f"{role}: {r.status_code} {r.text}"
-        anon = await client.post("/staff/imports/corporate/preview",
+        anon = await client.post("/staff/imports/products/preview",
                                  files={"file": ("c.csv", data)})
         assert anon.status_code in (401, 403), anon.text
         assert (await _counts(tag))["assets"] == 0
