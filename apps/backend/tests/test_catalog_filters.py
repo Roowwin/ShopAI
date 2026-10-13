@@ -347,7 +347,15 @@ def test_the_unfiltered_query_is_the_one_this_endpoint_has_always_run():
     sql = store_catalog._catalog_sql(None, None, None, None, None, "featured")
     assert sql == store_catalog.CATALOG_SELECT.replace("%CAT%", "").replace("%UNIT%", "")
     assert "%" not in sql, "a placeholder that did not expand would be a broken statement"
-    for leak in ("a.grade", "a.sale_price_cents >", "a.sale_price_cents <", "b.slug =", "c.slug ="):
+    # Probes are BOUND PARAMETER NAMES, and that is the point rather than a detail: a filter's own
+    # fragment IS its parameter, and `:min_cents` cannot appear in a statement that never applied
+    # that filter. The earlier probes named COLUMNS ("a.sale_price_cents >"), which was a proxy for
+    # the same promise - and a proxy that an UNCONDITIONAL clause legitimately trips. The margin
+    # floor is exactly such a clause: it names `a.sale_price_cents` on every statement this endpoint
+    # runs, by design, so a column probe would read the shop's own invariant as a leaked filter. The
+    # assertion just above (`sql == CATALOG_SELECT ...`) is what pins the statement; these probes pin
+    # the FILTERS, which is what the leak was ever about.
+    for leak in ("a.grade", ":min_cents", ":max_cents", "b.slug =", "c.slug ="):
         assert leak not in sql, "an unset filter leaked into the statement: " + leak
 
     # Each filter adds its own clause, and only its own.
@@ -516,7 +524,10 @@ def test_the_unfiltered_facet_query_is_the_one_this_endpoint_has_always_run():
     sql = store_catalog._brand_facet_sql(None, None, None, None, None)
     assert sql == store_catalog.CATALOG_BRANDS.replace("%CAT%", "").replace("%UNIT%", "")
     assert "%" not in sql, "a placeholder that did not expand would be a broken statement"
-    for leak in ("a.grade", "a.sale_price_cents", "search_vec", "c.name =", "b.slug ="):
+    # Parameter names, for the reason the list's twin gives: the margin floor names
+    # `a.sale_price_cents` unconditionally, so the price filter is probed by its parameter and not by
+    # a column fragment it shares with an invariant.
+    for leak in ("a.grade", ":min_cents", ":max_cents", "search_vec", "c.name =", "b.slug ="):
         assert leak not in sql, "an unset filter leaked into the facet statement: " + leak
 
     # Each filter adds its own clause, and only its own.
