@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { apiFetch } from "@/lib/api";
 import { Badge, Button, Card, Heading, Input, Stat, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
 import { aud, when } from "@/lib/format";
@@ -39,6 +39,15 @@ type AuditEntry = { at: string; actor_type: string; actor_id: number | null; ent
 type Detail = { asset: Asset; lot: Lot; movements: Movement[]; reservations: Reservation[];
                 images: HubImage[]; grade_templates: Record<string, number | null>;
                 audit: AuditEntry[] };
+
+/* What GET /staff/ai/market-hint answers: the aggregate over other units of this model at this
+   grade. `avg_cents` is null when there is nothing to compare against - a model or grade that is
+   absent, or a grade nobody has priced yet - and the dialog says which rather than printing a
+   zero. `current_cents` is the price this unit already carries; it is reported, not averaged in -
+   the unit being priced is excluded from its own sample so a re-price is not its own echo. */
+type MarketHint = { asset_id: number; model: string | null; grade: string | null;
+                    sample_size: number; avg_cents: number | null; min_cents: number | null;
+                    max_cents: number | null; current_cents: number | null };
 
 /* The roles the two commerce doors are behind. `manager` IS the store manager in this schema - the
    role check on `staff_users` is (admin, manager, technician, warehouse, sales) and there is no
@@ -243,9 +252,17 @@ export default function AssetDetailPage({ params }: { params: Promise<{ id: stri
 
    It carries the three things a dialog owes a keyboard: focus goes in on open and back where it
    came from on close, Escape dismisses, and a press outside the card dismisses while a press
-   inside it does not. It does NOT carry the focus trap the workbench's slide-over has - that one
-   hosts a whole form and a table behind a scrim, while this is a single field over a page the
-   reader just came from. If a control is ever added beside the field, the trap comes with it. */
+   inside it does not. Tab is kept inside the card while it is open - and the trap arrived with the
+   second control, exactly as this comment used to promise: the market hint and its Smart Price
+   button are focusable neighbours of the field, so the dialog now owns a small form and the
+   keyboard has to stay with it.
+
+   THE MARKET HINT. A price field with nothing behind it but memory is the thing this job fixes:
+   the dialog asks the AI API what other units of this model at this grade have gone for, and shows
+   the answer as one sentence and a range. SMART PRICE WRITES IT INTO THE FIELD rather than saving
+   it, so the number about to be written is one the operator can see and correct first - the same
+   "check the cents, then press save" contract the field already had, and the reason this button is
+   not a second way to commit a price. */
 function PriceModal({ assetId, serial, current, onClose, onSaved }:
                     { assetId: number; serial: string | null; current: number | null;
                       onClose: () => void; onSaved: () => void }) {
@@ -253,11 +270,13 @@ function PriceModal({ assetId, serial, current, onClose, onSaved }:
   const [price, setPrice] = useState(current === null ? "" : String(current));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [hint, setHint] = useState<MarketHint | null>(null);
+  const [hintNote, setHintNote] = useState("");
 
   useEffect(() => {
     const back = document.activeElement as HTMLElement | null;
     card.current?.querySelector("input")?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     const onDown = (e: MouseEvent) => {
       if (card.current && !card.current.contains(e.target as Node)) onClose();
     };
@@ -269,6 +288,40 @@ function PriceModal({ assetId, serial, current, onClose, onSaved }:
       back?.focus?.();
     };
   }, [onClose]);
+
+  /* The hint is a courtesy, not a gate: a read that fails leaves the dialog exactly as it was
+     before this feature existed - a field, a save, and no advice. The `alive` flag is what stops a
+     dismissed modal from setting state after it is gone. */
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await apiFetch("/staff/ai/market-hint?asset_id=" + assetId);
+        const j: MarketHint | null = r.ok ? await r.json().catch(() => null) : null;
+        if (!alive) { return; }
+        if (j) { setHint(j); } else { setHintNote("The market hint could not be read."); }
+      } catch {
+        if (alive) { setHintNote("The market hint could not be read."); }
+      }
+    })();
+    return () => { alive = false; };
+  }, [assetId]);
+
+  /* Tab stays with the card while it is open, first wrapping to last and last back to first. The
+     stops are read from the live DOM rather than listed, so the disabled Save button drops out of
+     the ring while a write is in flight without this having to say so. */
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== "Tab") { return; }
+    const root = card.current;
+    if (!root) { return; }
+    const stops = root.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])');
+    if (stops.length === 0) { e.preventDefault(); return; }
+    const first = stops[0];
+    const last = stops[stops.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
 
   async function save() {
     if (!centsGuard(price)) { setErr("The sale price has to be a whole number of cents, zero or more."); return; }
@@ -294,6 +347,11 @@ function PriceModal({ assetId, serial, current, onClose, onSaved }:
     }
   }
 
+  /* The average as a plain local rather than read off `hint` in the handler: the Smart Price
+     callback runs later, and a narrowed property access is not something the checker carries
+     across that boundary - a narrowed const is. */
+  const avg = hint?.avg_cents ?? null;
+
   return (
     <>
       <div className="fixed inset-0 z-40 bg-surface-muted/70 backdrop-blur-sm" aria-hidden="true" />
@@ -302,6 +360,7 @@ function PriceModal({ assetId, serial, current, onClose, onSaved }:
             rather than `aria-labelledby` because Heading (hand-mirrored with the storefront) takes
             no id, and widening a shared primitive for one dialog is the wrong trade. */}
         <div ref={card} role="dialog" aria-modal="true" aria-label="Set the sale price"
+             onKeyDown={onKeyDown}
              className="w-full max-w-sm rounded-card bg-surface p-5 ring-1 ring-line shadow-glow">
           <Heading level="h2">Set the sale price</Heading>
           <p className="mt-1 text-xs text-ink-500">
@@ -316,6 +375,38 @@ function PriceModal({ assetId, serial, current, onClose, onSaved }:
               In cents, whole: 49900 is $499.00.
             </p>
           </div>
+
+          {/* The hint: the average when there is one, otherwise the reason there is not. Both are
+              one sentence, and the button only exists when there is a number to write. */}
+          <div className="mt-3 rounded-control bg-surface-sunken px-3 py-2">
+            {hint === null && !hintNote && <p className="text-xs text-ink-500">Reading the market...</p>}
+            {hintNote && <p className="text-xs text-ink-500">{hintNote}</p>}
+            {hint && (avg !== null ? (
+              <>
+                <p className="text-xs text-ink-500">Market hint</p>
+                <p className="pt-0.5 text-sm text-ink-900">
+                  Avg market value{" "}
+                  <span className="font-semibold tabular-nums">{aud(avg, "AUD")}</span>
+                  {" "}&middot; {hint.sample_size} comparable unit{hint.sample_size === 1 ? "" : "s"}
+                  {" "}({hint.model}, grade {hint.grade})
+                </p>
+                <p className="pt-0.5 text-xs text-ink-500">
+                  Range {aud(hint.min_cents, "AUD")} to {aud(hint.max_cents, "AUD")}.
+                </p>
+                <Button variant="secondary" size="sm" className="mt-2"
+                        onClick={() => setPrice(String(avg))}>
+                  Smart Price
+                </Button>
+              </>
+            ) : (
+              <p className="text-xs text-ink-500">
+                {hint.model === null || hint.grade === null
+                  ? "This unit has no model or grade yet, so there is nothing to compare it against."
+                  : "No other " + hint.model + " at grade " + hint.grade + " has a price yet - the hint fills in as units are priced."}
+              </p>
+            ))}
+          </div>
+
           {err && <p className="pt-2 text-sm text-danger-600">{err}</p>}
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>

@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 from app.api.v1 import staff_ops
 from app.api.v1.deps import require_roles
-from app.api.v1.staff_ops import GradeIn, LotIn, MoveIn, PriceIn, ScanIn, StatusIn
+from app.api.v1.staff_ops import GradeIn, LotIn, MoveIn, PriceIn, ROLES_PRICE, ScanIn, StatusIn
 from app.core.config import get_settings
 from app.core.db import get_db, get_ai_db
 from app.core.redis import get_redis
@@ -798,6 +798,63 @@ async def suggestions(staff: dict = Depends(require_roles("admin", "manager", "t
     for x in restock:
         items.append({"chip": "Restock: " + (x["title"] or "item without title"), "message": "Let us restock: " + (x["title"] or "") + " - create a lot and scan in the units"})
     return {"role": staff["role"], "can_do": [a for a, rs in TOOL_ROLES.items() if staff["role"] in rs], "items": items}
+
+
+# ------------- Price benchmarking (the Set Price dialog's market hint) -------------
+# What units of the SAME model at the SAME grade actually went for, so a price is set against the
+# market rather than from memory. The dialog shows the average as a "Market Hint"; Smart Price
+# writes it into the field.
+#
+# WHERE THE NUMBER COMES FROM. `assets.sale_price_cents` is the price an operator deliberately set
+# on a unit on its way to the shop, so a priced unit is a statement of what that model at that
+# grade is worth - which is the comparable a market hint wants. Nothing is inferred and no model is
+# called: this is an aggregate over prices a human already committed.
+#
+# THE UNIT BEING PRICED IS EXCLUDED from its own sample (`a.id <> :i`). A hint that averaged in the
+# price already on this unit would pull toward whatever was typed last time, so re-pricing a unit
+# would be answering its own echo. Excluding it also makes the number mean one thing plainly: what
+# every OTHER unit of this model and grade went for.
+#
+# The key is the MODEL STRING and the GRADE, deliberately not `product_id`: one model arrives under
+# more than one product record (a re-listing, a variant), and scoping to the unit's own product row
+# would hide exactly the comparables the hint exists to find.
+#
+# What leaves this endpoint is a count and three cents values - no serial, no lot, and no row-level
+# price from any other unit - so the hint cannot be read as a per-unit price list. It is behind the
+# PRICING roles (admin/manager/sales), the same tuple that may set the price it feeds: whoever may
+# write a price may see what the market pays, and nobody else learns what the stock costs.
+@router.get("/market-hint")
+async def market_hint(asset_id: int,
+                      staff: dict = Depends(require_roles(*ROLES_PRICE)),
+                      db=Depends(get_db)):
+    row = (await db.execute(text("""
+        SELECT a.id, a.grade, a.sale_price_cents, pr.model
+        FROM assets a LEFT JOIN products pr ON pr.id = a.product_id
+        WHERE a.id = :i"""), {"i": asset_id})).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    hint = {"asset_id": row["id"], "model": row["model"], "grade": row["grade"],
+            "sample_size": 0, "avg_cents": None, "min_cents": None, "max_cents": None,
+            "current_cents": row["sale_price_cents"]}
+    # Both halves of the key are needed to have anything to compare against: a model to match and a
+    # grade to match it at. The dialog names the missing half rather than showing a zero.
+    if row["model"] is None or row["grade"] is None:
+        return hint
+    agg = (await db.execute(text("""
+        SELECT count(*) AS n, avg(a.sale_price_cents) AS avg_cents,
+               min(a.sale_price_cents) AS min_cents, max(a.sale_price_cents) AS max_cents
+        FROM assets a JOIN products pr ON pr.id = a.product_id
+        WHERE pr.model = :model AND a.grade = :grade
+          AND a.sale_price_cents IS NOT NULL AND a.id <> :i"""),
+        {"model": row["model"], "grade": row["grade"], "i": row["id"]})).mappings().first()
+    if int(agg["n"]) > 0:
+        # avg() over a bigint column is numeric, so it arrives as a Decimal: rounded to whole cents
+        # because the price door takes cents and a fractional cent could not be written back.
+        hint["sample_size"] = int(agg["n"])
+        hint["avg_cents"] = int(round(float(agg["avg_cents"])))
+        hint["min_cents"] = int(agg["min_cents"])
+        hint["max_cents"] = int(agg["max_cents"])
+    return hint
 
 
 # The three vibes the listing studio's switcher offers, and the instruction each one adds to the

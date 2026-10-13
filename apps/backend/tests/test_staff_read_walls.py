@@ -44,6 +44,10 @@ STAFF_READS = (
     ("/staff/ai/briefing", {}),
     ("/staff/ai/activity", {}),
     ("/staff/ai/suggestions", {}),
+    # The market hint returns an OBJECT, so only the "no credential -> 401" leg applies here. It is
+    # aimed past every asset id on purpose: it reports an aggregate, and a probe that leaked would
+    # otherwise read the pricing of a real model.
+    ("/staff/ai/market-hint", {"asset_id": 999_999_999_999}),
     # /staff/overview lives HERE and only here. It returns an OBJECT, and test_staff_read_walls_
     # hold_for_every_read's admin leg below asserts `r.json() == []` - written for the
     # list-returning reads. Adding it to READ_WALLS would fail on a CORRECT response, so the
