@@ -2,7 +2,9 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
-import { GROUPS, activeGroupId, activeHref, type NavIcon } from "./nav";
+import {
+  GROUPS, activeGroupId, activeHref, subGroupId, subGroupIds, subGroupOf, type NavIcon,
+} from "./nav";
 import { kickerClass } from "@/lib/ui";
 import { cn } from "./ui";
 
@@ -35,8 +37,13 @@ import { cn } from "./ui";
 
 const OPEN_KEY = "rfo.admin.nav.open";
 
+/* Every id the open-state list may hold: the categories AND the nested groups. Both live in one
+   remembered set and one storage key, and this is the list that decides which of them survives a
+   reload - which is why a nested group's id has to be named here too. Miss it and the sub-group
+   would open on the current route and then forget itself on the next visit, which is exactly the
+   silent failure this filter exists to prevent rather than cause. */
 function categoryIds(): string[] {
-  return GROUPS.map((g) => g.id);
+  return [...GROUPS.map((g) => g.id), ...subGroupIds().map(subGroupId)];
 }
 
 /* A remembered list of category ids, or none. Every branch here returns - this function cannot
@@ -74,9 +81,25 @@ const CATEGORY_BASE =
 const CATEGORY_IDLE = "text-ink-500 hover:bg-surface-sunken hover:text-ink-600";
 const CATEGORY_CURRENT = "text-brand-300";
 
+/* The left padding is NOT in the base. It is the one thing that differs between a child and a
+   grandchild, and `cn` joins utilities rather than merging them - so a `pl-12` passed after a baked
+   `pl-8` would resolve by stylesheet order instead of by intent, which is the same trap the UI
+   primitives' own comments describe. The indent is therefore the caller's, named here once. */
 const ITEM_BASE =
-  "flex min-h-[36px] items-center rounded-control pr-2 pl-8 text-sm " +
+  "flex min-h-[36px] items-center rounded-control pr-2 text-sm " +
   "transition-colors duration-fast ease-out motion-reduce:transition-none " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500";
+const INDENT_CHILD = "pl-8";
+const INDENT_GRANDCHILD = "pl-12";
+
+/* The nested group's twist. It is a SIBLING of the row's anchor rather than a child of it - a button
+   inside a link is invalid markup, and the two controls must stay apart anyway, because pressing one
+   navigates and pressing the other expands and a single control cannot do both without guessing.
+   `ring-inset` for the same reason every other cue in this file uses it: the scroller trims what is
+   painted outside its box. */
+const SUB_TOGGLE =
+  "flex h-9 w-6 shrink-0 items-center justify-center rounded-control text-ink-500 " +
+  "transition-transform duration-fast ease-out motion-reduce:transition-none " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500";
 /* The page you are on carries the emerald treatment AND its bloom, from the app's own boxShadow
    tokens - the glow is a token rather than a hue chosen here, so a change to the emerald is one
@@ -154,6 +177,15 @@ export default function SidebarNav({ rail = false, onNavigate, onExpand }: Props
     if (!current) { return; }
     setOpen((prev) => (prev.has(current) ? prev : new Set(prev).add(current)));
   }, [current]);
+
+  /* The same rule one level down: landing on a page inside a nested group opens that group, so the
+     operator can see the entry they are on rather than a parent that looks closed. */
+  const currentSub = subGroupOf(pathname);
+  useEffect(() => {
+    if (!currentSub) { return; }
+    const id = subGroupId(currentSub);
+    setOpen((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+  }, [currentSub]);
 
   function toggle(id: string) {
     const next = new Set(open);
@@ -250,7 +282,7 @@ export default function SidebarNav({ rail = false, onNavigate, onExpand }: Props
                       <li key={l.href} title="Coming soon" aria-label={l.label + " - coming soon"}>
                         <span
                           aria-disabled="true"
-                          className={cn(ITEM_BASE, ITEM_SOON, "pointer-events-none")}
+                          className={cn(ITEM_BASE, INDENT_CHILD, ITEM_SOON, "pointer-events-none")}
                         >
                           {l.label}
                         </span>
@@ -258,16 +290,70 @@ export default function SidebarNav({ rail = false, onNavigate, onExpand }: Props
                     );
                   }
                   const on = l.href === href;
+                  const kids = (l.children ?? []).filter((c) => !c.soon);
+                  if (kids.length === 0) {
+                    return (
+                      <li key={l.href}>
+                        <a
+                          href={l.href}
+                          aria-current={on ? "page" : undefined}
+                          onClick={() => onNavigate?.()}
+                          className={cn(ITEM_BASE, INDENT_CHILD, on ? ITEM_CURRENT : ITEM_IDLE)}
+                        >
+                          {l.label}
+                        </a>
+                      </li>
+                    );
+                  }
+                  /* An entry with children: its own page keeps its link, and a twist beside it opens
+                     the group. The twist's panel stays in the markup whether or not it is open, the
+                     same way a category's does, so the control always has something to name. */
+                  const sub = subGroupId(l.href);
+                  const subPanel = "nav-sub-panel-" + l.href;
+                  const subOpen = open.has(sub);
                   return (
                     <li key={l.href}>
-                      <a
-                        href={l.href}
-                        aria-current={on ? "page" : undefined}
-                        onClick={() => onNavigate?.()}
-                        className={cn(ITEM_BASE, on ? ITEM_CURRENT : ITEM_IDLE)}
-                      >
-                        {l.label}
-                      </a>
+                      <div className="flex items-center gap-1">
+                        <a
+                          href={l.href}
+                          aria-current={on ? "page" : undefined}
+                          onClick={() => onNavigate?.()}
+                          className={cn(ITEM_BASE, INDENT_CHILD, "min-w-0 flex-1", on ? ITEM_CURRENT : ITEM_IDLE)}
+                        >
+                          {l.label}
+                        </a>
+                        <button
+                          type="button"
+                          aria-expanded={subOpen}
+                          aria-controls={subPanel}
+                          aria-label={(subOpen ? "Collapse " : "Expand ") + l.label}
+                          onClick={() => toggle(sub)}
+                          className={cn(SUB_TOGGLE, subOpen && "rotate-180")}
+                        >
+                          <svg viewBox="0 0 16 16" width="12" height="12" fill="none"
+                            stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+                            strokeLinejoin="round" aria-hidden="true">
+                            <path d="M4 6.5l4 4 4-4" />
+                          </svg>
+                        </button>
+                      </div>
+                      <ul id={subPanel} hidden={!subOpen} className="space-y-0.5 pt-0.5">
+                        {kids.map((c) => {
+                          const con = c.href === href;
+                          return (
+                            <li key={c.href}>
+                              <a
+                                href={c.href}
+                                aria-current={con ? "page" : undefined}
+                                onClick={() => onNavigate?.()}
+                                className={cn(ITEM_BASE, INDENT_GRANDCHILD, con ? ITEM_CURRENT : ITEM_IDLE)}
+                              >
+                                {c.label}
+                              </a>
+                            </li>
+                          );
+                        })}
+                      </ul>
                     </li>
                   );
                 })}
