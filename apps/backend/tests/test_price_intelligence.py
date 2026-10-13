@@ -371,7 +371,13 @@ async def test_a_file_of_thin_margins_still_imports(client):
         rows = [_row(tag, tag + "-L" + str(n), Lot=tag + "-LOT-1",
                      Resale="100.00", Settlement="95.00") for n in range(1, 4)]
         data = _sheet(rows)
-        preview = (await _post(client, tok, data)).json()
+        # Assert the STATUS before reading the payload. A peer suite's `pytest-%` sweep can delete
+        # this test's identity between the login and this call, and without this line that arrives
+        # as `KeyError: 'summary'` - an error that reads like a defect in the pricing payload
+        # rather than the 401 it actually is.
+        r = await _post(client, tok, data)
+        assert r.status_code == 200, r.text
+        preview = r.json()
         assert preview["summary"]["low_margin"] == 3
         assert preview["summary"]["blocked"] == 0
         assert len(preview["warnings"]) == 3
