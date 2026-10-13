@@ -155,13 +155,26 @@ type Props = {
 export default function SidebarNav({ rail = false, onNavigate, onExpand }: Props) {
   const pathname = usePathname();
   const current = activeGroupId(pathname);
+  const currentSub = subGroupOf(pathname);
   const href = activeHref(pathname);
 
   /* The first draw is decided by the route alone, which is the one thing the server and this
      browser agree on at that moment, so the current category is already open in the shipped page
      and hydration has nothing to disagree about. Remembered categories are folded in after mount,
-     which is the first moment storage may be read at all. */
-  const [open, setOpen] = useState<Set<string>>(() => new Set(current ? [current] : []));
+     which is the first moment storage may be read at all.
+
+     THE NESTED GROUP BELONGS IN THIS FIRST DRAW TOO, and leaving it to the effect below was a real
+     defect rather than a detail: the server rendered the category open and the group CLOSED, so a
+     cold load of /admin/intake painted a rail in which the page you were on was hidden inside a
+     shut disclosure, and only a post-hydration effect opened it. A flash of the wrong tree is bad;
+     a first paint that hides the operator's own page is worse, and both are the same bug. Both ids
+     are pure functions of the pathname, so both can be decided before the first byte is sent. */
+  const [open, setOpen] = useState<Set<string>>(() => {
+    const ids: string[] = [];
+    if (current) { ids.push(current); }
+    if (currentSub) { ids.push(subGroupId(currentSub)); }
+    return new Set(ids);
+  });
 
   useEffect(() => {
     const remembered = readOpen();
@@ -178,9 +191,9 @@ export default function SidebarNav({ rail = false, onNavigate, onExpand }: Props
     setOpen((prev) => (prev.has(current) ? prev : new Set(prev).add(current)));
   }, [current]);
 
-  /* The same rule one level down: landing on a page inside a nested group opens that group, so the
-     operator can see the entry they are on rather than a parent that looks closed. */
-  const currentSub = subGroupOf(pathname);
+  /* The same rule one level down, for the case the initial state cannot cover: arriving at a nested
+     page by NAVIGATING rather than by loading, where the sidebar is already mounted and there is no
+     first draw left to get right. The initial state above handles a cold load; this handles a click. */
   useEffect(() => {
     if (!currentSub) { return; }
     const id = subGroupId(currentSub);
