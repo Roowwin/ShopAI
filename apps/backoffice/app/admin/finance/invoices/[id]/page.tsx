@@ -8,11 +8,13 @@
    this page does not second-guess it: an invoice states what an order contained, and the order is
    where that is recorded.
 
-   THE SELLER'S OWN IDENTITY IS THE ONE THING THAT DOES NOT EXIST YET, and this page does not invent
-   it. There is no store of the business's legal name, ABN or address anywhere in the platform, so
-   the document carries the trading name and nothing else, and a SCREEN-ONLY note says so - printed
-   off, that note would be a placeholder on a customer's tax document, and a fabricated ABN would be
-   far worse than a missing one. The note is the honest state until a settings store for it exists.
+   THE SELLER'S OWN IDENTITY COMES FROM THE SETTINGS STORE. The legal name, ABN, registered address
+   and contact email are the one block on this document the platform cannot derive from the sale, so
+   they are read from `site_settings` (Settings & System) by the server and rendered here in the
+   order a tax invoice needs them: name, then ABN, then address, then the order's own details. A
+   field nobody has set is OMITTED rather than invented - there is no placeholder ABN, ever. If the
+   legal name itself is unset the document falls back to the trading name and says so ON SCREEN
+   ONLY, because a printed page must not carry a note about what it is missing.
 
    MONOCHROME-SAFE, like the fulfilment documents: the rules are hairlines, the emphasis is weight,
    and nothing depends on an emerald that a mono printer would flatten into grey. */
@@ -31,11 +33,13 @@ type Line = { asset_id: number | null; sku_title: string; qty: number; unit_pric
               line_total_cents: number; grade: string | null; serial_tail: string | null };
 type Address = { name: string; line1: string; line2: string; city: string; state: string;
                  postcode: string; country: string };
+type Seller = { legal_name: string; tax_id: string; address: string; email: string };
 type Doc = {
   id: number; number: string; status: string; currency: string; order_id: number | null;
   subtotal_cents: number; tax_cents: number; shipping_cents: number; total_cents: number;
   issued_on: string | null; due_on: string | null; paid_at: string | null; notes: string | null;
   customer: { email: string; display_name: string | null } | null;
+  seller: Seller | null;
   ship_to: Address | null;
   lines: Line[];
 };
@@ -94,6 +98,12 @@ export default function InvoiceDocumentPage() {
        doc.ship_to.country].filter(Boolean)
     : [];
 
+  /* The seller block, defaulted to blanks so the document always renders. The registered address is
+     free text an operator typed across lines, so it is split on newlines rather than assumed to be
+     one string. */
+  const seller: Seller = doc.seller ?? { legal_name: "", tax_id: "", address: "", email: "" };
+  const sellerLines = seller.address.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
   return (
     <main className="mx-auto max-w-3xl px-4 pt-8 pb-24">
       <div className="mb-6 flex flex-wrap items-center gap-3 print:hidden">
@@ -108,12 +118,23 @@ export default function InvoiceDocumentPage() {
       <Card className="p-8 print:ring-0">
         <header className="flex flex-wrap items-start justify-between gap-4 border-b border-ink-900 pb-4">
           <div>
-            <p className="text-2xl font-semibold tracking-tight text-ink-900">RFO</p>
-            {/* SCREEN ONLY: the printed document must not carry a note about what it is missing. */}
-            <p className="mt-1 max-w-xs text-xs text-ink-500 print:hidden">
-              The business&apos;s own legal name, ABN and address have no store in this platform yet,
-              so this document renders the trading name and nothing invented.
+            {/* THE SELLER BLOCK, in the order a tax invoice needs it: legal name, ABN, registered
+                address, contact email - then the order's own details beside it. */}
+            <p className="text-2xl font-semibold tracking-tight text-ink-900">
+              {seller.legal_name || "RFO"}
             </p>
+            {seller.tax_id && <p className="mt-1 text-sm text-ink-700">ABN {seller.tax_id}</p>}
+            {sellerLines.map((l) => (
+              <p key={l} className="text-sm text-ink-600">{l}</p>
+            ))}
+            {seller.email && <p className="mt-1 text-sm text-ink-600">{seller.email}</p>}
+            {/* SCREEN ONLY: a printed page must not carry a note about what it is missing. */}
+            {!seller.legal_name && (
+              <p className="mt-2 max-w-xs text-xs text-ink-500 print:hidden">
+                No legal identity is set yet, so this document prints the trading name and nothing
+                invented. Set the business&apos;s name, ABN and address under Settings &amp; System.
+              </p>
+            )}
           </div>
           <div className="text-right">
             <p className={cn(kickerClass, "block")}>Tax invoice</p>

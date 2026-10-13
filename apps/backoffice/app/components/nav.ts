@@ -118,11 +118,17 @@ export const GROUPS: NavGroup[] = [
     id: "administration", heading: "Administration & Security", icon: "shield", items: [
       { href: "/admin/team", label: "Team & Access Control" },
       { href: "/admin/audit", label: "Audit Logs" },
-      /* Named "Settings & System" by the roadmap and built as the Security screen today - the one
-         page that carries the platform's own system configuration (MFA enrolment, the CSP posture
-         and the session rules). It keeps the roadmap's label because that is the roadmap's name for
-         this seat in the tree, and the page it opens is the platform's system page. */
-      { href: "/admin/security", label: "Settings & System" },
+      /* "Settings & System" is a real Settings page now: the business's own legal identity - the
+         name, ABN and address every tax invoice prints - plus the system configuration behind the
+         documents the shop issues. The Security screen it used to open (MFA enrolment, the CSP
+         posture and the session rules) hangs UNDER it rather than losing its seat in the tree: it
+         is still the platform's system page, just no longer the only one. */
+      {
+        href: "/admin/settings", label: "Settings & System",
+        children: [
+          { href: "/admin/security", label: "Security & MFA" },
+        ],
+      },
     ],
   },
 ];

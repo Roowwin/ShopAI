@@ -13,6 +13,7 @@ this file is HTTP shape only):
     tax_rates      read by the checkout, so an edit here changes real order totals
     system_config  free-form operator config
     api_keys       third-party credentials, stored whole and returned MASKED
+    business_identity  the seller block a tax invoice prints (legal name, ABN, address, email)
 
 THE SECRET NEVER LEAVES MASKED. ``create`` returns ``mask_secret`` output and every read is filtered
 through ``_public_key``; there is deliberately no endpoint that returns a stored secret. An internal
@@ -46,6 +47,7 @@ ROLES_SETTINGS_WRITE = ("admin",)
 ACTION_READ_SETTINGS = "read_settings"
 ACTION_WRITE_TAX_RATES = "write_tax_rates"
 ACTION_WRITE_CONFIG = "write_system_config"
+ACTION_WRITE_IDENTITY = "write_business_identity"
 ACTION_CREATE_API_KEY = "create_api_key"
 ACTION_REVOKE_API_KEY = "revoke_api_key"
 
@@ -58,6 +60,14 @@ class TaxRatesIn(BaseModel):
 class ConfigIn(BaseModel):
     """A partial config patch: keys to set, and keys given as null to remove."""
     values: dict
+
+
+class IdentityIn(BaseModel):
+    """The seller block a tax invoice carries. Validated by the service, not here."""
+    legal_name: str = Field(default="", max_length=400)
+    tax_id: str = Field(default="", max_length=400)
+    address: str = Field(default="", max_length=400)
+    email: str = Field(default="", max_length=400)
 
 
 class ApiKeyIn(BaseModel):
@@ -73,9 +83,11 @@ def _refuse(e: ss.SettingsError) -> None:
 
 @router.get("")
 async def get_settings_root(staff: dict = Depends(require_roles(*ROLES_SETTINGS_READ)), db=Depends(get_db)):
-    """Everything a Settings page shows at a glance: the live tax rates and the config document."""
+    """Everything a Settings page shows at a glance: the live tax rates, the config document, and the
+    business's own legal identity (what an invoice names as its seller)."""
     await _require_role(staff, ROLES_SETTINGS_READ, ACTION_READ_SETTINGS, None)
-    return {"tax_rates": await ss.get_tax_rates(db), "config": await ss.get_system_config(db)}
+    return {"tax_rates": await ss.get_tax_rates(db), "config": await ss.get_system_config(db),
+            "identity": await ss.get_business_identity(db)}
 
 
 @router.get("/tax-rates")
@@ -139,6 +151,39 @@ async def put_config(body: ConfigIn, staff: dict = Depends(require_roles(*ROLES_
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
     return {"config": merged}
+
+
+@router.get("/identity")
+async def get_identity(staff: dict = Depends(require_roles(*ROLES_SETTINGS_READ)), db=Depends(get_db)):
+    """The seller block an invoice prints: legal name, ABN/Tax ID, registered address, contact email."""
+    await _require_role(staff, ROLES_SETTINGS_READ, ACTION_READ_SETTINGS, None)
+    return {"identity": await ss.get_business_identity(db)}
+
+
+@router.put("/identity")
+async def put_identity(body: IdentityIn, staff: dict = Depends(require_roles(*ROLES_SETTINGS_WRITE)),
+                       db=Depends(get_db)):
+    """Replace the business's legal identity - what every invoice then names as its seller.
+
+    A replace rather than a merge, unlike `system_config`: this is ONE document with a fixed set of
+    four fields, and a form that submits all four cannot mean "leave the others as they were" - a
+    merge would make a field impossible to CLEAR, which is exactly what an operator does after
+    mistyping an ABN.
+    """
+    await _require_role(staff, ROLES_SETTINGS_WRITE, ACTION_WRITE_IDENTITY, None)
+    try:
+        identity = ss.validate_business_identity(body.model_dump())
+    except ss.SettingsError as e:
+        _refuse(e)
+    before = await ss.get_business_identity(db)
+    await ss.write_setting(db, ss.BUSINESS_IDENTITY_KEY, identity)
+    await audit(db, "staff", entity="settings", action="business_identity_updated",
+                actor_id=staff["id"], before=before, after=identity)
+    try:
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    return {"identity": identity}
 
 
 @router.get("/api-keys")

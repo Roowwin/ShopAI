@@ -1,18 +1,27 @@
-"""The Settings API: tax rates (live), general config, and third-party API keys.
+"""The Settings API: tax rates (live), general config, third-party API keys, and the business's own
+legal identity.
 
 The load-bearing test here is `test_a_stored_tax_rate_drives_the_checkout_total`: a rate set through
 the API must change the GST on a real order AND appear as the rate on that order's tax line, which is
 what makes the total and the setting one fact instead of two that can drift.
 
+The identity tests pin the other half of that idea: what Settings & System saves is what a tax
+invoice PRINTS, so the assertion runs end to end - write the identity, take a real order to paid, and
+read the seller block back off the invoice document the print screen renders.
+
 Settings live in shared, global rows, so every test that writes one SNAPSHOTS it first and RESTORES
-it in a `finally` - a leaked tax rate would misprice every other test on the box.
+it in a `finally` - a leaked tax rate would misprice every other test on the box, and a leaked legal
+name would print on somebody else's document.
 """
+import hashlib
+import hmac
 import json
 import uuid
 
 from sqlalchemy import text
 
 from app.bootstrap_staff import bootstrap
+from app.core.config import get_settings
 from app.core.db import get_engine
 
 
@@ -273,3 +282,95 @@ async def test_settings_reads_are_manager_but_writes_are_admin(client):
         await _restore("tax_rates", original)
         await _drop_staff(admin_email)
         await _drop_staff(mgr_email)
+
+
+# ---------------------------------------------------------------------------
+# The business's own legal identity: stored, validated, and PRINTED
+# ---------------------------------------------------------------------------
+async def test_the_business_identity_round_trips_and_refuses_a_bad_one(client):
+    """The write is strict where the read is total: a nameless seller or a malformed ABN is refused
+    with a reason, because this is what a customer's tax document will say."""
+    h, email = await _staff(client)
+    original = await _snapshot("business_identity")
+    try:
+        good = {"legal_name": "RFO Pty Ltd", "tax_id": "12 345 678 901",
+                "address": "1 Example St\nSydney NSW 2000", "email": "accounts@rfo.example"}
+        r = await client.put("/staff/settings/identity", headers=h, json=good)
+        assert r.status_code == 200, r.text
+        assert r.json()["identity"] == good, r.text
+
+        # It comes back on both reads: the dedicated one and the Settings page's root payload.
+        assert (await client.get("/staff/settings/identity", headers=h)).json()["identity"] == good
+        assert (await client.get("/staff/settings", headers=h)).json()["identity"] == good
+
+        # THE LEGAL NAME IS REQUIRED - an invoice that does not name its seller is not a tax invoice.
+        r = await client.put("/staff/settings/identity", headers=h,
+                             json={**good, "legal_name": "   "})
+        assert r.status_code == 422 and "legal_name" in r.json()["detail"], r.text
+        # ... and the two formats a document would misprint are refused rather than stored.
+        for bad in ({**good, "tax_id": "not-a-number"}, {**good, "email": "nope"}):
+            r = await client.put("/staff/settings/identity", headers=h, json=bad)
+            assert r.status_code == 422, (bad, r.status_code, r.text)
+    finally:
+        await _restore("business_identity", original)
+        await _drop_staff(email)
+
+
+async def test_an_invoice_names_the_business_the_settings_store_holds(client):
+    """END TO END. What Settings & System saves is what the invoice document PRINTS as its seller -
+    the one block on that page the platform cannot derive from the sale."""
+    h, email = await _staff(client)
+    original = await _snapshot("business_identity")
+    pid = aid = None
+    public_id = None
+    try:
+        identity = {"legal_name": "RFO Legal Pty Ltd", "tax_id": "98 765 432 109",
+                    "address": "9 Seller Rd\nMelbourne VIC 3000", "email": "billing@rfo.example"}
+        assert (await client.put("/staff/settings/identity", headers=h,
+                                 json=identity)).status_code == 200
+
+        pid, aid = await _listed_unit(client, h, slug="mission-identity-" + uuid.uuid4().hex[:8],
+                                      price=25000)
+        r = await client.post("/store/checkout", json={
+            "asset_ids": [aid], "shipping_country": "AU", "ship_to_name": "T", "ship_line1": "1 St",
+            "ship_city": "Sydney", "ship_postcode": "2000"})
+        assert r.status_code == 200, r.text
+        public_id = r.json()["order_public_id"]
+        # Initiate the charge first (the shortcut settles an EXISTING payment), then take it to
+        # succeeded. Both run the app's own paths, so this is a real paid order with a real invoice
+        # rather than a hand-written row.
+        assert (await client.post(f"/store/orders/{public_id}/pay")).status_code == 200
+        assert (await client.post(f"/store/orders/{public_id}/simulate-payment")).status_code == 200
+
+        eng = get_engine()
+        async with eng.begin() as c:
+            inv_id = (await c.execute(text(
+                "SELECT i.id FROM invoices i JOIN orders o ON o.id = i.order_id"
+                " WHERE o.public_id = :p"), {"p": public_id})).scalar_one()
+
+        r = await client.get(f"/staff/finance/invoices/{inv_id}", headers=h)
+        assert r.status_code == 200, r.text
+        doc = r.json()
+        assert doc["seller"] == identity, doc.get("seller")
+        # The document still carries the SALE's own half - the seller block is an addition, not a
+        # replacement for the order detail the screen already rendered.
+        assert doc["lines"] and doc["total_cents"] > 0, doc
+    finally:
+        if public_id is not None:
+            eng = get_engine()
+            async with eng.begin() as c:
+                await c.execute(text("DELETE FROM payment_events WHERE order_id IN"
+                                     " (SELECT id FROM orders WHERE public_id = :p)"),
+                                {"p": public_id})
+                await c.execute(text("DELETE FROM invoices WHERE order_id IN"
+                                     " (SELECT id FROM orders WHERE public_id = :p)"),
+                                {"p": public_id})
+                for table in ("order_tax_lines", "payments", "order_lines"):
+                    await c.execute(text(f"DELETE FROM {table} WHERE order_id IN"
+                                         " (SELECT id FROM orders WHERE public_id = :p)"),
+                                    {"p": public_id})
+                await c.execute(text("DELETE FROM orders WHERE public_id = :p"), {"p": public_id})
+        if pid is not None:
+            await _archive(pid)
+        await _restore("business_identity", original)
+        await _drop_staff(email)

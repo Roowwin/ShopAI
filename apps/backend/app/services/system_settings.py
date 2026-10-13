@@ -14,6 +14,7 @@ at-rest shape is therefore a small set of keys, not a set of columns:
     tax_rates      {"AU": {"jurisdiction": "AU_GST", "rate_bp": 1000}, "NZ": {...}}
     system_config  {<operator-chosen key>: <any JSON value>, ...}
     api_keys       [{id, provider, label, secret, masked, scopes, is_active, created_at}, ...]
+    business_identity  {legal_name, tax_id, address, email}
 
 THE TAX RATES ARE LIVE, NOT INFORMATIONAL. :func:`get_tax_rate` is what ``store_ops.checkout``
 calls, so editing a rate here changes the GST on the next order - and the SAME number is written to
@@ -34,6 +35,7 @@ from sqlalchemy import text
 TAX_RATES_KEY = "tax_rates"
 SYSTEM_CONFIG_KEY = "system_config"
 API_KEYS_KEY = "api_keys"
+BUSINESS_IDENTITY_KEY = "business_identity"
 
 # The countries this shop ships to (the checkout's own pattern), so a stored rate is validated
 # against the same closed set the order accepts.
@@ -181,6 +183,70 @@ def validate_config_value(value):
     if not isinstance(value, dict):
         raise SettingsError("system_config must be an object of key/value pairs")
     return value
+
+
+# ---------------------------------------------------------------------------
+# The business's own legal identity
+# ---------------------------------------------------------------------------
+# The SELLER BLOCK on a tax invoice: legal name, ABN/Tax ID, registered address, contact email. It is
+# the one thing on that document the platform cannot derive from anything else it already holds -
+# every other field comes from the order or the sale - which is why it is stored rather than
+# computed. The invoice screen said so for as long as it existed ("the seller's own identity is the
+# one thing that does not exist yet"), and this is that gap closed.
+IDENTITY_FIELDS = ("legal_name", "tax_id", "address", "email")
+MAX_IDENTITY_FIELD = 400
+# An ABN is 11 digits and the other registries this shop might name are similar; separators are
+# allowed because that is how people write them, and the write normalises nothing but the trim.
+_TAX_ID = re.compile(r"^[0-9][0-9 \-]{4,24}$")
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+\Z")
+
+
+def validate_business_identity(raw) -> dict[str, str]:
+    """An operator's payload -> the stored four fields, or :class:`SettingsError`.
+
+    THE LEGAL NAME IS THE ONE REQUIRED FIELD. An invoice that does not name its seller is not a tax
+    invoice, so the WRITE refuses an empty one - while the READ still tolerates it (see
+    :func:`get_business_identity`), because a document that was already issued must stay printable.
+    """
+    if not isinstance(raw, dict):
+        raise SettingsError("business identity must be an object")
+    out: dict[str, str] = {}
+    for field in IDENTITY_FIELDS:
+        value = raw.get(field)
+        if value is None:
+            value = ""
+        if not isinstance(value, str):
+            raise SettingsError(f"{field} must be text")
+        value = value.strip()
+        if len(value) > MAX_IDENTITY_FIELD:
+            raise SettingsError(f"{field} must be at most {MAX_IDENTITY_FIELD} characters")
+        out[field] = value
+
+    if not out["legal_name"]:
+        raise SettingsError("legal_name is required - a tax invoice must name its seller")
+    if out["tax_id"] and not _TAX_ID.match(out["tax_id"]):
+        raise SettingsError("tax_id must be the digits of an ABN or registration number")
+    if out["email"] and not _EMAIL.match(out["email"]):
+        raise SettingsError("email must be an email address")
+    return out
+
+
+async def get_business_identity(db) -> dict[str, str]:
+    """The seller block for a document: four strings, every one possibly empty. Never raises.
+
+    Total by construction, like :func:`get_tax_rates` - this is read on the INVOICE path, and a
+    settings read must never be the reason a document cannot be printed. A missing row, a malformed
+    document or a database error all resolve to the blank block, and the caller decides what to do
+    with a nameless seller rather than being handed an exception at print time.
+    """
+    blank = {f: "" for f in IDENTITY_FIELDS}
+    try:
+        raw = await read_setting(db, BUSINESS_IDENTITY_KEY)
+    except Exception:
+        return blank
+    if not isinstance(raw, dict):
+        return blank
+    return {f: str(raw.get(f) or "").strip() for f in IDENTITY_FIELDS}
 
 
 # ---------------------------------------------------------------------------

@@ -26,6 +26,8 @@ from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import text
 
+from app.services import system_settings as ss
+
 
 def _iso(value) -> str | None:
     return value.isoformat() if value is not None else None
@@ -117,6 +119,10 @@ async def invoice_document(db, invoice_id: int) -> dict | None:
     if inv is None:
         return None
     out = dict(inv)
+    # THE SELLER. Read from the settings store rather than derived from anything, because it is the
+    # one block on the document the platform cannot work out for itself - and read through a TOTAL
+    # accessor, so a missing identity leaves four empty fields rather than failing the print.
+    out["seller"] = await ss.get_business_identity(db)
     out["customer"] = None
     out["ship_to"] = None
     out["lines"] = []
