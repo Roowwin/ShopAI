@@ -79,7 +79,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         <div className="grid gap-8 lg:grid-cols-[88px_minmax(0,1fr)_380px] lg:items-start">
           <div className="order-2 lg:order-1 flex gap-3 overflow-x-auto lg:flex-col lg:overflow-visible">
             {shots.map((shot, i) => (
-              <div key={i} className="shrink-0 w-20 lg:w-full rounded-control ring-2 ring-brand-300 overflow-hidden">
+              /* The hero above shows `image_url`, which is shots[0] - so the first thumbnail is
+                 the current view and the ring says so. With one shot (today) that is the whole
+                 rail; the ring is written by index rather than unconditionally so a second shot
+                 does not arrive looking equally selected. */
+              <div key={i} className={"shrink-0 w-20 lg:w-full rounded-control overflow-hidden " + (i === 0 ? "ring-2 ring-brand-300" : "ring-1 ring-line")}>
                 <ProductArt slug={slug} imageUrl={shot} alt={shot ? p.title + " (view " + (i + 1) + ")" : p.title}
                   className="w-full aspect-[4/3] object-cover" fallback={initials} />
               </div>
