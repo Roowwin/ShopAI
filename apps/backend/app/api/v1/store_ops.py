@@ -16,20 +16,38 @@ from app.models import Asset, Lot, StockMovement
 from app.models.catalog import Product
 from app.models.identity import User
 from app.models.orders import Order, OrderLine, OrderTaxLine, Payment, Reservation
+from app.services import system_settings as ss
 from app.services.audit import audit
+from app.services.margin import is_loss_maker
 
 router = APIRouter(prefix="/store", tags=["store-ops"])
-
-TAX = {"AU": ("AU_GST", 1000), "NZ": ("NZ_GST", 1500)}
 
 # same shape as store.py's register validator - kept local so the two public
 # routers stay independently readable.
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
-def _tax_cents(subtotal: int, country: str) -> int:
-    bp = TAX[country][1]
-    return (subtotal * bp + 5000) // 10000   # half-up to the cent
+# The GST rates used to be a literal here (``TAX = {"AU": ..., "NZ": ...}``). They now live in the
+# settings store, so an operator can change them without a deploy, and the checkout is what reads
+# them. `system_settings.get_tax_rate` is total - it falls back to the shipped AU 10% / NZ 15% on a
+# missing row or a database error - so the pricing path can never fail because a settings read did.
+# The rate that prices an order is ALSO the rate written to its tax line (see `checkout`), which is
+# what keeps the total and the setting one fact instead of two that can drift apart.
+def _tax_cents(subtotal: int, rate_bp: int) -> int:
+    return (subtotal * rate_bp + 5000) // 10000   # half-up to the cent
+
+
+def _margin_409(asset_id: int, sale_price_cents: int | None, cost_cents: int | None,
+                settlement_cents: int | None = None) -> None:
+    """Refuse the storefront half of the margin guard.
+
+    The shop already hides a loss-maker (see store_catalog), so this is the belt to that brace: a
+    crafted POST that names the id directly must not buy a unit the shop would not display. Same
+    rule, same cost basis (services/margin), as the shop's own floor.
+    """
+    if is_loss_maker(sale_price_cents, cost_cents, settlement_cents):
+        raise HTTPException(status_code=409,
+                            detail=f"unit {asset_id} is priced below its cost and is not for sale")
 
 
 def _409(e: Exception) -> None:
@@ -60,12 +78,13 @@ class ReserveIn(BaseModel):
 
 @router.post("/reservations", status_code=201)
 async def reserve(body: ReserveIn, db=Depends(get_db)):
-    row = (await db.execute(text("SELECT a.id, a.status FROM assets a JOIN lots l ON l.id = a.lot_id WHERE a.id = :i AND l.status = 'active' FOR UPDATE OF a SKIP LOCKED"),
+    row = (await db.execute(text("SELECT a.id, a.status, a.sale_price_cents, a.cost_cents, a.settlement_cents FROM assets a JOIN lots l ON l.id = a.lot_id WHERE a.id = :i AND l.status = 'active' FOR UPDATE OF a SKIP LOCKED"),
                             {"i": body.asset_id})).first()
     if row is None:
         raise HTTPException(status_code=409, detail="unit not available (locked, sold, or lot not active)")
     if row.status != "listed":
         raise HTTPException(status_code=409, detail=f"unit not available (status {row.status})")
+    _margin_409(row.id, row.sale_price_cents, row.cost_cents, row.settlement_cents)
     a = await db.get(Asset, row.id)
     exp = datetime.now(timezone.utc) + timedelta(minutes=body.hold_minutes)
     r = Reservation(asset_id=row.id, status="active", expires_at=exp)
@@ -115,7 +134,7 @@ async def checkout(body: CheckoutIn, customer: dict | None = Depends(_opt_custom
     sub = 0
     locked = []
     for aid in ids:
-        row = (await db.execute(text("SELECT a.id, a.status, a.sale_price_cents FROM assets a JOIN lots l ON l.id = a.lot_id WHERE a.id = :i AND l.status = 'active' FOR UPDATE OF a SKIP LOCKED"),
+        row = (await db.execute(text("SELECT a.id, a.status, a.sale_price_cents, a.cost_cents, a.settlement_cents FROM assets a JOIN lots l ON l.id = a.lot_id WHERE a.id = :i AND l.status = 'active' FOR UPDATE OF a SKIP LOCKED"),
                                 {"i": aid})).first()
         if row is None:
             raise HTTPException(status_code=409, detail=f"unit {aid} unavailable (locked, sold, or lot not active)")
@@ -123,10 +142,14 @@ async def checkout(body: CheckoutIn, customer: dict | None = Depends(_opt_custom
             raise HTTPException(status_code=409, detail=f"unit {aid} not purchasable (status {row.status})")
         if row.sale_price_cents is None:
             raise HTTPException(status_code=409, detail=f"unit {aid} has no sale price")
+        _margin_409(aid, row.sale_price_cents, row.cost_cents, row.settlement_cents)
         sub += row.sale_price_cents
         locked.append(await db.get(Asset, aid))
     country = body.shipping_country
-    tax = _tax_cents(sub, country)
+    # The rate in force, from the settings store. It prices the order AND is written to the tax line
+    # below, so the total and the setting are one number rather than two.
+    jurisdiction, rate_bp = await ss.get_tax_rate(db, country)
+    tax = _tax_cents(sub, rate_bp)
     order = Order(currency="AUD", status="pending", subtotal_cents=sub, tax_cents=tax,
                   shipping_cents=0, total_cents=sub + tax, shipping_country=country,
                   ship_to_name=body.ship_to_name, ship_line1=body.ship_line1,
@@ -144,10 +167,11 @@ async def checkout(body: CheckoutIn, customer: dict | None = Depends(_opt_custom
                          line_total_cents=a.sale_price_cents))
         db.add(Reservation(asset_id=a.id, status="active",
                            expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)))
-    db.add(OrderTaxLine(order_id=order.id, jurisdiction=TAX[country][0],
-                        rate_bp=TAX[country][1], amount_cents=tax))
+    db.add(OrderTaxLine(order_id=order.id, jurisdiction=jurisdiction,
+                        rate_bp=rate_bp, amount_cents=tax))
     await audit(db, "system", entity="order", entity_id=order.id, action="checkout",
-                after={"total_cents": sub + tax, "country": country, "units": len(locked)})
+                after={"total_cents": sub + tax, "country": country, "units": len(locked),
+                       "tax_rate_bp": rate_bp})
     try:
         await db.commit()
     except SQLAlchemyError as e:

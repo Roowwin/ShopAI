@@ -11,6 +11,7 @@ from app.core.db import get_db
 from app.models import Asset, Lot, StockMovement
 from app.models.catalog import Product
 from app.services.audit import audit
+from app.services.margin import margin_refusal
 
 router = APIRouter(prefix="/staff", tags=["staff-ops"])
 
@@ -380,6 +381,13 @@ async def set_status(asset_id: int, body: StatusIn, staff: dict = Depends(requir
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
+    # MARGIN GUARD (staff layer). Listing is the moment a unit becomes purchasable, so this is where
+    # a loss-maker is stopped: the shop hides one anyway (store_catalog), but a unit that can never
+    # be sold at a profit must not be walked into `listed` in the first place.
+    if body.status == "listed":
+        refusal = margin_refusal(asset.sale_price_cents, asset.cost_cents, asset.settlement_cents)
+        if refusal:
+            raise HTTPException(status_code=422, detail=refusal)
     before = {"status": asset.status}
     asset.status = body.status
     await _audit_execution(db, staff, grant, entity="asset", entity_id=asset.id, action="status",
@@ -619,6 +627,12 @@ async def set_price(asset_id: int, body: PriceIn, staff: dict = Depends(require_
     asset = await db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
+    # MARGIN GUARD (staff layer). A price below the unit's known cost is refused here rather than
+    # stored and hidden later, so the operator learns at the moment of pricing - and the storefront
+    # filter (store_catalog) is the belt to this brace, not the only check.
+    refusal = margin_refusal(body.sale_price_cents, asset.cost_cents, asset.settlement_cents)
+    if refusal:
+        raise HTTPException(status_code=422, detail=refusal)
     before = {"sale_price_cents": asset.sale_price_cents}
     asset.sale_price_cents = body.sale_price_cents
     await _audit_execution(db, staff, grant, entity="asset", entity_id=asset.id, action="price",

@@ -76,6 +76,9 @@ from app.api.v1.staff_ops import _409, _gen_lot_number, _require_role
 from app.core.db import get_db
 from app.models import Asset, Lot, StockMovement
 from app.services.audit import audit
+# The margin guard is one rule shared with the staff doors and the storefront (services/margin), so
+# a row refused here is the same unit the shop would hide - not a second, differently-worded check.
+from app.services.margin import margin_refusal
 # Smart pricing rides ALONG with this door rather than living in it: the engine is a pure module
 # (services/pricing.py) so its arithmetic is testable without a database, and this file only feeds
 # it the row and writes back what it says. It is deliberately not an AI call - the reasons are in
@@ -146,6 +149,12 @@ _ALIASES: dict[str, tuple[str, ...]] = {
     "pallet": ("pallet", "palletid", "palletno", "palletnumber"),
     "sku": ("sku", "skunumber", "itemcode", "productcode", "stockkeepingunit"),
     "zone": ("zone", "zoneid", "zonename", "warehousezone"),
+    # NOT one of the workbook's twenty-six. This is the margin guard's input (see services/margin):
+    # a unit cannot be checked for a loss unless the sheet can say what it cost, and `assets`
+    # has carried `cost_cents` since 0001 with no door that ever filled it from a file. Every
+    # spelling here is a column a cost normally arrives under.
+    "cost": ("cost", "unitcost", "costprice", "purchasecost", "buyprice", "acquisitioncost",
+             "landedcost", "costegst", "costexgst"),
 }
 
 # THE HASH HEADERS. "Model #", "SKU #" and "Serial#" all normalise to the SAME core as their base
@@ -176,6 +185,7 @@ FIELD_LABELS = {
     "account": "Account", "upgrade": "Upgrade", "upgrade_desc": "Upgrade description",
     "fmv": "FMV", "settlement": "Settlement", "channel": "Channel", "load_id": "Load ID",
     "on_shelf": "On Shelf", "pallet": "Pallet", "sku": "SKU #", "zone": "Zone",
+    "cost": "Cost",
 }
 # Serial and lot are the two the DB cannot be told to invent: lot_id is NOT NULL, and a serial is
 # what the whole unit ledger is keyed on. Everything else has a defensible default.
@@ -509,6 +519,22 @@ async def _lookup_existing_serials(db, serials: list[str]) -> set[str]:
     return set(rows)
 
 
+async def _lookup_existing_skus(db, skus: list[str]) -> set[str]:
+    """Which of these SKUs already exist, case-insensitively - the DB half of SKU uniqueness.
+
+    `assets.sku` is a plain TEXT column added by 0015 and is NULL on every unit that predates it, so
+    a NULL never matches and an empty input is an empty answer: "not recorded" is not the same claim
+    as "recorded as this value", exactly as it is for cost in the margin guard.
+    """
+    if not skus:
+        return set()
+    lowered = [s.lower() for s in skus]
+    rows = (await db.execute(
+        text("SELECT lower(sku) AS s FROM assets WHERE sku IS NOT NULL AND lower(sku) = ANY(:ss)"),
+        {"ss": lowered})).scalars().all()
+    return set(rows)
+
+
 async def _load_comparables(db, parsed: list[dict]) -> dict[tuple[str, str], dict]:
     """The market evidence for every (model, grade) this file mentions, in ONE query per call.
 
@@ -568,12 +594,15 @@ def _price_rows(parsed: list[dict], comparables: dict) -> list[dict]:
                                               - record["sale_price_cents"])
         record["pricing"] = block
 
-        # `cost_cents` is passed as None on purpose: a supplier sheet has no cost column. Settlement
-        # is the cost this door actually has, and margin_verdict reads it as the fallback - the same
-        # arithmetic the rest of the app does once a unit carries a real cost_cents.
+        # The cost basis is the SAME one the blocking guard below and the storefront floor use:
+        # the sheet's own Cost column when it carries one, else its Settlement. (This door now maps
+        # a Cost column - see `_ALIASES` - so "a supplier sheet has no cost column" no longer holds;
+        # reading it here is what keeps the verdict and the block from judging the same row
+        # differently.)
         verdict = margin_verdict(sale_price_cents=record["sale_price_cents"],
                                  suggested_price_cents=suggestion.suggested_price_cents,
-                                 cost_cents=None, settlement_cents=record["settlement_cents"])
+                                 cost_cents=record["cost_cents"],
+                                 settlement_cents=record["settlement_cents"])
         record["margin"] = verdict.as_dict()
         message = margin_warning(verdict)
         if message:
@@ -612,6 +641,9 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
     idx = mapped["mapping"]
     parsed: list[dict] = []
     seen: dict[str, int] = {}
+    # SKU uniqueness, the in-file half. Keyed like `seen` (lowercased) because "sku" is matched the
+    # way a person reads it - case is not a different SKU.
+    seen_sku: dict[str, int] = {}
     issues: list[dict] = []
 
     for offset, row in enumerate(body):
@@ -638,6 +670,10 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
         price, price_err = _parse_price(_cell(row, idx.get("price")))
         if price_err:
             flag("price", price_err)
+        # The margin guard's input. Same parser and same refusal rules as the other money columns.
+        cost, cost_err = _parse_price(_cell(row, idx.get("cost")), "Cost")
+        if cost_err:
+            flag("cost", cost_err)
         # The workbook's other two money columns. Same parser, same refusal rules, different labels.
         fmv, fmv_err = _parse_price(_cell(row, idx.get("fmv")), "FMV")
         if fmv_err:
@@ -655,6 +691,14 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
             flag("price", "status is listed but there is no resale price - the shop cannot list a unit with no price")
         if status == "listed" and grade is None and not grade_err:
             flag("grade", "status is listed but there is no grade - the shop cannot list an ungraded unit")
+        # MARGIN GUARD (importer layer). A row priced below its cost basis is blocked, and because the
+        # import is all-or-nothing the whole FILE is then refused: a sheet that would put loss-makers
+        # on the shelf is one to correct, not one to import around. The basis is the same
+        # COALESCE(cost, settlement) the storefront floor and the staff doors use (services/margin),
+        # so a row refused here is exactly the row the shop would refuse to publish.
+        margin_issue = margin_refusal(price, cost, settlement)
+        if margin_issue:
+            flag("price", margin_issue)
 
         brand = _cell(row, idx.get("brand"))
         category = _cell(row, idx.get("category"))
@@ -669,6 +713,18 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
                 flag("serial", f"serial also appears on row {seen[key]} of this file")
             else:
                 seen[key] = row_no
+
+        # SKU UNIQUENESS, the in-file half. A workbook that carries the same SKU twice is stating
+        # that two units are one item, and letting both in would make "which unit is SKU #X" a
+        # question with two answers. The collision is reported with the row it collides with, which
+        # is the only way the operator can find it in a five-thousand-row sheet.
+        sku = _cell(row, idx.get("sku"))
+        if sku:
+            sku_key = sku.lower()
+            if sku_key in seen_sku:
+                flag("sku", f"SKU {sku!r} also appears on row {seen_sku[sku_key]} of this file")
+            else:
+                seen_sku[sku_key] = row_no
 
         parts = {k: _cell(row, idx.get(k)) for k in ("audit", "cosmetic", "functional", "notes")}
         technical_notes = _merge_technical_notes(parts)
@@ -694,7 +750,8 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
             "audit_desc": _cell(row, idx.get("audit")), "cosmetics_desc": _cell(row, idx.get("cosmetic")),
             "functional_desc": _cell(row, idx.get("functional")),
             "fmv_cents": fmv, "settlement_cents": settlement, "on_shelf": on_shelf,
-            "channel": _cell(row, idx.get("channel")), "sku": _cell(row, idx.get("sku")),
+            "channel": _cell(row, idx.get("channel")), "sku": sku,
+            "cost_cents": cost,
             "location": _cell(row, idx.get("location")), "pallet": _cell(row, idx.get("pallet")),
             # Batch facts. They ride on the row but belong to the LOT, so they are namespaced here
             # and lifted onto the lot record in _run_import - see the note there about the first row
@@ -713,6 +770,17 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
         if record["serial_number"] and record["serial_number"].lower() in existing:
             issue = {"row": record["row"], "field": "serial",
                      "message": "this serial is already in the system"}
+            record["issues"].append(issue)
+            issues.append(issue)
+
+    # SKU UNIQUENESS, the DB half. Same shape as the serial check above and for the same reason: a
+    # SKU already on the shelf is a different operator mistake from one repeated inside the file, and
+    # the two read differently in the report.
+    existing_sku = await _lookup_existing_skus(db, [r["sku"] for r in parsed if r["sku"]])
+    for record in parsed:
+        if record["sku"] and record["sku"].lower() in existing_sku:
+            issue = {"row": record["row"], "field": "sku",
+                     "message": f"SKU {record['sku']!r} is already in the system"}
             record["issues"].append(issue)
             issues.append(issue)
 
@@ -898,6 +966,9 @@ async def _run_import(db, staff: dict, parsed: list[dict], filename: str) -> dic
             status=record["status"],
             grade=record["grade"],
             sale_price_cents=record["sale_price_cents"],
+            # The margin guard's input, carried onto the unit so every later door (pricing, listing,
+            # the storefront) has the cost to check against without re-reading the sheet.
+            cost_cents=record["cost_cents"],
             # The suggestion the preview showed, recorded so the workbench can still see it weeks
             # later - see 0016_price_intelligence for why an advisory that only lives in a preview
             # payload is not worth computing. It is written BESIDE sale_price_cents and never into
@@ -958,6 +1029,7 @@ async def _run_import(db, staff: dict, parsed: list[dict], filename: str) -> dic
             "assets": [{"row": r["row"], "asset_id": a.id, "serial_number": a.serial_number,
                         "lot_number": r["lot_number"], "status": a.status, "grade": a.grade,
                         "sale_price_cents": a.sale_price_cents,
+                        "cost_cents": a.cost_cents,
                         "suggested_price_cents": a.suggested_price_cents,
                         "suggested_price_basis": a.suggested_price_basis,
                         "asset": a.asset, "class": a.asset_class, "model_number": a.model_number,

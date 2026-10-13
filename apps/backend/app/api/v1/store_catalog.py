@@ -4,6 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 
 from app.core.db import get_db
+# The margin floor's SQL predicate. It lives with the rest of the margin rule
+# (services/margin) rather than here, because the importer, the staff pricing/listing doors and the
+# checkout all enforce the same rule in Python, and a second definition of it is a second thing to
+# keep true. Splicing it from one place is what makes the guard that admits a unit to `listed` and
+# the guard that publishes it here incapable of disagreeing.
+from app.services.margin import ON_SALE
 
 router = APIRouter(prefix="/store", tags=["store-catalog"])
 
@@ -31,28 +37,13 @@ router = APIRouter(prefix="/store", tags=["store-catalog"])
 # ASSETS JOIN, exactly like the grade and price-band filters and for the reason stated above: the
 # joined set IS the sellable stock, so `units_available` and `price_from_cents` describe only that,
 # and HAVING count(a.id) > 0 then takes a product whose every listed unit is under water off the
-# catalogue entirely rather than showing it with a count of none.
+# catalogue entirely rather than showing it with a count of none. An absent cost publishes - see
+# `services/margin`, which owns the rule, its cost basis and the three other layers that enforce it.
 #
-# THE COST BASIS IS `COALESCE(cost_cents, settlement_cents)`. `cost_cents` is the schema's canonical
-# cost and the supplier workbook's Settlement is the same fact for stock that arrived on a sheet, so
-# the shop reads them as one number in the order the app already prefers - `services.pricing`'s
-# `margin_verdict` makes the identical choice, which is what keeps the guard that lets a unit be
-# LISTED and the guard that PUBLISHES it from ever disagreeing.
-#
-# NULL COST PUBLISHES. An absent cost is a fact about the workbook ("this sheet never carried one"),
-# not a claim that the unit is a loss-maker, so hiding it would empty the shop of everything the
-# supplier did not price. Only a KNOWN cost below the price is a refusal.
-#
-# Written once and spliced into each statement at import time rather than duplicated per query: the
-# six statements below have to agree on this rule, and a second copy of it is a second thing to keep
-# true. It is spliced into the CONSTANT (not a new placeholder) so the unfiltered statement remains
-# byte-for-byte what it always was, which is what the catalog query's own test asserts. The leading
-# and trailing spaces are part of the literal, not sloppiness: it lands mid-statement in half the
-# call sites and after a newline in the others, and one of the two separators is always the right
-# one - without them a splice produces `'active')AND (`, which parses but reads as a defect.
+# `ON_SALE` is spliced into each statement's CONSTANT (not a new placeholder) so the unfiltered
+# statement remains byte-for-byte what it always was, which is what the catalog query's own test
+# asserts.
 # ---------------------------------------------------------------------------
-ON_SALE = (" AND (COALESCE(a.cost_cents, a.settlement_cents) IS NULL"
-           " OR a.sale_price_cents >= COALESCE(a.cost_cents, a.settlement_cents)) ")
 
 CATALOG_SELECT = """SELECT p.id, p.public_id::text AS public_id, p.slug, p.title, p.model,
        b.name AS brand, c.name AS category, p.specs, p.image_url, p.featured,
