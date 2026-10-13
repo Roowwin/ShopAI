@@ -184,17 +184,6 @@
     background-repeat: no-repeat;
   }
 
-  /* The hero's floating device cards. Transform-only, so it never triggers layout, and it lives
-     here rather than in the markup because a keyframe cannot be spelled with utilities. The
-     duration is deliberately long and the travel deliberately small: this is drift, not bounce,
-     and it is the one piece of motion on the page that nothing is waiting on. Someone who has
-     asked for reduced motion gets the cards where they are - the fan and the glow still read. */
-  @keyframes hero-float {
-    0%, 100% { transform: translateY(0); }
-    50%      { transform: translateY(-10px); }
-  }
-  .hero-float { animation: hero-float 7s ease-in-out infinite; }
-
   /* Reduced motion: the durations collapse to zero, so every token-driven transition in the app
      becomes an instant state change without any component having to opt out. Components that also
      translate on hover/press carry `motion-reduce:` variants for the movement itself - a 0ms
@@ -204,6 +193,5 @@
       --motion-fast: 0ms;
       --motion-base: 0ms;
     }
-    .hero-float { animation: none; }
   }
 }

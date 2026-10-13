@@ -1,22 +1,10 @@
 import { apiInternal } from "@/lib/api";
-import { iconFor } from "@/lib/productIcons";
-import ProductArt from "./components/ProductArt";
 import LoadMore from "./components/LoadMore";
 import DealOfMonth from "./components/DealOfMonth";
 import { catalogPath, Filters, parseFilters } from "./components/catalogFilters";
-import { Button, cn, Eyebrow, Heading, linkClass, ProductCard } from "./components/ui";
+import { cn, Heading, linkClass, ProductCard } from "./components/ui";
 
 export const revalidate = 30;
-
-/* Where the hero's three cards sit: a fanned cluster, each with its own tilt and its own drift
-   delay. Written as whole class strings rather than composed from fragments, because Tailwind
-   scans source TEXT - a class assembled at runtime would never be emitted into the stylesheet.
-   The offsets are sized to the fan box (h-52 with w-32/w-36 cards), not to the old 320px one. */
-const HERO_SLOTS = [
-  "left-0 top-5 -rotate-6",
-  "left-1/2 -translate-x-1/2 top-0 z-10 rotate-2",
-  "right-0 top-7 rotate-6",
-];
 
 /* The catalog's filters live in the query string, and this page is where that string is read: the
    server parses it, asks the API for that page of results, and hands the applied filter set to the
@@ -31,79 +19,30 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   try {
     catalog = await apiInternal(catalogPath(filters, { limit: 8, withFilters: true }), 0);
   } catch { void 0; }
-  const items: any[] = await apiInternal("/store/catalog?limit=12&sort=new");
-  /* The "New arrivals" shelf below shows the first four; the hero looks further down the SAME
-     response, so this is still one request. */
-  const arrivals: any[] = items.slice(0, 4);
+  const items: any[] = await apiInternal("/store/catalog?limit=4&sort=new");
+  const arrivals: any[] = items;
   let best: any[] = [];
   try { best = await apiInternal("/store/best-sellers", 60); } catch { void 0; }
   let cats: any[] = [];
   try { cats = await apiInternal("/store/categories", 60); } catch { void 0; }
-  /* THE HERO DRAWS WHAT IT CAN RENDER, out of the sets this page has ALREADY fetched - the newest
-     arrivals first, then the best sellers, then the catalogue grid. A product is drawable when it
-     has a photo or a shipped category glyph; one with neither shows an initials tile, which is
-     right on a card and wrong three-up in a hero.
-
-     It used to map the newest four through `iconFor` alone and stop there. On this catalogue that
-     came up empty: `sort=new` puts a long tail of test fixtures first, none of them with art, so
-     the fan never drew. Falling through to the other two sets costs no extra request and makes the
-     hero a picture of the shop rather than a picture of whatever happens to be newest.
-
-     Empty is still a real answer - the column collapses and the headline takes the full width. */
-  const drawable = (i: any) => Boolean(i.image_url || iconFor(i.slug));
-  const heroPicks = [...items, ...best, ...(catalog.items ?? [])].filter(drawable).slice(0, 3);
+  /* Still fetched for `deal_of_month` alone - the headline and CTA it also carries went with the
+     hero (see below), and the shop's live offer reaches the page through the layout's promo band. */
   let hero: any = { hero_title: "Renewed tech. Zero waste.",
     hero_sub: "Certified refurbished devices - serialised, graded, warehouse-tracked.", cta_label: "Shop devices" };
   try { hero = await apiInternal("/store/home-content", 60); } catch { void 0; }
-  let promo: string | null = null;
-  try {
-    const p: any[] = await apiInternal("/store/promotions", 60);
-    if (p.length) { promo = p[0].name + (p[0].kind === "percent" ? " - " + p[0].value + "% off" : ""); }
-  } catch { void 0; }
   return (
     <main>
-      {/* THE HERO, COMPACT. It was a full-height banner - 112px of padding above, a 44px headline
-          and a 320px fan - which pushed the first shelf of actual products below the fold on a
-          laptop. Nothing was removed: the same words, the same CTA, the same three cards, at about
-          half the height. The headline steps down from the display size to the page-title size, the
-          copy from `lead` to `body`, and the fan is smaller and sits higher.
+      {/* THE HERO IS REMOVED, and the page now opens on the deal (or, with no deal pinned, on the
+          first shelf). Everything the hero carried still exists elsewhere: the offer runs as the
+          promo band in the layout, the products it previewed are the shelves below, and the CMS
+          headline it showed can be reached from /admin/cms.
 
-          The device cards are real product art - the newest arrivals the shop can draw, falling
-          through to the best sellers when the newest have no photo and no shipped glyph - fanned and
-          offset so they read as floating rather than as a row. They are decorative (`alt=""`,
-          aria-hidden): the headline beside them is the content, and three unlabelled tiles would
-          only be noise to a screen reader. With nothing drawable the column collapses and the text
-          takes the full width - text-only, never a broken grid. */}
-      <section className="px-4 md:px-8 pt-10 pb-10 md:pt-14 md:pb-12">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-8 md:gap-12">
-          <div className="flex-1 text-center md:text-left">
-            <Eyebrow tone="brand">RFO Store</Eyebrow>
-            <Heading level="h1" className="mt-3">{promo ?? hero.hero_title}</Heading>
-            <p className="text-body text-ink-500 mt-3 max-w-lg mx-auto md:mx-0">{promo ? "Sale prices below - " + hero.hero_sub : hero.hero_sub}</p>
-            <div className="relative mt-6 inline-flex items-center">
-              {/* Two layers of bloom behind the button, both `pointer-events-none` so they cannot
-                  steal the click: a wide soft wash and the button's own tight glow ring. */}
-              <span aria-hidden="true" className="pointer-events-none absolute -inset-x-12 -inset-y-8 rounded-full bg-brand-500/25 blur-3xl" />
-              <Button variant="primary" href="#shop" className="relative shadow-glow">{hero.cta_label}</Button>
-            </div>
-          </div>
-          {heroPicks.length > 0 && (
-            <div className="hidden md:block flex-1 relative h-52" aria-hidden="true">
-              {heroPicks.map((p, i) => (
-                /* The rotation lives on the wrapper and the drift on the image, because both want
-                   the `transform` property and an animation would otherwise overwrite the tilt.
-                   Keyed by slug: `heroPicks` is a subset of a de-duplicated catalogue list. */
-                <div key={p.slug} className={cn("absolute w-32 lg:w-36", HERO_SLOTS[i] ?? HERO_SLOTS[0])}>
-                  <ProductArt slug={p.slug} imageUrl={p.image_url} alt=""
-                    style={{ animationDelay: (i * 900) + "ms" }}
-                    className="hero-float w-full aspect-[4/3] object-cover rounded-card bg-surface-glass/5 ring-1 ring-brand-500/20 shadow-glow-sm"
-                    fallback={<span className="hero-float block w-full aspect-[4/3] rounded-card bg-surface-glass/5 ring-1 ring-brand-500/20" />} />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
+          Removing an element removes the page's only <h1> with it, so one stays - the shop's own
+          name, which the header wordmark already carries, not new copy. A page with no top-level
+          heading loses its place in the document outline for anyone navigating by headings, and
+          that is a screen-reader problem rather than a visual one, which is why this one is
+          `sr-only`. The first visible heading below is "New arrivals". */}
+      <h1 className="sr-only">RFO Store - certified refurbished devices</h1>
       <DealOfMonth deal={hero.deal_of_month} />
       <section className="max-w-6xl mx-auto px-4 pt-16">
         <div className="flex items-end justify-between"><Heading level="h2">New arrivals</Heading><a href="/" className={cn("text-xs", linkClass)}>View all</a></div>
