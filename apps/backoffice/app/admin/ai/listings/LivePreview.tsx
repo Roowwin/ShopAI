@@ -77,12 +77,12 @@ export default function LivePreview({ title, description, product, unit, detail,
               {/* The storefront draws this badge when the product has no listed units. A unit that
                   is not yet listed is exactly that state, which is why it is shown before publish. */}
               {!listed && (
-                <p className="mt-2 inline-block rounded-control bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500">
+                <p className="mt-2 inline-block rounded-control bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
                   Out of stock
                 </p>
               )}
 
-              <div className="mt-3 flex aspect-[4/3] flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 text-slate-500">
+              <div className="mt-3 flex aspect-[4/3] flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600">
                 <p className="text-3xl font-bold text-slate-400">{initials}</p>
                 <p className="mt-2 text-xs">Product photo coming soon</p>
                 <p className="mt-0.5 text-[10px] text-slate-400">{brand} {product?.model ?? ""}</p>
