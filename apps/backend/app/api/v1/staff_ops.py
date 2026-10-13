@@ -763,26 +763,91 @@ async def cms_edit_promotion(pid: int, body: dict, staff: dict = Depends(require
 
 @router.get("/cms/products")
 async def cms_list_products(staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+    """Every parent product, one row each - the list the redesigned CMS edits.
+
+    ONE ROW PER PRODUCT, NEVER ONE PER ASSET. An asset is a serialised unit and carries no content
+    of its own: the photo, the title and the featured flag all live on the parent, so a write here
+    already reaches every unit of that product. The page reads this list, folds the products that
+    share a brand and a model into ONE entry (a model can appear as several products - the seeded
+    catalogue has both `iphone-13` and `seed-demo-ip13`), and writes back with the group door below,
+    which is what makes "editing the model updates the storefront for all of its assets" true rather
+    than merely stated.
+
+    `brand` and `model` are the fold key and are therefore on the row; `status` lets the page tell a
+    draft from a live product. `listed_units` is unchanged (listed assets, whatever lot they are in)
+    and `live_units`/`price_from_cents` carry the STOREFRONT's own publishable predicate - listed AND
+    in an active lot - which is the number the deal picker and the hero preview have to show, since a
+    product with no such unit cannot appear on the shop floor at all.
+    """
     rows = (await db.execute(text("""
-        SELECT p.id, p.title, p.slug, p.image_url, p.featured, c.name AS category,
-               count(a.id) FILTER (WHERE a.status = 'listed') AS units
-        FROM products p JOIN categories c ON c.id = p.category_id
+        SELECT p.id, p.title, p.slug, p.model, p.status, p.image_url, p.featured,
+               b.name AS brand, c.name AS category,
+               count(a.id) FILTER (WHERE a.status = 'listed') AS units,
+               count(a.id) FILTER (WHERE a.status = 'listed' AND l.status = 'active') AS live_units,
+               min(a.sale_price_cents) FILTER (WHERE a.status = 'listed' AND l.status = 'active')
+                   AS price_from_cents
+        FROM products p
+        JOIN brands b ON b.id = p.brand_id
+        JOIN categories c ON c.id = p.category_id
         LEFT JOIN assets a ON a.product_id = p.id
-        GROUP BY p.id, p.title, p.slug, p.image_url, p.featured, c.name
+        LEFT JOIN lots l ON l.id = a.lot_id
+        GROUP BY p.id, p.title, p.slug, p.model, p.status, p.image_url, p.featured, b.name, c.name
         ORDER BY p.featured DESC, p.title"""))).mappings().all()
-    return [{"id": r["id"], "title": r["title"], "slug": r["slug"], "category": r["category"],
-             "image_url": r["image_url"], "featured": bool(r["featured"]), "listed_units": int(r["units"])} for r in rows]
+    return [{"id": r["id"], "title": r["title"], "slug": r["slug"], "model": r["model"],
+             "status": r["status"], "brand": r["brand"], "category": r["category"],
+             "image_url": r["image_url"], "featured": bool(r["featured"]),
+             "listed_units": int(r["units"]), "live_units": int(r["live_units"]),
+             "price_from_cents": (int(r["price_from_cents"])
+                                  if r["price_from_cents"] is not None else None)} for r in rows]
 
 
-@router.patch("/cms/products/{pid}")
-async def cms_edit_product(pid: int, body: dict, staff: dict = Depends(require_roles(*ROLES_CMS)), db=Depends(get_db)):
-    await _require_role(staff, ROLES_CMS, ACTION_CMS_EDIT_PRODUCT, None)
+# The group write is capped: a model entry is a handful of products in practice (the catalogue's
+# duplicates are two rows, and the pytest sweep is not the shape this door is for), and an
+# unbounded id list would let one press become an unbounded number of UPDATEs.
+MAX_GROUP_IDS = 200
+
+
+async def _gallery_photo(db, media_row_id) -> str | None:
+    """The PUBLIC ADDRESS of one gallery row - the only thing a storefront `img` can be pointed at.
+
+    A gallery row is either url-backed (`storage_key`, an address the catalogue has always held) or
+    byte-backed (`media_id`, bytes in Postgres behind the staff door). Only the first can be a
+    product's photo: the storefront renders `products.image_url` with no credentials at all, so a
+    byte-backed row copied into it would be a broken tile on the shop floor. That is a 422 with the
+    reason rather than a silent half-write, and the picker greys those tiles out for the same reason.
+    """
+    row = (await db.execute(text("SELECT id, storage_key FROM product_media WHERE id = :r AND kind = 'image'"),
+                            {"r": media_row_id})).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="that photo is not in the gallery")
+    if row["storage_key"] is None:
+        raise HTTPException(status_code=422,
+                            detail="that photo is stored behind the staff door - it has no public address the storefront can render")
+    return row["storage_key"]
+
+
+async def _cms_write_product(db, pid: int, body: dict, photo: str | None, clear_photo: bool) -> None:
+    """Apply one CMS product write to ONE product, and keep its photo SET and its photo URL one story.
+
+    `image_url` is what the storefront renders TODAY and `product_media` is the set 0014 made live; if
+    the CMS could write one without the other, a product's page and its media list would disagree
+    about whether it has a photo. A chosen photo joins the set as a url-backed row (storage_key, no
+    bytes) exactly as the 0014 backfill wrote the existing ones, and the (product_id, storage_key)
+    unique index makes a re-write idempotent rather than a second row for the same address.
+
+    THE CHOSEN PHOTO BECOMES THE PRIMARY ROW. A card renders exactly one photo, and a pick is the
+    act of saying which - leaving the flag wherever it happened to be would make the tile show a
+    photo the operator just replaced. The old primary is cleared first because 0014's partial unique
+    index allows one per product, and both statements are in the caller's transaction.
+
+    Clearing adds nothing and removes nothing, as before: the catalogue is pointed at null and the
+    set keeps whatever rows it has.
+    """
     upd = []
     params: dict = {"i": pid}
-    if "image_url" in body:
-        img = str(body["image_url"]).strip()
+    if clear_photo or photo is not None:
         upd.append("image_url = :img")
-        params["img"] = (img or None)
+        params["img"] = photo
     if "featured" in body:
         upd.append("featured = :feat")
         params["feat"] = bool(body["featured"])
@@ -795,26 +860,143 @@ async def cms_edit_product(pid: int, body: dict, staff: dict = Depends(require_r
     if not upd:
         raise HTTPException(status_code=422, detail="nothing to update")
     await db.execute(text("UPDATE products SET " + ", ".join(upd) + ", updated_at = now() WHERE id = :i"), params)
-    # Keep the parent's photo SET and its legacy single URL one story. `image_url` is what the
-    # storefront renders today, and `product_media` is the set this job made live; if the CMS could
-    # write one without the other, a product's page and its media list would disagree about whether
-    # it has a photo. The row is url-backed (storage_key, no bytes) exactly like the 0014 backfill
-    # wrote, and the (product_id, storage_key) unique index makes a re-PATCH idempotent rather than
-    # a second row for the same address. A cleared url adds nothing and removes nothing: the CMS
-    # still points the catalog at null, and the set keeps whatever rows it has.
-    if "img" in params and params["img"] is not None and params["img"].strip():
-        await db.execute(text("""
-            INSERT INTO product_media (product_id, storage_key, kind, position, is_primary, alt_text)
-            SELECT :i, :img, 'image',
-                   COALESCE((SELECT max(position) + 1 FROM product_media WHERE product_id = :i), 0),
-                   NOT EXISTS (SELECT 1 FROM product_media WHERE product_id = :i AND is_primary),
-                   NULL
-            ON CONFLICT (product_id, storage_key) WHERE storage_key IS NOT NULL DO NOTHING
-        """), {"i": pid, "img": params["img"]})
+    if photo is None:
+        return
+    await db.execute(text("""
+        INSERT INTO product_media (product_id, storage_key, kind, position, is_primary, alt_text)
+        SELECT :i, :img, 'image',
+               COALESCE((SELECT max(position) + 1 FROM product_media WHERE product_id = :i), 0),
+               NOT EXISTS (SELECT 1 FROM product_media WHERE product_id = :i AND is_primary),
+               NULL
+        ON CONFLICT (product_id, storage_key) WHERE storage_key IS NOT NULL DO NOTHING
+    """), {"i": pid, "img": photo})
+    await db.execute(text("""
+        UPDATE product_media SET is_primary = false
+        WHERE product_id = :i AND is_primary AND storage_key IS DISTINCT FROM :img
+    """), {"i": pid, "img": photo})
+    await db.execute(text("""
+        UPDATE product_media SET is_primary = true
+        WHERE product_id = :i AND storage_key = :img
+    """), {"i": pid, "img": photo})
+
+
+async def _cms_body_photo(db, body: dict) -> tuple[str | None, bool]:
+    """Read the photo out of a CMS write body: (address, clear).
+
+    A picked gallery row (`media_row_id`) and a plain address (`image_url`) are the same act with two
+    spellings - the picker sends the first, the demo seeder and the tests send the second - so both
+    land on one address here rather than in two code paths that could drift.
+    """
+    if "media_row_id" in body:
+        if body["media_row_id"] in (None, ""):
+            return None, True
+        return await _gallery_photo(db, int(body["media_row_id"])), False
+    if "image_url" in body:
+        return str(body["image_url"]).strip() or None, True
+    return None, False
+
+
+@router.patch("/cms/products")
+async def cms_edit_products(body: dict, staff: dict = Depends(require_roles(*ROLES_CMS)), db=Depends(get_db)):
+    """ONE write for ONE model entry: every product that shares the model, in one transaction.
+
+    The page folds products by brand and model, so its switch and its photo picker each speak for the
+    whole group. Sending that as N separate PATCHes would leave the entry half-written if one of them
+    failed, and would put the group's size in the URL layer's hands - so the group is one request and
+    one commit, and "editing this entry updates the storefront for all associated assets" holds.
+    """
+    await _require_role(staff, ROLES_CMS, ACTION_CMS_EDIT_PRODUCT, None)
+    raw = body.get("ids")
+    if not isinstance(raw, list) or not raw:
+        raise HTTPException(status_code=422, detail="ids must be a non-empty list")
+    if len(raw) > MAX_GROUP_IDS:
+        raise HTTPException(status_code=422, detail=f"at most {MAX_GROUP_IDS} products per group write")
+    try:
+        ids = sorted({int(i) for i in raw})
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="ids must be whole product ids")
+    photo, clear = await _cms_body_photo(db, body)
+    try:
+        for pid in ids:
+            await _cms_write_product(db, pid, body, photo, clear)
+        # ONE audit row for the group, not one per member: the row names every id it changed, so the
+        # trail is complete, and a 200-product group does not bury the feed it has to be readable in.
+        await audit(db, "staff", entity="cms", action="model_group_updated", actor_id=staff["id"],
+                    after={"ids": ids, "featured": body.get("featured"),
+                           "photo": (photo or "")[:120], "cleared": clear})
+        await db.commit()
+    except HTTPException:
+        await db.rollback()
+        raise
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    return {"ok": True, "updated": ids, "photo": photo}
+
+
+@router.patch("/cms/products/{pid}")
+async def cms_edit_product(pid: int, body: dict, staff: dict = Depends(require_roles(*ROLES_CMS)), db=Depends(get_db)):
+    await _require_role(staff, ROLES_CMS, ACTION_CMS_EDIT_PRODUCT, None)
+    photo, clear = await _cms_body_photo(db, body)
+    await _cms_write_product(db, pid, body, photo, clear)
     await db.commit()
     await audit(db, "staff", entity="cms", action="product_updated", entity_id=pid, actor_id=staff["id"], after={k: str(body[k])[:60] for k in body})
     await db.commit()
     return {"ok": True}
+
+
+@router.get("/cms/media")
+async def cms_media_gallery(q: str = Query("", max_length=80), limit: int = Query(120, le=400),
+                            staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+    """The catalogue's stock-photo gallery: every `product_media` image, for the picker to choose from.
+
+    This is the door that replaces the URL text box. The catalogue's photos are already a real table
+    - 0014 made `product_media` live and backfilled the products that had an `image_url` - so the
+    picker chooses from what the catalogue already holds instead of asking an operator to paste an
+    address they would have to look up somewhere else.
+
+    BOTH KINDS OF ROW ARE RETURNED, and each says which it is. A url-backed row carries the address a
+    storefront renders and is therefore selectable; a byte-backed one carries `raw_path` (its bytes
+    are behind the staff token, so the admin shows it from a blob URL) and is NOT selectable - there
+    is no public address for it to copy into `image_url`. The page greys those tiles out and says why
+    rather than hiding a photo the operator knows they uploaded.
+
+    `kind = 'image'` only: this gallery exists to point a product's card at a photo, and 0001's kind
+    CHECK also allows video and doc rows.
+    """
+    term = q.strip().lower()
+    like = ("%" + term + "%") if term else None
+    total = int((await db.execute(text("SELECT count(*) FROM product_media WHERE kind = 'image'"))).scalar_one())
+    rows = (await db.execute(text("""
+        SELECT pm.id, pm.product_id, pm.position, pm.is_primary, pm.alt_text, pm.storage_key,
+               pm.media_id, pm.created_at, p.slug AS product_slug, p.title AS product_title,
+               mo.filename, mo.content_type, mo.byte_size
+        FROM product_media pm
+        JOIN products p ON p.id = pm.product_id
+        LEFT JOIN media_objects mo ON mo.id = pm.media_id
+        WHERE pm.kind = 'image'
+          AND (:like IS NULL OR lower(p.title) LIKE :like OR lower(coalesce(mo.filename, '')) LIKE :like
+               OR lower(coalesce(pm.storage_key, '')) LIKE :like)
+        ORDER BY pm.is_primary DESC, p.title, pm.position, pm.id
+        LIMIT :lim
+    """), {"like": like, "lim": limit})).mappings().all()
+    return {
+        "total": total,
+        "shown": len(rows),
+        "items": [{
+            "media_row_id": m["id"], "product_id": m["product_id"],
+            "product_slug": m["product_slug"], "product_title": m["product_title"],
+            "storage_key": m["storage_key"], "media_id": m["media_id"],
+            "filename": m["filename"], "content_type": m["content_type"],
+            "byte_size": (int(m["byte_size"]) if m["byte_size"] is not None else None),
+            "position": m["position"], "is_primary": bool(m["is_primary"]),
+            "alt_text": m["alt_text"], "created_at": m["created_at"].isoformat(),
+            # The storefront's own rule, in one place: a photo is usable as a card only when it has
+            # an address no credential is needed to fetch.
+            "publishable": m["storage_key"] is not None,
+            "raw_path": (f"/staff/products/{m['product_id']}/media/{m['id']}/raw"
+                         if m["media_id"] is not None else None),
+        } for m in rows],
+    }
 
 
 # ------------- Newsletter: public signups, admin read-only list -------------

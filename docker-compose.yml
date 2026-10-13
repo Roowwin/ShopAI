@@ -223,6 +223,10 @@ services:
       - backoffice_modules:/app/node_modules
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.rfo.localhost}
+      # The CMS previews the shop inside the admin, so it needs the shop's own origin: the
+      # catalogue's photos are root-relative addresses (`/icons/...`) that only resolve there.
+      # Same value the storefront service takes - one origin, not two.
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://shop.rfo.localhost}
     networks: [edge]
     depends_on:
       api: { condition: service_healthy }

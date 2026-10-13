@@ -38,6 +38,10 @@ STAFF_READS = (
     ("/staff/cms/home", {}),
     ("/staff/cms/promotions", {}),
     ("/staff/cms/products", {}),
+    # The CMS photo gallery: an OBJECT like /staff/overview, so only the "no credential -> 401"
+    # leg applies. It reads the whole catalogue's stock photos, so it is admin or manager like the
+    # three CMS reads above it rather than the wider staff read set.
+    ("/staff/cms/media", {}),
     ("/staff/newsletter", {}),
     ("/staff/ai/whoami", {}),
     ("/staff/ai/status", {}),

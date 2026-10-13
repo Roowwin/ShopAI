@@ -8,7 +8,8 @@
    rather than the storefront's roomier value so Button and Input share one 36px control height.
    Everything else is API-identical to the storefront.
 
-   Table, Stat and Select are admin-only primitives the storefront has no call for.
+   Table, Stat, Select and Switch are admin-only primitives the storefront has no call for. (Switch
+   is a form control the storefront's own pages never needed - see its own note.)
 
    NOT copied from the storefront: Eyebrow, EmptyState, ProductCard. The backoffice needs the
    kicker as a CLASS rather than a component - a Table header row is a `<tr>` and cannot contain
@@ -23,4 +24,5 @@ export { default as Input } from "./Input";
 export { default as Select } from "./Select";
 export { default as Table, THead, TBody, TR, TH, TD } from "./Table";
 export { default as Stat } from "./Stat";
+export { default as Switch } from "./Switch";
 export { cn } from "./cn";
