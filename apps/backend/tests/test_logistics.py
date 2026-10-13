@@ -176,6 +176,25 @@ def test_the_exact_amount_match_leads_and_shows_its_working():
     assert any("exactly" in r for r in m.reasons) and any("3 day" in r for r in m.reasons), m.reasons
 
 
+def test_a_bare_number_in_the_reference_must_be_a_token_not_a_substring():
+    """Three digits hide inside anything. This one put a stranger's payment at the top of the list.
+
+    The reference an operator types carries their own tag, and a tag is usually hex - which contains
+    digit runs that coincide with other orders' ids. Matching a digits-only candidate against the
+    collapsed reference is how order 123's payment earns the full reference bonus for a reference that
+    says `...ABC123 ORDER 716`.
+    """
+    ref = "PYTEST-LOG-ABC123 ORDER 716"
+    assert lg._reference_hit(ref, None, 716) is True, "the order the reference names"
+    assert lg._reference_hit(ref, None, 123) is False, "a digit run inside the tag is not a mention"
+    assert lg._reference_hit(ref, None, 23) is False, "and neither is a shorter run"
+    # Delimiters a bank actually uses still hit - one rule, four spellings.
+    for spelling in ("ORDER 501", "INV-501", "REF/501", "501"):
+        assert lg._reference_hit(spelling, None, 501) is True, spelling
+    for miss in ("ABC501", "5010", "X501Y"):
+        assert lg._reference_hit(miss, None, 501) is False, miss
+
+
 def test_the_banks_reference_naming_the_order_is_the_strongest_signal():
     found = lg.match_payout({"amount_cents": 27900, "received_on": date(2026, 10, 8),
                              "bank_ref": "DEP 501 SETTLE"},
