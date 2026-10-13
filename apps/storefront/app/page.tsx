@@ -1,5 +1,6 @@
 import { apiInternal } from "@/lib/api";
 import { iconFor } from "@/lib/productIcons";
+import ProductArt from "./components/ProductArt";
 import LoadMore from "./components/LoadMore";
 import DealOfMonth from "./components/DealOfMonth";
 import { catalogPath, Filters, parseFilters } from "./components/catalogFilters";
@@ -29,15 +30,27 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   try {
     catalog = await apiInternal(catalogPath(filters, { limit: 8, withFilters: true }), 0);
   } catch { void 0; }
-  const items: any[] = await apiInternal("/store/catalog?limit=4&sort=new");
-  const arrivals: any[] = items;
-  /* Hero art: the category glyphs already shipped in public/icons, for the newest arrivals.
-     No product photos exist, so this degrades to text-only when nothing matches. */
-  const heroArt = arrivals.map((i) => iconFor(i.slug)).filter((s): s is string => Boolean(s)).slice(0, 3);
+  const items: any[] = await apiInternal("/store/catalog?limit=12&sort=new");
+  /* The "New arrivals" shelf below shows the first four; the hero looks further down the SAME
+     response, so this is still one request. */
+  const arrivals: any[] = items.slice(0, 4);
   let best: any[] = [];
   try { best = await apiInternal("/store/best-sellers", 60); } catch { void 0; }
   let cats: any[] = [];
   try { cats = await apiInternal("/store/categories", 60); } catch { void 0; }
+  /* THE HERO DRAWS WHAT IT CAN RENDER, out of the sets this page has ALREADY fetched - the newest
+     arrivals first, then the best sellers, then the catalogue grid. A product is drawable when it
+     has a photo or a shipped category glyph; one with neither shows an initials tile, which is
+     right on a card and wrong three-up in a hero.
+
+     It used to map the newest four through `iconFor` alone and stop there. On this catalogue that
+     came up empty: `sort=new` puts a long tail of test fixtures first, none of them with art, so
+     the fan never drew. Falling through to the other two sets costs no extra request and makes the
+     hero a picture of the shop rather than a picture of whatever happens to be newest.
+
+     Empty is still a real answer - the column collapses and the headline takes the full width. */
+  const drawable = (i: any) => Boolean(i.image_url || iconFor(i.slug));
+  const heroPicks = [...items, ...best, ...(catalog.items ?? [])].filter(drawable).slice(0, 3);
   let hero: any = { hero_title: "Renewed tech. Zero waste.",
     hero_sub: "Certified refurbished devices - serialised, graded, warehouse-tracked.", cta_label: "Shop devices" };
   try { hero = await apiInternal("/store/home-content", 60); } catch { void 0; }
@@ -53,11 +66,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
           brand fill on the page - everything else is glass and hairlines, which is what makes one
           button read as THE action.
 
-          The three cards are the category glyphs already shipped in public/icons, fanned and
+          The three cards are real product art - the newest arrivals the shop can draw, falling
+          through to the best sellers when the newest have no photo and no shipped glyph - fanned and
           offset so they read as floating rather than as a row. They are decorative (`alt=""`,
-          aria-hidden): the headline beside them is the content, and three unlabelled glyphs would
-          only be noise to a screen reader. With no glyphs to show the column collapses and the
-          text takes the full width - text-only, never a broken grid. */}
+          aria-hidden): the headline beside them is the content, and three unlabelled tiles would
+          only be noise to a screen reader. With nothing drawable the column collapses and the text
+          takes the full width - text-only, never a broken grid. */}
       <section className="px-4 md:px-8 pt-20 pb-16 md:pt-28 md:pb-24">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-14 md:gap-20">
           <div className="flex-1 text-center md:text-left">
@@ -71,18 +85,17 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
               <Button variant="primary" href="#shop" className="relative shadow-glow px-8 text-sm">{hero.cta_label}</Button>
             </div>
           </div>
-          {heroArt.length > 0 && (
+          {heroPicks.length > 0 && (
             <div className="hidden md:block flex-1 relative h-80" aria-hidden="true">
-              {heroArt.map((src, i) => (
+              {heroPicks.map((p, i) => (
                 /* The rotation lives on the wrapper and the drift on the image, because both want
                    the `transform` property and an animation would otherwise overwrite the tilt.
-                   The key carries the index: `iconFor` maps many slugs to one glyph, so two
-                   arrivals of the same category return the SAME src string and a key of `src`
-                   alone would collide. */
-                <div key={src + "-" + i} className={cn("absolute w-44 lg:w-52", HERO_SLOTS[i] ?? HERO_SLOTS[0])}>
-                  <img src={src} alt=""
+                   Keyed by slug: `heroPicks` is a subset of a de-duplicated catalogue list. */
+                <div key={p.slug} className={cn("absolute w-44 lg:w-52", HERO_SLOTS[i] ?? HERO_SLOTS[0])}>
+                  <ProductArt slug={p.slug} imageUrl={p.image_url} alt=""
                     style={{ animationDelay: (i * 900) + "ms" }}
-                    className="hero-float w-full aspect-[4/3] object-cover rounded-card bg-surface-glass/5 ring-1 ring-brand-500/20 shadow-glow-sm" />
+                    className="hero-float w-full aspect-[4/3] object-cover rounded-card bg-surface-glass/5 ring-1 ring-brand-500/20 shadow-glow-sm"
+                    fallback={<span className="hero-float block w-full aspect-[4/3] rounded-card bg-surface-glass/5 ring-1 ring-brand-500/20" />} />
                 </div>
               ))}
             </div>

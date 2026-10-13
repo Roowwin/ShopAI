@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { iconFor } from "@/lib/productIcons";
 
 type Props = {
@@ -7,8 +7,10 @@ type Props = {
   alt: string;
   className: string;
   fallback: ReactNode;
-  /** The one image above the fold (the product page's hero). Card art stays lazy. */
+  /** The one image above the fold (the product page's hero, the homepage fan). Card art is lazy. */
   priority?: boolean;
+  /** Passed through to the <img> - the hero staggers its float with it. */
+  style?: CSSProperties;
 };
 
 /* Card art, best available first: the product's own photo (image_url), else the category-glyph icon
@@ -21,10 +23,10 @@ type Props = {
 
    `priority` is for the product page's hero shot, which IS the fold: lazy-loading it delays the
    largest paint for no benefit, since it is visible before anything scrolls. */
-export default function ProductArt({ slug, imageUrl, alt, className, fallback, priority }: Props) {
+export default function ProductArt({ slug, imageUrl, alt, className, fallback, priority, style }: Props) {
   const loading = priority ? "eager" : "lazy";
-  if (imageUrl) return <img src={imageUrl} alt={alt} className={className} loading={loading} fetchPriority={priority ? "high" : "auto"} decoding="async" />;
+  if (imageUrl) return <img src={imageUrl} alt={alt} className={className} style={style} loading={loading} fetchPriority={priority ? "high" : "auto"} decoding="async" />;
   const icon = iconFor(slug);
   if (!icon) return <>{fallback}</>;
-  return <img src={icon} alt="" className={className} loading={loading} decoding="async" />;   // decorative: the product title sits beside it
+  return <img src={icon} alt="" className={className} style={style} loading={loading} decoding="async" />;   // decorative: the product title sits beside it
 }
