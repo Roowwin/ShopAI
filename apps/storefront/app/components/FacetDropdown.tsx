@@ -180,12 +180,12 @@ export default function FacetDropdown({ label, value, options, onSelect, open, o
         className={cn(
           "min-h-[44px] inline-flex items-center gap-1.5 rounded-control px-3 text-xs font-semibold",
           "transition-colors duration-fast ease-out motion-reduce:transition-none",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2",
           // A facet with nothing in force is a quiet secondary control; the one in force is the
           // brand-marked one, so a glance down the toolbar says what is actually filtering.
           value === null
             ? "bg-surface text-ink-700 ring-1 ring-line hover:bg-surface-sunken hover:ring-line-strong active:bg-surface-pressed"
-            : "bg-brand-50 text-brand-800 ring-1 ring-brand-700 hover:bg-brand-100",
+            : "bg-brand-500/15 text-brand-300 ring-1 ring-brand-500/50 hover:bg-brand-500/25",
         )}>
         <span className="truncate max-w-[12rem]">{text}</span>
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor"
@@ -199,7 +199,7 @@ export default function FacetDropdown({ label, value, options, onSelect, open, o
         <div role="listbox" aria-labelledby={baseId + "-trigger"} tabIndex={-1} onKeyDown={onKey}
           style={{ position: "fixed", width: panel.w, left: panel.left, maxHeight: panel.maxH,
             ...(panel.flip ? { bottom: panel.bottom } : { top: panel.top }) }}
-          className="z-40 overflow-y-auto rounded-control bg-surface text-ink-900 shadow-lg ring-1 ring-line py-1">
+          className="z-40 overflow-y-auto rounded-control bg-surface-glass/10 backdrop-blur-md text-ink-900 shadow-glow-sm ring-1 ring-brand-500/20 py-1">
           {options.map((o, i) => {
             const isSel = o.value === value;
             return (
@@ -209,12 +209,12 @@ export default function FacetDropdown({ label, value, options, onSelect, open, o
                 className={cn(
                   "min-h-[44px] flex items-center gap-2 px-3 text-sm cursor-pointer select-none",
                   "transition-colors duration-fast ease-out motion-reduce:transition-none",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-inset",
-                  isSel ? "bg-brand-50 text-brand-800 font-medium" : "hover:bg-surface-sunken",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset",
+                  isSel ? "bg-brand-500/15 text-brand-300 font-medium" : "hover:bg-surface-glass/10",
                 )}>
                 {/* The check keeps its box when the option is not the value in force (transparent,
                     not removed), so the labels of a list do not shift sideways as you pick. */}
-                <span className={cn("shrink-0", isSel ? "text-brand-700" : "text-transparent")} aria-hidden="true">
+                <span className={cn("shrink-0", isSel ? "text-brand-300" : "text-transparent")} aria-hidden="true">
                   <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor"
                     strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 8.5l3.5 3.5L13 4.5" />

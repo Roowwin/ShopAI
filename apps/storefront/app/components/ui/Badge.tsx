@@ -7,7 +7,7 @@ import { cn } from "./cn";
 type Props = {
   children: ReactNode;
   shape?: "pill" | "tile";
-  /** Data-driven colour (grade pills) or a token pair like "bg-brand-50 text-brand-700". */
+  /** Data-driven colour (grade pills) or a token pair like "bg-brand-500/15 text-brand-300". */
   colorClass?: string;
   className?: string;
 };

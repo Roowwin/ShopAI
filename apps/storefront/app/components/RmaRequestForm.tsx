@@ -157,14 +157,14 @@ export default function RmaRequestForm() {
           </p>
           <label className="block">
             <span className="text-sm font-medium text-ink-900">Reason for return</span>
-            <select className={cn(fieldClass, "mt-1 w-full px-4 py-2.5 bg-surface text-ink-900 ring-1 ring-line")}
+            <select className={cn(fieldClass, "mt-1 w-full px-4 py-2.5 bg-surface-sunken text-ink-900 ring-1 ring-line")}
                     value={reason} onChange={(e) => setReason(e.target.value)}>
               {REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </label>
           <label className="block">
             <span className="text-sm font-medium text-ink-900">What went wrong? <span className="font-normal text-ink-500">(optional)</span></span>
-            <textarea className={cn(fieldClass, "mt-1 w-full px-4 py-2.5 bg-surface text-ink-900 ring-1 ring-line")}
+            <textarea className={cn(fieldClass, "mt-1 w-full px-4 py-2.5 bg-surface-sunken text-ink-900 ring-1 ring-line")}
                       rows={3} maxLength={1000} value={detail}
                       onChange={(e) => setDetail(e.target.value)}
                       placeholder="A sentence about the fault helps us authorise it faster." />

@@ -6,12 +6,13 @@ import { cn } from "./cn";
    Medium weight keeps an 11px uppercase line from reading as a hairline at the top of a card.
 
    Two tones, both from the colour rhythm: `muted` (ink-400) is the default inside a card, and
-   `brand` (the brand green) is the rare accent kicker - the hero's "RFO Store" is the only one
-   today. A caller never passes a text colour of its own; see cn.ts, an appended class could not
-   reliably replace this one. */
+   `brand` (brand-300, the light step of the brand hue - `brand-700` is the button fill and reads
+   at 2.3:1 as ink on this ground) is the rare accent kicker - the hero's "RFO Store" is the only
+   one today. A caller never passes a text colour of its own; see cn.ts, an appended class could
+   not reliably replace this one. */
 const TONES: Record<"muted" | "brand", string> = {
   muted: "text-ink-400",
-  brand: "text-brand-700",
+  brand: "text-brand-300",
 };
 
 type Props = { children: ReactNode; tone?: "muted" | "brand"; className?: string };

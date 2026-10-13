@@ -2,7 +2,7 @@ import { apiInternal } from "@/lib/api";
 import PurchasePanel from "./PurchasePanel";
 import ProductArt from "../../components/ProductArt";
 import { GRADES } from "@/lib/grades";
-import { Badge, Button, Heading, linkOnDarkClass, ProductCard } from "../../components/ui";
+import { Badge, Button, Heading, linkClass, ProductCard } from "../../components/ui";
 import { notFound } from "next/navigation";
 
 export const revalidate = 0;
@@ -20,11 +20,12 @@ export const revalidate = 0;
    scrolling away from the price it belongs to. Below the fold the page reverts to full width:
    the model's own copy, the grading scale, and what else is on the shelf.
 
-   THE GROUND IS CHARCOAL, and it is the one dark route in this shop. It is a SCOPE, not a second
-   theme: `.pdp-dark` in globals.css rebinds the surface/ink/line tokens, so everything below
-   writes `bg-surface` and `text-ink-900` exactly as the light pages do and resolves dark here.
-   That is also why a value like `text-brand-700` cannot be used as ink on this page - see the
-   note on the price in PurchasePanel, and the `linkOnDarkClass` used throughout. */
+   THE GROUND IS THE SHOP'S GROUND NOW. This page was once the one dark route in a light shop and
+   carried a `.pdp-dark` scope of its own; the whole storefront is dark, so the scope is gone and
+   the tokens resolve here exactly as they do everywhere else. What remains from that pass is the
+   habit it forced: nothing here names a hex, and `linkClass` (brand-300) rather than
+   `text-brand-700` carries every link, because brand-700 is the button FILL and reads at 2.3:1 as
+   ink on this ground. */
 
 /** Parent facts, straight from products.specs (a flat JSONB object of short strings). Keys are
     display labels as stored ("storage", "screen_size"); the row capitalises them, so the CMS does
@@ -64,7 +65,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   );
 
   return (
-    <main className="pdp-dark bg-surface-page text-ink-900 min-h-screen">
+    <main className="text-ink-900 min-h-screen">
       <div className="mx-auto max-w-6xl px-4 pt-10 pb-20">
         {promo && (
           <p className="mb-6 text-xs font-medium text-ink-500">
@@ -118,17 +119,17 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <p className="text-body text-ink-600 mt-3 whitespace-pre-wrap">{p.description}</p>
           <p className="text-xs text-ink-400 mt-4">
             Model: <span className="text-ink-600">{p.brand} {p.model}</span> - Category:{" "}
-            <a href={"/search?q=" + encodeURIComponent(p.category)} className={linkOnDarkClass}>{p.category}</a> - Brand:{" "}
-            <a href={"/search?q=" + encodeURIComponent(p.brand)} className={linkOnDarkClass}>{p.brand}</a>
+            <a href={"/search?q=" + encodeURIComponent(p.category)} className={linkClass}>{p.category}</a> - Brand:{" "}
+            <a href={"/search?q=" + encodeURIComponent(p.brand)} className={linkClass}>{p.brand}</a>
           </p>
         </section>
 
-        <div className="mt-8 rounded-card bg-surface ring-1 ring-line p-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="mt-8 rounded-card bg-surface-glass/5 backdrop-blur-md ring-1 ring-brand-500/20 p-6 flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-ink-900">Not sure which unit fits?</p>
             <p className="text-xs text-ink-500 mt-1">Ask the AI - it answers from live stock only.</p>
           </div>
-          <Button variant="primaryOnDark" href={"/assistant?about=" + slug} size="sm" className="shrink-0">Ask the AI</Button>
+          <Button variant="primary" href={"/assistant?about=" + slug} size="sm" className="shrink-0">Ask the AI</Button>
         </div>
 
         {/* What the grade dropdown is actually choosing between. Parent-level education: the scale
@@ -143,7 +144,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
             {GRADES.map((g) => (
-              <div key={g.letter} className="rounded-card bg-surface ring-1 ring-line p-4">
+              <div key={g.letter} className="rounded-card bg-surface-glass/5 backdrop-blur-md ring-1 ring-brand-500/20 p-4">
                 <Badge colorClass={g.pill}>Grade {g.letter}</Badge>
                 <p className="text-sm font-medium text-ink-900 mt-2">{g.label}</p>
                 <p className="text-xs text-ink-500 mt-1">{g.spec}</p>
@@ -151,7 +152,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             ))}
           </div>
           <p className="text-xs text-ink-400 mt-4">
-            <a href="/grades" className={linkOnDarkClass}>Read the full grading scale</a>
+            <a href="/grades" className={linkClass}>Read the full grading scale</a>
           </p>
         </section>
 
@@ -169,7 +170,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
         <section className="mt-16 grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
           {["Serialised units", "Graded quality", "Fast AU-NZ delivery", "Secure checkout", "GST-compliant invoices"].map((t) => (
-            <div key={t} className="rounded-control bg-surface ring-1 ring-line px-3 py-4 text-xs text-ink-600">{t}</div>
+            <div key={t} className="rounded-control bg-surface-glass/5 backdrop-blur-md ring-1 ring-brand-500/20 px-3 py-4 text-xs text-ink-600">{t}</div>
           ))}
         </section>
       </div>

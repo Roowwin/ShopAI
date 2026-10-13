@@ -111,9 +111,9 @@ export default function LoadMore({ initial, applied, categories, brands }: {
               aria-label={"Remove search: " + filters.q}
               className={cn(
                 "shrink-0 min-h-[44px] inline-flex items-center gap-1.5 rounded-control px-3 text-xs font-semibold",
-                "bg-brand-50 text-brand-800 ring-1 ring-brand-700 hover:bg-brand-100",
+                "bg-brand-500/15 text-brand-300 ring-1 ring-brand-500/50 hover:bg-brand-500/25",
                 "transition-colors duration-fast ease-out motion-reduce:transition-none",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2",
               )}>
               Search: {filters.q}
               <span aria-hidden="true">✕</span>

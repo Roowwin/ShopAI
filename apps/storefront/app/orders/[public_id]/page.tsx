@@ -59,14 +59,14 @@ function stepIndex(status: string): number {
 function banner(status: string): { tone: string; title: string; body: string } {
   switch (status) {
     case "paid":
-      return { tone: "bg-brand-50 text-brand-800",
+      return { tone: "bg-brand-500/15 text-brand-300",
                title: "Payment confirmed",
                body: "Your order is with our warehouse team. Every unit is checked and packed by hand before it ships." };
     case "shipped":
-      return { tone: "bg-brand-50 text-brand-800", title: "On its way",
+      return { tone: "bg-brand-500/15 text-brand-300", title: "On its way",
                body: "Your parcel has left the warehouse." };
     case "delivered":
-      return { tone: "bg-brand-50 text-brand-800", title: "Delivered",
+      return { tone: "bg-brand-500/15 text-brand-300", title: "Delivered",
                body: "This order has been delivered. Thanks for keeping a device out of landfill." };
     case "cancelled":
       return { tone: "bg-surface-sunken text-ink-700", title: "Order cancelled",

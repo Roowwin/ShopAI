@@ -235,10 +235,10 @@ export default function NavDropdown({ label, links, open, onOpenChange }: Props)
         onKeyDown={(e) => { if (e.key === "ArrowDown" && !open) { e.preventDefault(); place(); onOpenChange(true); } }}
         className={cn(
           "min-h-[44px] inline-flex items-center gap-1.5 rounded-control px-3 text-sm font-medium text-ink-700",
-          "transition-colors duration-fast ease-out hover:bg-surface-sunken hover:text-brand-700 active:bg-surface-pressed",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2",
+          "transition-colors duration-fast ease-out hover:bg-surface-sunken hover:text-brand-300 active:bg-surface-pressed",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2",
           "motion-reduce:transition-none",
-          open && "bg-surface-sunken text-brand-700",
+          open && "bg-brand-500/15 text-brand-300",
         )}>
         {label}
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor"
@@ -252,7 +252,7 @@ export default function NavDropdown({ label, links, open, onOpenChange }: Props)
         <ul id={id + "-menu"} role="list" aria-labelledby={id + "-trigger"} onKeyDown={onKey}
           style={{ position: "fixed", width: box.w, left: box.left, maxHeight: box.maxH,
             ...(box.flip ? { bottom: box.bottom } : { top: box.top }) }}
-          className="z-40 overflow-y-auto rounded-control bg-surface text-ink-900 shadow-lg ring-1 ring-line py-1">
+          className="z-40 overflow-y-auto rounded-control bg-surface-glass/10 backdrop-blur-md text-ink-900 shadow-glow-sm ring-1 ring-brand-500/20 py-1">
           {links.map((l, i) => {
             const kids = l.children ?? [];
             const subOpen = sub === l.href;
@@ -268,8 +268,8 @@ export default function NavDropdown({ label, links, open, onOpenChange }: Props)
                     onClick={() => onOpenChange(false)}
                     className={cn(
                       "min-h-[44px] flex-1 flex items-center px-4 py-2.5 text-sm text-ink-700 truncate",
-                      "transition-colors duration-fast ease-out hover:bg-surface-sunken hover:text-brand-700 active:bg-surface-pressed",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-inset",
+                      "transition-colors duration-fast ease-out hover:bg-surface-sunken hover:text-brand-300 active:bg-surface-pressed",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset",
                       "motion-reduce:transition-none",
                     )}>
                     {l.label}
@@ -291,10 +291,10 @@ export default function NavDropdown({ label, links, open, onOpenChange }: Props)
                       }}
                       className={cn(
                         "shrink-0 w-11 flex items-center justify-center text-ink-500",
-                        "transition-colors duration-fast ease-out hover:bg-surface-sunken hover:text-brand-700 active:bg-surface-pressed",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-inset",
+                        "transition-colors duration-fast ease-out hover:bg-surface-sunken hover:text-brand-300 active:bg-surface-pressed",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset",
                         "motion-reduce:transition-none",
-                        subOpen && "bg-surface-sunken text-brand-700",
+                        subOpen && "bg-brand-500/15 text-brand-300",
                       )}>
                       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor"
                         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -308,15 +308,15 @@ export default function NavDropdown({ label, links, open, onOpenChange }: Props)
                     aria-label={"Sub-categories of " + l.label}
                     style={{ position: "fixed", width: subBox.w, left: subBox.left, top: subBox.top,
                       maxHeight: subBox.maxH }}
-                    className="z-40 overflow-y-auto rounded-control bg-surface text-ink-900 shadow-lg ring-1 ring-line py-1">
+                    className="z-40 overflow-y-auto rounded-control bg-surface-glass/10 backdrop-blur-md text-ink-900 shadow-glow-sm ring-1 ring-brand-500/20 py-1">
                     {kids.map((c, j) => (
                       <li key={c.href}>
                         <a ref={(el) => { (subItems.current[l.href] ??= [])[j] = el; }}
                           href={c.href} onClick={() => onOpenChange(false)}
                           className={cn(
                             "min-h-[44px] flex items-center px-4 py-2.5 text-sm text-ink-700 truncate",
-                            "transition-colors duration-fast ease-out hover:bg-surface-sunken hover:text-brand-700 active:bg-surface-pressed",
-                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-inset",
+                            "transition-colors duration-fast ease-out hover:bg-surface-sunken hover:text-brand-300 active:bg-surface-pressed",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset",
                             "motion-reduce:transition-none",
                           )}>
                           {c.label}

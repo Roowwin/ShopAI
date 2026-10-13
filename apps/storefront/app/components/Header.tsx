@@ -69,14 +69,23 @@ export default function Header() {
      which is for a two-word kicker. That sentence is copy, not chrome: it is shrunk, never dropped. */
   return (
     <header className="sticky top-0 z-50">
-      <div className="bg-surface-page-alt text-ink-600 border-b border-line text-eyebrow px-6 py-1 text-center">Renewed tech. Zero waste. - Certified refurbished, delivered AU &amp; NZ</div>
-      <div className="bg-surface text-ink-900 px-4 md:px-6 py-2 flex items-center gap-2 md:gap-3 shadow-sm">
+      {/* FLOATING. The header is no longer an opaque bar laid across the page: both strips are the
+          same 5% glass wash over a backdrop blur with a single brand hairline, so the ground
+          gradient reads straight through and the chrome sits ON the page rather than over it.
+          `sticky` stays - a catalog is long, and the search and the cart have to be reachable from
+          the bottom of it. */}
+      <div className="bg-surface-glass/5 backdrop-blur-md text-ink-500 border-b border-brand-500/20 text-eyebrow px-6 py-1 text-center">Renewed tech. Zero waste. - Certified refurbished, delivered AU &amp; NZ</div>
+      <div className="bg-surface-glass/5 backdrop-blur-md border-b border-brand-500/20 text-ink-900 px-4 md:px-6 py-2 flex items-center gap-2 md:gap-3">
+        {/* The left and right groups both take `flex-1`, which is what actually CENTRES the search:
+            two equal-grow flanks around it put the field on the page's centre line whatever the
+            wordmark and the controls measure. */}
+        <div className="flex items-center gap-1 md:gap-2 flex-1 min-w-0">
         {/* The wordmark is a link home on every route, so it needs the same visible focus ring as
             the rest of the chrome - it had none, which made it the one control in the header a
             keyboard user could land on without seeing where they were. */}
-        <a href="/" className="flex items-center gap-1.5 font-semibold tracking-wide shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-brand-600"></span>
-          RFO<span className="text-brand-700">Store</span>
+        <a href="/" className="flex items-center gap-1.5 font-semibold tracking-wide shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-brand-500"></span>
+          RFO<span className="text-brand-300">Store</span>
         </a>
         {/* The centre group: [Shop v | FAQ | Ask AI], per the owner's brief of 2026-10-12. This
             REPLACES the sideways-scrolling category strip job 17 put here, whose whole point was
@@ -95,7 +104,8 @@ export default function Header() {
               navigable destination. */}
           <a href="/account" className={cn("inline-flex items-center min-h-[44px] px-3 text-sm", navLinkClass)}>Account</a>
         </div>
-        <div className="relative flex-1 min-w-0 max-w-xl mx-auto">
+        </div>
+        <div className="relative w-full max-w-xl shrink-0">
           <Input tone="sunken"
             aria-label="Search devices"
             placeholder="Search devices - e.g. galaxy s21"
@@ -103,41 +113,43 @@ export default function Header() {
             onKeyDown={(e) => { if (e.key === "Enter" && q.trim().length >= 2) { setOpen(false); router.push("/search?q=" + encodeURIComponent(q.trim())); } }}
             onBlur={() => setTimeout(() => setOpen(false), 150)} />
           {open && items.length > 0 && (
-            <div className="absolute left-0 right-0 mt-1 bg-surface text-ink-900 rounded-control shadow-lg ring-1 ring-line overflow-hidden">
+            <div className="absolute left-0 right-0 mt-1 bg-surface-glass/10 backdrop-blur-md text-ink-900 rounded-control shadow-glow-sm ring-1 ring-brand-500/20 overflow-hidden">
               {items.slice(0, 5).map((s) => (
-                <button key={s.slug} className="w-full text-left px-4 py-2.5 text-sm transition-colors duration-fast ease-out hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 motion-reduce:transition-none"
+                <button key={s.slug} className="w-full text-left px-4 py-2.5 text-sm transition-colors duration-fast ease-out hover:bg-surface-glass/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset motion-reduce:transition-none"
                   onMouseDown={() => router.push("/products/" + s.slug)}>
                   <span className="font-medium">{s.title}</span>
                   <span className="text-xs text-ink-500 ml-2">{s.units_available} available{s.price_from_cents !== null ? " from " + aud(s.price_from_cents) : ""}</span>
                 </button>
               ))}
-              <button className="w-full text-left px-4 py-2 text-xs bg-surface-sunken text-brand-700 transition-colors duration-fast ease-out hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 motion-reduce:transition-none"
+              <button className="w-full text-left px-4 py-2 text-xs bg-surface-glass/5 text-brand-300 transition-colors duration-fast ease-out hover:bg-surface-glass/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset motion-reduce:transition-none"
                 onMouseDown={() => router.push("/search?q=" + encodeURIComponent(q.trim()))}>See all results</button>
             </div>
           )}
         </div>
+        <div className="flex items-center gap-2 flex-1 justify-end">
         <Button href="/cart" className="relative shrink-0">
           {/* The count badge is the one place that keeps a raw 10px: it is a single digit centred in
               a 20px circle, and the `eyebrow` step (11px + 0.1em tracking) crowds it and shifts the
               digit off centre on one character. Deliberate, not a missed sweep. */}
-          Cart{cartN > 0 && (<span className="absolute -top-2 -right-2 bg-ink-900 text-brand-300 text-[10px] font-bold rounded-full h-5 w-5 flex items-center justify-center">{cartN}</span>)}
+          Cart{cartN > 0 && (<span className="absolute -top-2 -right-2 bg-surface-deep text-brand-300 text-[10px] font-bold rounded-full h-5 w-5 flex items-center justify-center">{cartN}</span>)}
         </Button>
         <button
           type="button"
           onClick={() => setMenu((v) => !v)}
           aria-label={menu ? "Close menu" : "Open menu"}
           aria-expanded={menu}
-          className="md:hidden shrink-0 h-11 w-11 flex items-center justify-center rounded-control text-ink-600 transition-colors duration-fast ease-out hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 motion-reduce:transition-none">
+          className="md:hidden shrink-0 h-11 w-11 flex items-center justify-center rounded-control text-ink-600 transition-colors duration-fast ease-out hover:bg-surface-glass/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 motion-reduce:transition-none">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             {menu
               ? (<><path d="M5 5l10 10" /><path d="M15 5L5 15" /></>)
               : (<><path d="M3 6h14" /><path d="M3 10h14" /><path d="M3 14h14" /></>)}
           </svg>
         </button>
+        </div>
       </div>
       {/* The category nav is hidden below md, and there was no way to reach it on a phone. */}
       {menu && (
-        <nav className="md:hidden bg-surface ring-1 ring-line border-t border-line px-4 py-1 flex flex-col text-sm text-ink-600">
+        <nav className="md:hidden bg-surface-glass/10 backdrop-blur-md ring-1 ring-brand-500/20 border-t border-brand-500/20 px-4 py-1 flex flex-col text-sm text-ink-600">
           <a href="/" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>Shop</a>
           {/* A category with sub-categories becomes an accordion here, because hover does not exist on
               a phone. The word still goes to the category - a shopper who wants all of Accessories has
@@ -155,7 +167,7 @@ export default function Header() {
                     <button type="button" aria-expanded={isOpen}
                       aria-label={(isOpen ? "Hide " : "Show ") + c.name + " sub-categories"}
                       onClick={() => setOpenCat(isOpen ? null : c.name)}
-                      className="w-11 shrink-0 flex items-center justify-center text-ink-500 transition-colors duration-fast ease-out hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 motion-reduce:transition-none">
+                      className="w-11 shrink-0 flex items-center justify-center text-ink-500 transition-colors duration-fast ease-out hover:bg-surface-glass/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 motion-reduce:transition-none">
                       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor"
                         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
                         className={cn("transition-transform duration-fast ease-out motion-reduce:transition-none", isOpen && "rotate-180")}>

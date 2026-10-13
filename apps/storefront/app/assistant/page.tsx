@@ -55,7 +55,7 @@ export default function AssistantPage() {
             {!!m.cards?.length && (
               <div className="mt-2 space-y-2">
                 {m.cards.map((c) => (
-                  <a key={c.title + c.grade} href={c.url} className="block rounded-xl border border-line p-3 transition-colors duration-fast ease-out hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 motion-reduce:transition-none">
+                  <a key={c.title + c.grade} href={c.url} className="block rounded-xl bg-surface-glass/5 backdrop-blur-md ring-1 ring-brand-500/20 p-3 transition-colors duration-fast ease-out hover:bg-surface-glass/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 motion-reduce:transition-none">
                     {c.title} · Grade {c.grade} · from {aud(c.price_cents)} · {c.units_available} in stock
                   </a>
                 ))}

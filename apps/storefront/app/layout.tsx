@@ -4,7 +4,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import Header from "./components/Header";
 import FooterNewsletter from "./components/FooterNewsletter";
-import { footerLinkClass } from "./components/ui";
+import { navLinkClass } from "./components/ui";
 import { apiInternal } from "@/lib/api";
 
 /* Both faces are self-hosted at build time by next/font/google (no runtime third-party request,
@@ -49,22 +49,26 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang="en-AU" className={inter.variable + " " + grotesk.variable}>
       <body className="bg-surface-page text-ink-900 min-h-screen flex flex-col">
         <Header />
-        {promo && (<div className="bg-ink-900 text-white text-xs px-6 py-2 text-center tracking-wide">{promo}</div>)}
+        {/* The promo band and the footer are the two full-bleed strips. They were `bg-ink-900`,
+            which was a deliberate dark band under white text on the light ground - and ink-900 is
+            now WARM WHITE, so both would have been white on white. `surface-deep` is a fill by
+            name and cannot invert into an ink. */}
+        {promo && (<div className="bg-surface-deep text-ink-700 text-xs px-6 py-2 text-center tracking-wide">{promo}</div>)}
         <div className="flex-1">{children}</div>
-        <footer className="bg-ink-900 text-ink-300 mt-12">
+        <footer className="bg-surface-deep text-ink-500 mt-12">
           <div className="max-w-6xl mx-auto px-6 py-8 grid gap-6 md:grid-cols-3 text-sm">
             <div>
-              <p className="font-semibold text-white flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-brand-500"></span>RFO Store</p>
+              <p className="font-semibold text-ink-900 flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-brand-500"></span>RFO Store</p>
               <p className="text-xs text-ink-400 mt-1">Certified refurbished electronics. Every device renewed, graded and tracked - e-waste kept out of landfill.</p>
             </div>
             <div className="text-xs space-y-1">
-              <a href="/" className={"block " + footerLinkClass}>Shop</a>
-              <a href="/search" className={"block " + footerLinkClass}>Search</a>
-              <a href="/assistant" className={"block " + footerLinkClass}>Ask the AI</a>
-              <a href="/faq" className={"block " + footerLinkClass}>FAQ</a>
-              <a href="/contact" className={"block " + footerLinkClass}>Contact</a>
-              <a href="/grades" className={"block " + footerLinkClass}>Our grades A-D</a>
-              <a href="/returns" className={"block " + footerLinkClass}>Returns &amp; warranty</a>
+              <a href="/" className={"block " + navLinkClass}>Shop</a>
+              <a href="/search" className={"block " + navLinkClass}>Search</a>
+              <a href="/assistant" className={"block " + navLinkClass}>Ask the AI</a>
+              <a href="/faq" className={"block " + navLinkClass}>FAQ</a>
+              <a href="/contact" className={"block " + navLinkClass}>Contact</a>
+              <a href="/grades" className={"block " + navLinkClass}>Our grades A-D</a>
+              <a href="/returns" className={"block " + navLinkClass}>Returns &amp; warranty</a>
             </div>
             <div className="text-xs text-ink-400">
               <p>Prices in AUD incl. applicable GST (AU 10% / NZ 15%).</p>

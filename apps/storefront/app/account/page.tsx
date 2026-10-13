@@ -17,8 +17,8 @@ import { Badge, Button, Card, EmptyState, Heading } from "../components/ui";
  */
 
 const STATUS_TONE: Record<string, string> = {
-  paid: "bg-brand-50 text-brand-800",
-  shipped: "bg-brand-50 text-brand-800",
+  paid: "bg-brand-500/15 text-brand-300",
+  shipped: "bg-brand-500/15 text-brand-300",
   delivered: "bg-brand-700 text-white",
   pending: "bg-surface-sunken text-ink-600",
   cancelled: "bg-surface-sunken text-ink-500",
@@ -94,7 +94,7 @@ export default function AccountPage() {
       ) : (
         <div className="mt-8 space-y-3">
           {orders.map((o) => (
-            <a key={o.public_id} href={"/orders/" + o.public_id} className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2">
+            <a key={o.public_id} href={"/orders/" + o.public_id} className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2">
               <Card interactive className="p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="min-w-0">

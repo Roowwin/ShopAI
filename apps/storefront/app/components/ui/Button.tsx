@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "./cn";
 
-type Variant = "primary" | "primaryOnDark" | "secondary" | "ghost" | "danger";
+type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 /* `min-h-[44px]` lives in the base so every button clears the ~44px touch target, including
@@ -13,18 +13,20 @@ type Size = "sm" | "md" | "lg";
    motion tokens, and the reduced-motion pair cancels the 1px movement for anyone who has asked
    for no motion (a 0ms transition would still move it).
 
-   THE RING COLOUR LIVES IN THE VARIANTS, NOT IN THE BASE. It used to be `ring-brand-700` in the
-   base, which is right on the warm ground (7.9:1) and wrong the moment a button sits on charcoal
-   (2.26:1 - a focus indicator that fails the 3:1 non-text bar, and one that is invisible against
-   its own brand-700 fill besides). A single base value cannot serve both grounds, and a caller
-   cannot override it either: `cn` does not dedupe, and two `focus-visible:ring-<colour>` classes
-   resolve by Tailwind's own emission order rather than by which one the caller wrote last. So it
-   is per variant, and `primaryOnDark` is the one that differs.
+   THE RING IS `brand-300` ON EVERY VARIANT, because this app is now dark on every page. It used
+   to be `ring-brand-700` in the base, correct on the old warm ground (7.9:1) and 2.3:1 on this
+   one - a focus indicator that fails the 3:1 non-text bar and is invisible against its own
+   brand-700 fill besides. The colour moved out of the base per variant so the dark pages could
+   override it; now that there are no light pages, they are all the same value again and the
+   variant-level declaration is kept only so that a future light surface has somewhere to put
+   itself. A caller still cannot override it: `cn` does not dedupe, and two
+   `focus-visible:ring-<colour>` classes resolve by Tailwind's emission order rather than by which
+   one the caller wrote last.
 
-   Palette, round 2: only `primary` carries the brand hue - it is THE accent, so a solid brand
-   button is the one loud thing on a page. Secondary is a white button on a hairline and ghost is
-   transparent; both step through neutral fills, so the brand never appears as a large area and
-   the eye always knows which control is the action. */
+   Palette: only `primary` carries the brand hue - it is THE accent, so a solid green button is the
+   one loud thing on a page. Secondary is a glass button on a hairline and ghost is transparent;
+   both step through neutral fills, so the brand never appears as a large area and the eye always
+   knows which control is the action. */
 const BASE =
   "inline-flex items-center justify-center gap-2 min-h-[44px] rounded-control font-semibold " +
   "transition duration-fast ease-out active:translate-y-px " +
@@ -34,14 +36,10 @@ const BASE =
 
 const VARIANTS: Record<Variant, string> = {
   // white on brand-700 is the darkest green step that still clears 4.5:1 - do not lighten it
-  primary: "bg-brand-700 text-white hover:bg-brand-800 active:bg-brand-900 focus-visible:ring-brand-700",
-  /* The same fill and the same white ink, on a DARK ground (the product page). Only the ring
-     changes: brand-300 is the one brand step light enough to be seen against charcoal. The fill
-     is deliberately identical, so the shop's primary action is the same colour everywhere. */
-  primaryOnDark: "bg-brand-700 text-white hover:bg-brand-800 active:bg-brand-900 focus-visible:ring-brand-300",
-  secondary: "bg-surface text-ink-700 ring-1 ring-line hover:bg-surface-sunken hover:ring-line-strong active:bg-surface-pressed focus-visible:ring-brand-700",
-  ghost: "text-ink-700 hover:bg-surface-sunken active:bg-surface-pressed focus-visible:ring-brand-700",
-  danger: "bg-surface text-danger-600 ring-1 ring-danger-200 hover:bg-danger-50 active:bg-danger-200 focus-visible:ring-brand-700",
+  primary: "bg-brand-700 text-white hover:bg-brand-800 active:bg-brand-900 focus-visible:ring-brand-300",
+  secondary: "bg-surface-glass/5 backdrop-blur-md text-ink-700 ring-1 ring-line hover:bg-surface-glass/10 hover:ring-line-strong active:bg-surface-pressed focus-visible:ring-brand-300",
+  ghost: "text-ink-700 hover:bg-surface-glass/10 active:bg-surface-pressed focus-visible:ring-brand-300",
+  danger: "bg-surface-glass/5 backdrop-blur-md text-danger-600 ring-1 ring-danger-200 hover:bg-surface-glass/10 active:bg-danger-50 focus-visible:ring-brand-300",
 };
 
 const SIZES: Record<Size, string> = {

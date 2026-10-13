@@ -2,189 +2,186 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokens. Channel triples (not hex) so Tailwind can apply opacity modifiers -
-   see the `token()` helper in tailwind.config.ts. Named by role: brand = a deep
-   forest green, accent = amber, ink = neutral text, grade.* = the A-D scale.
+/* Design tokens - "Luxury Boutique".
 
-   The brand ladder moved from emerald to forest green (#245B45 at brand-700). The
-   roles did not move with it - brand-700 is still the primary button fill and the
-   link ink, brand-50 the soft wash - so only the values below changed. The new
-   primary is DARKER than the emerald it replaces (white on it measures 7.9:1, up
-   from 5.5:1), which is why the "do not lighten it" note in Button.tsx still holds
-   and now has more headroom rather than less. */
+   Channel triples (not hex) so Tailwind can apply opacity modifiers - see the `token()` helper in
+   tailwind.config.ts. Named by ROLE.
+
+   THIS IS A FULL INVERSION. The storefront was a warm LIGHT theme; it is now a dark one, on the
+   same side of the fence as the backoffice. The roles did not move - `ink-*` is still a TEXT scale
+   where a higher number is stronger text, `surface` is still the raised step - so what changed is
+   the direction each ladder climbs:
+
+     surface   raised  (was the lightest, now a deep forest charcoal)
+     muted     the alternate band
+     sunken    the page  (the root layout paints the body with it)
+     ink-900   the strongest text (was slate-900, now warm off-white)
+
+   THE TRAP THIS FILE IS WRITTEN AROUND: seven sites in the app used `bg-ink-900` as a FILL (the
+   footer, the promo band, the cart count, a badge, a numbered step, the newsletter panel, the
+   input's dark tone). On a light ground that was a deliberate dark band under white text. Invert
+   ink-900 and every one of them becomes warm-white-on-white. A token whose VALUE flips under a
+   role the page did not mean cannot be caught by reading the palette; it is caught by enumerating
+   every opaque fill+ink pair and computing. Those seven now use `surface-deep`, which is a fill by
+   name and cannot invert into an ink.
+
+   Two values are deliberately NOT inverted, both the "one token, two jobs" split:
+   - `brand-700` is the primary button FILL (white on it measures 7.9:1) and would be 2.3:1 as ink
+     on this ground, so every ink site points at `brand-300` (8.5:1). One token, two jobs, and the
+     ground decides which value each job needs.
+   - `brand-500` stays the saturated step: it is a ring and a dot, never body text.
+
+   Every value below was checked before it was written. Body text on `surface` clears 4.5:1 with
+   room (ink-600 9.0:1, ink-500 6.6:1, ink-400 4.8:1), white on brand-700 measures 7.9:1, and each
+   grade chip's ink clears 5:1 on its own deep fill. `ink-300` is the deliberately dim step for
+   placeholders and disabled text. The hairlines are left below the 3:1 non-text bar on purpose -
+   see the note on `--line`; do not "correct" them. */
 @layer base {
+  /* The focus ring's offset band, declared on the SAME selector Tailwind's base uses, which is the
+     whole point. Tailwind sets this property on `*, ::before, ::after` - on every element - so a
+     `<button>` receives its own `#fff` and never inherits anything from `:root`: the two rules do
+     not compete for the same element, and specificity and layer order never enter into it. A
+     `:root` override therefore does NOTHING. Same selector, later in source order than
+     `@tailwind base`, so this wins. On a dark ground an unset offset paints a WHITE band behind
+     every focus ring in the app. */
+  *, ::before, ::after {
+    --tw-ring-offset-color: rgb(var(--surface-page));
+  }
+
   :root {
-    /* forest green. 700 is the primary fill and the link ink (7.9:1 on both white and
-       the page ground), 800/900 the hover and pressed steps below it. 50/100 are the
-       soft washes - --brand-100 is the brief's "soft sage" - and 300 is the one step
-       light enough to be read ON a dark fill, which is what the footer and the cart
-       badge use it for (6.6:1 on --ink-900). */
-    --brand-50: 243 247 244;
-    --brand-100: 231 239 232;
-    --brand-200: 200 219 207;
-    --brand-300: 143 184 162;
-    --brand-500: 53 119 90;
-    --brand-600: 42 106 82;
+    /* forest green. 700 is the primary fill, 800 the hover below it, 300 the INK read on this
+       ground, and 50/100/200 the soft fills (deep tints here, pale washes on the old light one).
+       Identical to the backoffice's ladder, so the two apps draw their one accent from one hue. */
+    --brand-50: 12 42 32;
+    --brand-100: 17 56 43;
+    --brand-200: 23 74 57;
+    --brand-300: 135 191 160;
+    --brand-500: 62 143 108;
+    --brand-600: 47 122 92;
     --brand-700: 36 91 69;
     --brand-800: 27 70 52;
     --brand-900: 18 51 37;
     --brand-950: 9 27 20;
 
-    /* Amber. Kept in the palette but no longer used in the UI: round 2 demoted the brand hue to the
-       single accent, so the two sale chips that used to be amber are now neutral dark and the
-       colour carries no meaning anywhere. Retained deliberately for a future semantic use. */
-    --accent-50: 255 251 235;
-    --accent-100: 254 243 199;
+    /* amber: the soft fills deepen and 700 is only ever an ink, so it moves to a light amber. */
+    --accent-50: 69 26 3;
+    --accent-100: 120 53 15;
     --accent-300: 252 211 77;
     --accent-400: 251 191 36;
     --accent-500: 245 158 11;
-    --accent-700: 180 83 9;
+    --accent-700: 253 230 138;
 
-    --ink-300: 203 213 225;
-    --ink-400: 148 163 184;
-    /* ink-500 carries the meta and secondary copy, so it is the one mid step that has to
-       clear 4.5:1 against the page ground - and warming that ground to #F7F7F2 (from
-       stone-50) dropped the old slate-500 to 4.43:1, under the bar. This is two steps
-       darker and measures 5.05:1 on the page, 5.43:1 on a card.
-       ink-400 is deliberately NOT raised with it: the same token is read ON the charcoal
-       footer (5.6:1 there), and darkening it enough for the light ground would sink it to
-       ~2.9:1 on the dark one. One token, two grounds, and the dark ground wins - the
-       light-ground kicker stays dim. */
-    --ink-500: 92 107 128;
-    --ink-600: 71 85 105;
-    --ink-700: 51 65 85;
-    --ink-900: 37 43 40;
+    /* text, inverted by step so "higher number = stronger" still holds. WARM, matching the brief's
+       off-white headings and the forest-and-charcoal family this app is drawn in - the backoffice
+       keeps its cool slate, so the two apps stay distinguishable at a glance.
 
-    --surface: 255 255 255;
-    --surface-muted: 248 250 252;
-    --surface-sunken: 241 245 249;
-    /* The pressed fill for a control the shopper is actively clicking. A role of its own
-       rather than a reuse of --line: the two happen to share a value today, and pairing
-       them would mean a later tweak to a hairline silently restyled every input press. */
-    --surface-pressed: 226 232 240;
+       ink-400 is set by the BRIGHTEST ground this app has, not by the average one. The ground is a
+       radial wash and its core is lighter than its edges; a card near the top of the page adds a
+       5% white glass film on top of that. Against that worst case the old 140 150 143 measured
+       3.52:1 - under AA for the kicker and meta copy it carries, which sit exactly there. This is
+       163 173 166: 4.65:1 on the brightest glass, 7.72:1 on the plain ground.
+       ink-300 is the one deliberately dim step (2.4:1 on that glass) and is for placeholders and
+       disabled text only - never for copy. */
+    --ink-300: 110 120 113;
+    --ink-400: 163 173 166;
+    --ink-500: 168 177 170;
+    --ink-600: 198 206 199;
+    --ink-700: 226 231 226;
+    --ink-900: 247 247 242;
+    /* The one ink that stays DARK: text sitting on a bright fill (the fallback badge's amber, a
+       grade's solid tile). Every other ink step is light now, so a bright fill would otherwise
+       have to carry light text at ~1.3:1. */
+    --ink-inverse: 2 6 23;
 
-    /* The ground. The page is a WARM neutral so white cards read as cards, and the
-       interactive fills above stay cool - warm ground, cool hairlines.
-       `page` is the document background (the brief's warm off-white), `page-alt` a
-       slightly deeper band for the quiet bars (the header tagline strip). Forest green
-       is no longer any page's background. */
-    --surface-page: 247 247 242;      /* warm off-white */
-    --surface-page-alt: 240 240 234;  /* the deeper band */
+    /* The ladder keeps its DIRECTION: surface raised, muted the alternate band, sunken the PAGE.
+       The root layout paints the body with `surface-page`, so sunken/page are the deepest steps and
+       cards sit above them. A hover that darkens onto a card is simply a recessed row. */
+    --surface-page: 15 23 42;      /* the page - the edge of the ground gradient */
+    --surface-page-alt: 21 30 38;  /* the quiet band (the header's tagline strip) */
+    --surface: 26 45 36;           /* cards and panels - the raised step */
+    --surface-muted: 20 34 31;     /* the alternate band, between the two */
+    --surface-sunken: 10 16 30;    /* recessed fills: wells, disabled, the quantity stepper */
+    --surface-pressed: 40 62 50;   /* the pressed fill of a control */
+    /* A fill that is dark BY NAME. This is the token the seven `bg-ink-900` sites needed and never
+       had: something to paint a deliberately deep band with that cannot invert into an ink. */
+    --surface-deep: 8 14 26;
+    /* The glass tint. Held as CHANNELS and always used at a low alpha (`bg-surface-glass/5`), so
+       the blur and the border are the only things the design has to get right. */
+    --surface-glass: 255 255 255;
 
-    /* The hairline boundaries below sit deliberately under the 3:1 non-text bar against white
-       (1.23:1 and 1.48:1). A recorded exception, not an oversight: raising them would put mid-grey
-       outlines on every surface in both apps. Values are unchanged - do not "correct" them. */
-    --line: 226 232 240;
-    --line-strong: 203 213 225;
+    /* Hairlines, deliberately below the 3:1 non-text bar. A recorded exception, not an oversight:
+       raising them puts a bright grey outline on every card and every input. Do not "fix" these. */
+    --line: 55 70 62;
+    --line-strong: 82 100 90;
 
-    /* The error ink, used ONLY as text - the four inline error messages and the danger Button's
-       label - so it can be darkened without touching a fill anywhere. It was 220 38 38, which
-       measured 4.49:1 on the page ground (under AA for the 14px it is set in) and 3.34:1 on the
-       danger Button's own `active:` fill. This is 174 27 27: 6.6:1 on the page, 7.1:1 on a card,
-       and 4.9:1 on the danger-200 active fill. The backoffice's equivalent was closed when that
-       app went dark; the storefront's was left open. */
-    --danger-50: 254 242 242;
-    --danger-200: 254 202 202;
-    --danger-600: 174 27 27;
+    /* The user agent's own palette: scrollbars, <select> popups, number spinners, and the fill
+       Chrome paints over an autofilled field. Unset, all of them stay light on a dark page. */
+    color-scheme: dark;
 
-    /* Grade A is the brand hue by design (see the note in tailwind.config.ts), so it moved
-       with the brand ladder. Leaving it on emerald would put two different greens on one
-       product card - the muted forest of the CTA next to the old bright emerald chip - which
-       is the same "two greens at a glance" problem that pushed grade B to sky in the first
-       place. B/C/D are untouched. */
-    --grade-a-solid: 42 106 82;
-    --grade-a-soft: 231 239 232;
-    --grade-a-ink: 27 70 52;
-    --grade-b-solid: 2 132 199;
-    --grade-b-soft: 240 249 255;
-    --grade-b-ink: 3 105 161;
-    --grade-c-solid: 245 158 11;
-    --grade-c-soft: 255 251 235;
-    --grade-c-ink: 180 83 9;
-    --grade-d-solid: 100 116 139;
-    --grade-d-soft: 241 245 249;
-    --grade-d-ink: 71 85 105;
+    --danger-50: 69 10 10;
+    --danger-200: 153 27 27;
+    --danger-600: 248 113 113;
 
-    /* Motion. The one source of truth for every transition in the storefront: two durations
-       (controls = fast, surfaces that move = base) and a single ease-out curve that starts
-       quickly and settles, which reads calmer than the browser default. Tailwind maps these
-       in tailwind.config.ts, so components write `duration-fast ease-out` and no page ever
-       hand-picks a millisecond value. */
+    /* the A-D scale: the soft fill deepens, the ink lightens, the solid stays the saturated dot.
+       Grade A is the brand hue by design, so it follows the forest ladder. */
+    --grade-a-solid: 62 143 108;
+    --grade-a-soft: 12 42 32;
+    --grade-a-ink: 135 191 160;
+    --grade-b-solid: 56 189 248;
+    --grade-b-soft: 12 74 110;
+    --grade-b-ink: 125 211 252;
+    --grade-c-solid: 251 191 36;
+    --grade-c-soft: 120 53 15;
+    --grade-c-ink: 252 211 77;
+    --grade-d-solid: 148 163 184;
+    --grade-d-soft: 51 65 85;
+    --grade-d-ink: 203 213 225;
+
+    /* The ground itself: a radial wash from a deep forest at the top of the viewport out to the
+       page colour at the edges. It is painted on the body (below) rather than on any element, so a
+       page cannot accidentally cover it - and `--surface-page` stays the flat colour underneath as
+       the fallback for anything that needs an opaque ground. */
+    --ground-core: 26 58 42;
+    --ground-edge: 15 23 42;
+
+    /* Motion. Two durations and one ease-out curve that starts quickly and settles, which reads
+       calmer than the browser default. Tailwind maps these in tailwind.config.ts, so components
+       write `duration-fast ease-out` and no page ever hand-picks a millisecond value. */
     --motion-fast: 150ms;
     --motion-base: 200ms;
     --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  /* Reduced motion: the durations collapse to zero, so every token-driven transition in the
-     app becomes an instant state change without any component having to opt out. Components
-     that also translate on hover/press carry `motion-reduce:` variants for the movement
-     itself - a 0ms transition would still jump the element a pixel. */
+  /* The ground. `fixed` so the wash does not scroll away from a long catalog page, and painted as
+     a background-IMAGE so the flat `bg-surface-page` underneath still works as a fallback and as
+     the opaque colour behind a translucent panel. */
+  body {
+    background-image: radial-gradient(120% 90% at 50% 0%,
+      rgb(var(--ground-core)) 0%, rgb(var(--ground-edge)) 68%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+
+  /* The hero's floating device cards. Transform-only, so it never triggers layout, and it lives
+     here rather than in the markup because a keyframe cannot be spelled with utilities. The
+     duration is deliberately long and the travel deliberately small: this is drift, not bounce,
+     and it is the one piece of motion on the page that nothing is waiting on. Someone who has
+     asked for reduced motion gets the cards where they are - the fan and the glow still read. */
+  @keyframes hero-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-10px); }
+  }
+  .hero-float { animation: hero-float 7s ease-in-out infinite; }
+
+  /* Reduced motion: the durations collapse to zero, so every token-driven transition in the app
+     becomes an instant state change without any component having to opt out. Components that also
+     translate on hover/press carry `motion-reduce:` variants for the movement itself - a 0ms
+     transition would still jump the element a pixel. */
   @media (prefers-reduced-motion: reduce) {
     :root {
       --motion-fast: 0ms;
       --motion-base: 0ms;
     }
-  }
-
-  /* The dark product page. One route in this shop is drawn on charcoal instead of the warm
-     ground: the product detail page, where the photograph and the price are the whole screen
-     and a dark ground makes both carry. Everything around it - the header above, the catalog
-     that links here, the cart - stays light.
-
-     It is a SCOPE, not a second theme, and for the same reason the backoffice's print documents
-     are one: the page's markup keeps writing `bg-surface`, `text-ink-900` and `ring-line`, and
-     resolves them against the ladder below. Nothing in the page file names a hex, so the dark
-     treatment is one block here rather than forty class strings over there.
-
-     Two values are deliberately NOT rebound, and both are the "one token, two jobs" trap this
-     palette has hit before:
-       - brand-700 stays #245B45. It is the CTA FILL, and white on it measures 7.9:1 on any
-         ground. It is NOT usable as ink here (2.26:1 on this charcoal), so links and the price
-         point at brand-300 (6.9:1) - which is the same split the charcoal footer already makes.
-       - the brand fill steps 500/800/900 are unchanged for the same reason. */
-  .pdp-dark {
-    --surface-page: 37 43 40;      /* the charcoal ground */
-    --surface-page-alt: 31 36 33;
-    --surface: 46 54 49;           /* panels and cards - the raised step */
-    --surface-muted: 41 48 44;
-    --surface-sunken: 30 35 32;    /* recessed: the image well, the quantity well */
-    --surface-pressed: 60 70 64;
-
-    --line: 66 76 70;
-    --line-strong: 92 104 96;
-
-    /* The ink scale inverts: on a dark ground the strongest text is the lightest value. */
-    --ink-900: 247 247 242;        /* headings */
-    --ink-700: 226 231 226;
-    --ink-600: 198 206 199;        /* body copy */
-    --ink-500: 168 177 170;        /* meta */
-    --ink-400: 140 150 143;        /* the kicker - 4.7:1, still readable on this ground */
-    --ink-300: 110 120 113;        /* the deliberately dim step: placeholders, disabled */
-
-    /* The soft brand fills deepen and the link ink lightens, exactly as the footer's do. */
-    --brand-50: 12 42 32;
-    --brand-100: 17 56 43;
-    --brand-300: 135 191 160;
-
-    --danger-600: 248 113 113;
-
-    /* Grade A is the brand hue; the soft fills deepen and the inks lighten with it. Same values
-       the backoffice uses on its dark ground, so a grade chip reads the same in both apps. */
-    --grade-a-soft: 12 42 32;   --grade-a-ink: 135 191 160;
-    --grade-b-soft: 12 74 110;  --grade-b-ink: 125 211 252;
-    --grade-c-soft: 120 53 15;  --grade-c-ink: 252 211 77;
-    --grade-d-soft: 51 65 85;   --grade-d-ink: 203 213 225;
-
-    /* The user agent's own palette follows the ground: unset, this page would draw light
-       scrollbars, light <select> popups and a light spinner on charcoal. */
-    color-scheme: dark;
-  }
-
-  /* The focus ring's offset band, on the same selector Tailwind's base uses - see the note in the
-     backoffice's stylesheet for why `:root` cannot do this. It must be the PAGE ground, not
-     `--surface`: a control sitting directly on the charcoal (the CTA, the quantity buttons) would
-     otherwise draw its gap in the panel colour and show a visible seam. */
-  .pdp-dark, .pdp-dark *, .pdp-dark ::before, .pdp-dark ::after {
-    --tw-ring-offset-color: rgb(var(--surface-page));
+    .hero-float { animation: none; }
   }
 }

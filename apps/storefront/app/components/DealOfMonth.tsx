@@ -25,7 +25,7 @@ export default function DealOfMonth({ deal }: { deal?: Deal | null }) {
           } />
         <div className="p-8 md:w-1/2 flex flex-col justify-center">
           {/* a sale chip, not a colour - the neutral dark keeps emerald for the CTA below */}
-          <Badge colorClass="bg-ink-900 text-white" className="self-start">
+          <Badge colorClass="bg-surface-deep text-ink-700" className="self-start">
             {deal.badge || "Deal of the Month"}
           </Badge>
           <Heading level="h2" as="p" className="mt-4">{title}</Heading>

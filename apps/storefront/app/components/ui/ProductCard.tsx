@@ -101,7 +101,7 @@ export default function ProductCard({ href, title, brand, category, slug, imageU
         <div className="relative">
           <ProductArt slug={slug} imageUrl={imageUrl} alt={name} className="w-full aspect-[4/3] object-cover"
             fallback={<Initials brand={brand} large />} />
-          {!imageUrl && <Badge colorClass="bg-brand-700 text-white" className="absolute top-3 right-3">Eco choice</Badge>}
+          {!imageUrl && <Badge colorClass="bg-brand-700 text-white ring-1 ring-brand-500/50" className="absolute top-3 right-3">Eco choice</Badge>}
         </div>
         <div className="p-5">
           {eyebrowLine && <Eyebrow>{eyebrowLine}</Eyebrow>}
@@ -116,7 +116,7 @@ export default function ProductCard({ href, title, brand, category, slug, imageU
             className={cn(
               "font-medium mt-2 block truncate rounded-control",
               "after:absolute after:inset-0 after:rounded-2xl after:content-['']",
-              "focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-brand-700 focus-visible:after:ring-inset",
+              "focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-brand-300 focus-visible:after:ring-inset",
             )}>
             {name}
           </a>
@@ -124,11 +124,16 @@ export default function ProductCard({ href, title, brand, category, slug, imageU
             <span className="font-semibold text-sm">{price(priceCents)}</span>
             {stock && <StockPill stock={stock} />}
           </div>
-          {/* Above the overlay (z-10), so it stays a control of its own: hover, keyboard and
-              middle-click all behave like a button rather than being swallowed by the tile link.
-              Secondary, not primary: a grid of tiles puts one CTA per card on screen, and the design
-              system spends emerald on the page's one real action - see Button.tsx's own comment. */}
-          <Button variant="secondary" href={href} className="relative z-10 mt-3 w-full">View product</Button>
+          {/* THE card's action, and it names the number: a tile that says only "View product" makes
+              the shopper open the page to learn the one thing the grid could have told them. With
+              no listed units there is no number to name, so it falls back to the neutral label
+              rather than advertising "Buy at -".
+              `relative z-10` keeps it a control of its own: the tile-wide link above is what would
+              otherwise swallow the click. */}
+          <Button variant={priceCents !== null && priceCents !== undefined ? "primary" : "secondary"}
+            href={href} className="relative z-10 mt-3 w-full">
+            {priceCents !== null && priceCents !== undefined ? "Buy at " + price(priceCents) : "View product"}
+          </Button>
         </div>
       </Card>
     );

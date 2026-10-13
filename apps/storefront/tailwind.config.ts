@@ -46,6 +46,8 @@ const config: Config = {
           600: token("--ink-600"),
           700: token("--ink-700"),
           900: token("--ink-900"),
+          // the dark ink for text on a BRIGHT fill - see globals.css
+          inverse: token("--ink-inverse"),
           DEFAULT: token("--ink-900"),
         },
         // destructive actions (cart remove, checkout errors)
@@ -60,9 +62,16 @@ const config: Config = {
           muted: token("--surface-muted"),
           sunken: token("--surface-sunken"),
           pressed: token("--surface-pressed"),
-          // the warm neutral ground: `page` is the document, `page-alt` a deeper quiet band
+          // the ground: `page` is the document, `page-alt` the quiet band (the header strip)
           page: token("--surface-page"),
           "page-alt": token("--surface-page-alt"),
+          /* A fill that is dark BY NAME - the footer, the promo band, the cart count, a numbered
+             step. It exists because `ink-900` was doing that job and is now near-white: a token
+             whose value flips under a role the page did not mean. Always a fill, never an ink. */
+          deep: token("--surface-deep"),
+          /* The glass tint, used at a low alpha: `bg-surface-glass/5 backdrop-blur-md`. Held as
+             channels so the alpha is the call site's decision, not the token's. */
+          glass: token("--surface-glass"),
         },
         // hairlines
         line: {
@@ -82,6 +91,14 @@ const config: Config = {
       borderRadius: {
         card: "1rem", // content panels
         control: "0.75rem", // tiles, buttons, inputs
+      },
+      /* The glow. On a dark ground a grey shadow is invisible - the boundary has to be drawn in
+         light rather than cast in darkness - so a "shadow" here is a brand hairline plus a soft
+         bloom. Two layers on purpose: the 1px ring is the border the design asks for, the blur is
+         the glow. `glow-sm` is the resting hover on a card; `glow` is the hero button. */
+      boxShadow: {
+        glow: "0 0 0 1px rgb(var(--brand-500) / 0.45), 0 10px 40px -12px rgb(var(--brand-500) / 0.45)",
+        "glow-sm": "0 0 0 1px rgb(var(--brand-500) / 0.35), 0 4px 22px -10px rgb(var(--brand-500) / 0.40)",
       },
       fontFamily: {
         // --font-sans / --font-display are set by next/font on <html> (layout.tsx). Both are

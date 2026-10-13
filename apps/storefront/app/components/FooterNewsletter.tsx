@@ -34,11 +34,11 @@ export default function FooterNewsletter() {
   }
 
   return (
-    <div className="rounded-control bg-ink-900/60 px-4 py-3">
-      <p className="text-sm font-semibold text-white">Get the drop list</p>
+    <div className="rounded-control bg-surface-deep/60 px-4 py-3">
+      <p className="text-sm font-semibold text-ink-900">Get the drop list</p>
       <p className="text-xs text-ink-400 mt-1">Fresh stock alerts and deals - no spam.</p>
       <form className="mt-2 flex flex-wrap gap-2" onSubmit={submit}>
-        <Input tone="dark" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+        <Input tone="deep" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com" aria-label="Email address"
           className="flex-1 min-w-[12rem] text-sm" />
         <Button type="submit" disabled={busy}>

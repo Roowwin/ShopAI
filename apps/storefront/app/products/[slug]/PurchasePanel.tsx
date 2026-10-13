@@ -4,7 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { aud } from "@/lib/api";
 import { cartAdd, cartGet } from "@/lib/cart";
 import { GRADES } from "@/lib/grades";
-import { Badge, Button, Card, Eyebrow, Heading, linkOnDarkClass } from "../../components/ui";
+import { Badge, Button, Card, Eyebrow, Heading, fieldClass, linkClass } from "../../components/ui";
 
 /* THE PURCHASE PANEL - the right-hand column of the product page, and the only part of it that
    changes with stock.
@@ -24,13 +24,13 @@ import { Badge, Button, Card, Eyebrow, Heading, linkOnDarkClass } from "../../co
    serial, still locked at checkout, still refused twice by cartAdd()'s dedupe. Nothing is
    bundled; "2" means two devices.
 
-   THE GRADE SELECT IS NOT THE STOREFRONT'S `fieldClass`. That shell focuses to `ring-brand-700`,
-   which is the right ring on the warm ground and 2.3:1 on this charcoal. Same shape, dark-ground
-   ring - and the same reason Button carries a `primaryOnDark` variant. */
+   THE CONTROLS COME FROM THE SHARED SHELL. `fieldClass` is the one control shell both the Input
+   primitive and a bare <select> draw from, and its focus ring is brand-300 - which is correct for
+   every page now that the whole app is dark. These two constants only add the recessed fill and
+   the sizing the panel needs; they do not re-invent the shell. */
 const FIELD =
-  "w-full rounded-control text-sm outline-none transition duration-fast ease-out " +
-  "bg-surface-sunken text-ink-900 ring-1 ring-line hover:ring-line-strong " +
-  "focus:ring-2 focus:ring-brand-300 motion-reduce:transition-none";
+  fieldClass + " w-full px-3 py-2.5 " +
+  "bg-surface-sunken text-ink-900 ring-1 ring-line hover:ring-line-strong";
 
 const STEP =
   "h-11 w-11 shrink-0 inline-flex items-center justify-center rounded-control text-lg font-semibold " +
@@ -127,8 +127,8 @@ export default function PurchasePanel({ units, title, brand, category, slug, spe
   return (
     <Card className="p-6 ring-1 ring-line">
       <nav aria-label="Breadcrumb" className="text-xs text-ink-500">
-        <a href="/" className={linkOnDarkClass}>Home</a> <span aria-hidden="true">/</span>{" "}
-        <a href={"/search?q=" + encodeURIComponent(category)} className={linkOnDarkClass}>{category}</a>
+        <a href="/" className={linkClass}>Home</a> <span aria-hidden="true">/</span>{" "}
+        <a href={"/search?q=" + encodeURIComponent(category)} className={linkClass}>{category}</a>
       </nav>
 
       {/* The brand is a muted line, not a link - it is a label on the title, and a link here
@@ -195,7 +195,7 @@ export default function PurchasePanel({ units, title, brand, category, slug, spe
             </div>
           </div>
 
-          <Button variant="primaryOnDark" className="mt-6 w-full"
+          <Button variant="primary" className="mt-6 w-full"
             disabled={soldOut || stock === 0 || allInBag} onClick={addToBag}>
             {allInBag ? "In your bag" : "Add to Bag"}
           </Button>
@@ -246,7 +246,7 @@ export default function PurchasePanel({ units, title, brand, category, slug, spe
           </dl>
           <p className="mt-3 text-xs text-ink-500">
             Model <span className="text-ink-600">{slug}</span> - grading explained on the{" "}
-            <a href="/grades" className={linkOnDarkClass}>grades page</a>.
+            <a href="/grades" className={linkClass}>grades page</a>.
           </p>
         </details>
       )}

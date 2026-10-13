@@ -140,7 +140,7 @@ export default function CheckoutPage() {
           <Heading level="h2">Delivery</Heading>
           <label className="block text-xs font-medium text-ink-600" htmlFor="country">Country</label>
           <select id="country" value={country} onChange={(e) => setCountry(e.target.value)}
-            className={cn(fieldClass, "px-3 py-2.5 ring-1 ring-line bg-surface hover:ring-line-strong")}>
+            className={cn(fieldClass, "px-3 py-2.5 ring-1 ring-line bg-surface-sunken hover:ring-line-strong")}>
             <option value="AU">Australia</option>
             <option value="NZ">New Zealand</option>
           </select>
