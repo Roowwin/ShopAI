@@ -85,9 +85,19 @@ export const GROUPS: NavGroup[] = [
   },
   {
     id: "finance-analytics", heading: "Finance & Analytics", icon: "chart", items: [
-      /* Both unbuilt. The finance API exists on the rail (`/staff/finance`, `/staff/logistics/payouts`)
-         but neither has a screen yet, so both are placeholders rather than links to an empty shell. */
-      { href: "/admin/finance", label: "Financials", soon: true },
+      /* Financials is live: the landing page carries the month's headline, and the three registers
+         hang under it. The parent is a real page rather than a menu because "how are we doing" is
+         the question an operator opens this section to ask. */
+      {
+        href: "/admin/finance", label: "Financials",
+        children: [
+          { href: "/admin/finance/invoices", label: "Invoices" },
+          { href: "/admin/finance/expenses", label: "Expenses" },
+          { href: "/admin/finance/pnl", label: "P&L Report" },
+        ],
+      },
+      /* Still unbuilt, and still shown rather than hidden: there is no reporting surface beyond the
+         statement, so this is the roadmap's one remaining placeholder under this category. */
       { href: "/admin/reports", label: "Reports & Business Intelligence", soon: true },
     ],
   },

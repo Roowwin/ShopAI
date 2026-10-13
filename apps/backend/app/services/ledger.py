@@ -98,6 +98,109 @@ async def get_invoice(db, invoice_id: int) -> dict | None:
     return _invoice_row(row) if row is not None else None
 
 
+async def invoice_document(db, invoice_id: int) -> dict | None:
+    """The invoice PLUS what a printed document needs: who it is billed to, where it went, and the
+    lines that make up the subtotal.
+
+    WHY THIS IS A SECOND READ AND NOT FIELDS ON THE FIRST. `_invoice_row` is the shape the LIST and
+    the status writes return, and it is fetched for every row of a page - a customer block and a
+    line list on it would be three queries per invoice to draw a table that shows neither. The
+    document is fetched once, for one invoice, by the screen that prints it.
+
+    THE LINES COME FROM THE ORDER, not from a copy on the invoice. There is no invoice_lines table
+    and there should not be: an invoice states what an order contained, the order is where that is
+    recorded, and a duplicated line list is a second answer that drifts the first time a line is
+    corrected. The header amounts are the invoice's own (they are the numbers that were DOCUMENTED);
+    the lines are the order's (they are what the document is about).
+    """
+    inv = await get_invoice(db, invoice_id)
+    if inv is None:
+        return None
+    out = dict(inv)
+    out["customer"] = None
+    out["ship_to"] = None
+    out["lines"] = []
+    if inv["order_id"] is None:
+        return out
+
+    order = (await db.execute(text("""
+        SELECT customer_id, ship_to_name, ship_line1, ship_line2, ship_city, ship_state,
+               ship_postcode, shipping_country
+        FROM orders WHERE id = :o"""), {"o": inv["order_id"]})).mappings().first()
+    if order is None:
+        return out
+    out["ship_to"] = {
+        "name": order["ship_to_name"] or "", "line1": order["ship_line1"] or "",
+        "line2": order["ship_line2"] or "", "city": order["ship_city"] or "",
+        "state": order["ship_state"] or "", "postcode": order["ship_postcode"] or "",
+        "country": order["shipping_country"] or "AU",
+    }
+    if order["customer_id"] is not None:
+        c = (await db.execute(text(
+            "SELECT email::text AS email, display_name FROM users WHERE id = :i"),
+            {"i": order["customer_id"]})).mappings().first()
+        if c is not None:
+            out["customer"] = {"email": c["email"], "display_name": c["display_name"]}
+    lines = (await db.execute(text("""
+        SELECT ol.asset_id, ol.sku_title, ol.qty, ol.unit_price_cents, ol.line_total_cents,
+               a.grade, right(a.serial_number::text, 4) AS serial_tail
+        FROM order_lines ol LEFT JOIN assets a ON a.id = ol.asset_id
+        WHERE ol.order_id = :o ORDER BY ol.id"""), {"o": inv["order_id"]})).mappings().all()
+    out["lines"] = [{"asset_id": r["asset_id"], "sku_title": r["sku_title"], "qty": int(r["qty"]),
+                     "unit_price_cents": int(r["unit_price_cents"]),
+                     "line_total_cents": int(r["line_total_cents"]), "grade": r["grade"],
+                     "serial_tail": r["serial_tail"]} for r in lines]
+    return out
+
+
+async def update_expense(db, expense_id: int, *, changes: dict) -> dict | None:
+    """Correct a recorded expense. None when there is no such row.
+
+    ONLY THE FIELDS NAMED are written, so an edit of the description cannot silently re-date a cost
+    that a period has already been reported on - the same rule the invoice's own status ladder
+    follows in the other direction. `paid_at` is derived from `paid` rather than taken from the
+    caller: a timestamp is not something a form should be trusted to spell.
+
+    Returns the stored row so the caller can audit the AFTER state from the database rather than
+    from its own request.
+    """
+    sets, params = [], {"i": expense_id}
+    if "category" in changes:
+        sets.append("category = :cat")
+        params["cat"] = changes["category"]
+    if "vendor" in changes:
+        sets.append("vendor = :ven")
+        params["ven"] = changes["vendor"]
+    if "description" in changes:
+        sets.append("description = :descr")
+        params["descr"] = changes["description"]
+    if "amount_cents" in changes:
+        sets.append("amount_cents = :amt")
+        params["amt"] = changes["amount_cents"]
+    if "tax_cents" in changes:
+        sets.append("tax_cents = :tax")
+        params["tax"] = changes["tax_cents"]
+    if "incurred_on" in changes:
+        sets.append("incurred_on = COALESCE(CAST(:on AS date), CURRENT_DATE)")
+        params["on"] = changes["incurred_on"]
+    if "paid" in changes:
+        sets.append("paid_at = CASE WHEN :paid THEN COALESCE(paid_at, now()) ELSE NULL END")
+        params["paid"] = changes["paid"]
+    if not sets:
+        return await get_expense(db, expense_id)
+    row = (await db.execute(text(
+        f"UPDATE expenses SET {', '.join(sets)}, updated_at = now() WHERE id = :i"
+        f" RETURNING {_EXPENSE_COLUMNS}"), params)).mappings().first()
+    return _expense_row(row) if row is not None else None
+
+
+async def get_expense(db, expense_id: int) -> dict | None:
+    row = (await db.execute(text(
+        f"SELECT {_EXPENSE_COLUMNS} FROM expenses WHERE id = :i"),
+        {"i": expense_id})).mappings().first()
+    return _expense_row(row) if row is not None else None
+
+
 # The invoice lifecycle is a short ladder and not a free-form field: `paid` says the money arrived,
 # `void` says the document is withdrawn, and neither may be walked back by an edit - a void invoice
 # that can be un-voided is a document whose number cannot be trusted.
@@ -134,11 +237,26 @@ async def set_invoice_status(db, invoice_id: int, status: str) -> dict | None:
 
 
 async def list_invoices(db, *, since: date | None, until: date | None, status: str | None,
+                        customer: str | None, amount_min: int | None, amount_max: int | None,
                         limit: int, offset: int) -> tuple[int, list[dict]]:
-    params = {"f": since, "t": until, "s": status, "lim": limit, "off": offset}
+    """A page of invoices, filtered by date, status, CUSTOMER and AMOUNT.
+
+    The customer filter is an EXISTS over `users` rather than a join: the invoice already carries
+    `customer_id`, a join would multiply nothing here but would have to be repeated in the count
+    query, and one predicate in one string is harder to get out of step with itself. The pattern is
+    built by the caller (a `%`-wrapped needle) so this stays a WHERE clause rather than a parser.
+    """
+    params = {"f": since, "t": until, "s": status, "pat": customer,
+              "amin": amount_min, "amax": amount_max, "lim": limit, "off": offset}
     where = ("WHERE (CAST(:f AS date) IS NULL OR i.issued_on >= CAST(:f AS date))"
              "  AND (CAST(:t AS date) IS NULL OR i.issued_on <= CAST(:t AS date))"
-             "  AND (CAST(:s AS text) IS NULL OR i.status = CAST(:s AS text))")
+             "  AND (CAST(:s AS text) IS NULL OR i.status = CAST(:s AS text))"
+             "  AND (CAST(:pat AS text) IS NULL OR EXISTS ("
+             "        SELECT 1 FROM users u WHERE u.id = i.customer_id"
+             "          AND (u.email::text ILIKE CAST(:pat AS text)"
+             "               OR u.display_name ILIKE CAST(:pat AS text))))"
+             "  AND (CAST(:amin AS bigint) IS NULL OR i.total_cents >= CAST(:amin AS bigint))"
+             "  AND (CAST(:amax AS bigint) IS NULL OR i.total_cents <= CAST(:amax AS bigint))")
     rows = (await db.execute(text(
         f"SELECT {_INVOICE_COLUMNS} FROM invoices i {where}"
         " ORDER BY i.issued_on DESC, i.id DESC LIMIT :lim OFFSET :off"), params)).mappings().all()
