@@ -16,19 +16,16 @@ loosening done blind here.
 The two DDL statements are idempotent (`DROP ... IF EXISTS` then `ADD`), so applying this against a
 database where the constraint has already been relaxed by hand is a no-op rather than an error.
 
-A NOTE ON THE REVISION CHAIN, FOR WHOEVER MERGES THIS. `down_revision` is `0015_excel_foundation`,
-because that is the head of the committed tree this was written against. A CONCURRENT piece of work
-has an uncommitted `0016_price_intelligence` whose parent is also 0015, so once both land the history
-will have two heads and want `alembic merge -m "merge settings and pricing" heads` (or a reparent of
-this file onto 0016, which is the tidier fix if that revision lands first). This is stated here
-rather than discovered at deploy time; alembic's refusal to guess is the loud failure, not the quiet
-one.
+THE REVISION CHAIN. This was written as `0016_settings_api` with parent `0015_excel_foundation`,
+alongside a concurrent `0016_price_intelligence` with the same parent - two heads, which alembic
+refuses to upgrade past. That revision has since landed, so this is reparented onto it and renamed
+`0017_settings_api`, giving one linear chain: 0015 -> 0016_price_intelligence -> 0017_settings_api.
 """
 
 from alembic import op
 
-revision = "0016_settings_api"
-down_revision = "0015_excel_foundation"
+revision = "0017_settings_api"
+down_revision = "0016_price_intelligence"
 branch_labels = None
 depends_on = None
 

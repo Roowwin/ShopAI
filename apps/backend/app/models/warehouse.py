@@ -42,6 +42,11 @@ class Asset(Base):
     grade: Mapped[str | None] = mapped_column(String, nullable=True)
     cost_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     sale_price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # What the product import computed as this unit's price (0016_price_intelligence), and which
+    # evidence it used. ADVISORY ONLY: `sale_price_cents` above stays the one field a listing is
+    # priced from, and the importer never writes a price the sheet did not carry (ADR 0006).
+    suggested_price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    suggested_price_basis: Mapped[str | None] = mapped_column(Text, nullable=True)
     intake_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     location: Mapped[str | None] = mapped_column(Text, nullable=True)
     condition_report: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

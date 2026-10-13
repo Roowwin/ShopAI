@@ -79,6 +79,13 @@ from app.services.audit import audit
 # The margin guard is one rule shared with the staff doors and the storefront (services/margin), so
 # a row refused here is the same unit the shop would hide - not a second, differently-worded check.
 from app.services.margin import margin_refusal
+# Smart pricing rides ALONG with this door rather than living in it: the engine is a pure module
+# (services/pricing.py) so its arithmetic is testable without a database, and this file only feeds
+# it the row and writes back what it says. It is deliberately not an AI call - the reasons are in
+# that module's header, and the shortest of them is that preview and commit must agree.
+from app.services.pricing import (
+    BASIS_NONE, describe_method, margin_verdict, margin_warning, suggest_price,
+)
 
 router = APIRouter(prefix="/staff", tags=["staff-imports"])
 
@@ -528,6 +535,83 @@ async def _lookup_existing_skus(db, skus: list[str]) -> set[str]:
     return set(rows)
 
 
+async def _load_comparables(db, parsed: list[dict]) -> dict[tuple[str, str], dict]:
+    """The market evidence for every (model, grade) this file mentions, in ONE query per call.
+
+    A per-row lookup would be one round trip per line of a sheet that is allowed to carry five
+    thousand of them, and the whole file shares a handful of models, so the aggregate is fetched
+    once and keyed by the pair the pricing ladder asks for.
+
+    The scope is the MODEL STRING and the GRADE, matching `staff_ai.market_hint` exactly - one model
+    arrives under more than one `products` row, so scoping to `product_id` would hide the very
+    comparables this exists to find. Only units that carry a price count: `sale_price_cents` is a
+    statement an operator deliberately made about what that model at that grade is worth, which is
+    what makes it evidence rather than a column that happens to be numeric.
+
+    Nothing here reads a row's own price from another unit: the returned shape is a count and one
+    average per pair, the same two facts the Market Hint shows.
+    """
+    keys = {(r["model"].lower(), r["grade"]) for r in parsed if r["model"] and r["grade"]}
+    if not keys:
+        return {}
+    models = sorted({model for model, _ in keys})
+    rows = (await db.execute(text("""
+        SELECT lower(pr.model) AS model, a.grade, count(*) AS n,
+               avg(a.sale_price_cents) AS avg_cents
+        FROM assets a JOIN products pr ON pr.id = a.product_id
+        WHERE a.sale_price_cents IS NOT NULL AND a.grade IS NOT NULL
+          AND lower(pr.model) = ANY(:models)
+        GROUP BY 1, 2"""), {"models": models})).mappings().all()
+    return {(r["model"], r["grade"]): {"sample_size": int(r["n"]),
+                                       "avg_cents": int(round(float(r["avg_cents"])))}
+            for r in rows}
+
+
+def _price_rows(parsed: list[dict], comparables: dict) -> list[dict]:
+    """Attach a suggestion and a margin verdict to every parsed row, and collect the warnings.
+
+    Runs on the SAME parsed rows the commit will write, which is what makes the number on screen the
+    number in the database: the engine is deterministic, so there is no second answer to disagree
+    with.
+
+    A warning NEVER becomes an issue. `row["issues"]` is what refuses the whole file (the importer's
+    all-or-nothing gate); a thin margin is a commercial decision the operator is entitled to make -
+    a corporate lot may be cleared at 8% on purpose - so the guard's job is to make them look, and
+    it would be wrong to make a legal lot un-importable on the strength of an opinion.
+    """
+    warnings: list[dict] = []
+    for record in parsed:
+        suggestion = suggest_price(
+            comparables=comparables.get((record["model"].lower(), record["grade"])),
+            fmv_cents=record["fmv_cents"], settlement_cents=record["settlement_cents"],
+            description=record["technical_notes"], grade=record["grade"])
+        block = suggestion.as_dict()
+        # How far the suggestion sits from the sheet's own asking price. Not a warning - the operator
+        # set that number and is entitled to it - but the single most useful thing the preview can
+        # say about a row, and the UI renders it beside the two figures.
+        if suggestion.suggested_price_cents is not None and record["sale_price_cents"] is not None:
+            block["delta_vs_resale_cents"] = (suggestion.suggested_price_cents
+                                              - record["sale_price_cents"])
+        record["pricing"] = block
+
+        # The cost basis is the SAME one the blocking guard below and the storefront floor use:
+        # the sheet's own Cost column when it carries one, else its Settlement. (This door now maps
+        # a Cost column - see `_ALIASES` - so "a supplier sheet has no cost column" no longer holds;
+        # reading it here is what keeps the verdict and the block from judging the same row
+        # differently.)
+        verdict = margin_verdict(sale_price_cents=record["sale_price_cents"],
+                                 suggested_price_cents=suggestion.suggested_price_cents,
+                                 cost_cents=record["cost_cents"],
+                                 settlement_cents=record["settlement_cents"])
+        record["margin"] = verdict.as_dict()
+        message = margin_warning(verdict)
+        if message:
+            warning = {"row": record["row"], "field": "margin", "message": message}
+            record["warnings"].append(warning)
+            warnings.append(warning)
+    return warnings
+
+
 async def parse_and_validate(db, data: bytes, filename: str) -> dict:
     """The one parse+map+validate pass. Preview returns its report; commit refuses the same one.
 
@@ -650,6 +734,10 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
             "status": status, "sale_price_cents": price, "brand": brand, "category": category,
             "model": model, "asset_tag": _cell(row, idx.get("asset")),
             "technical_notes": technical_notes, "technical_parts": parts, "issues": row_issues,
+            # Warnings start empty and are filled by `_price_rows` once the whole file has been
+            # read - the margin guard needs comparables, which is one query for all rows rather
+            # than one per row. Kept a separate list from `issues` because only `issues` refuses.
+            "warnings": [],
             "translations": [{"field": f, "from": s, "to": t} for f, s, t in row_translations],
             # ---- the columns 0015_excel_foundation added, in two groups ----
             # Unit facts, written on the asset row.
@@ -696,8 +784,16 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
             record["issues"].append(issue)
             issues.append(issue)
 
+    # Smart pricing, last so it sees the file as a whole. It runs on the rows as parsed, before the
+    # blocked/ready split is read off: a suggestion is useful on a row that will be refused too, and
+    # a preview that only priced the rows it was about to write would be hiding its own arithmetic
+    # from the operator who needs it most.
+    comparables = await _load_comparables(db, parsed)
+    warnings = _price_rows(parsed, comparables)
+
     blocked = [r for r in parsed if r["issues"]]
     report["issues"] = issues
+    report["warnings"] = warnings
 
     # Every translation the mapper made, aggregated by (field, from, to) with its row count. The
     # per-row translation stays on the row, but 200 rows all reading "Active -> received" is not a
@@ -721,6 +817,32 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
         "lots": len({r["lot_number"] for r in parsed if r["lot_number"]}),
         "would_list": len([r for r in parsed if r["status"] == "listed" and not r["issues"]]),
         "issues": len(issues),
+        # Smart pricing, counted rather than listed. `low_margin` is the number the operator acts
+        # on, and it counts WARNINGS - nothing in this report refuses a file for a thin margin.
+        "suggested": len([r for r in parsed if r["pricing"]["suggested_price_cents"] is not None]),
+        "low_margin": len([r for r in parsed if r["margin"]["band"] == "low"]),
+        "cost_unknown": len([r for r in parsed if r["margin"]["band"] == "unknown"]),
+    }
+    # How the numbers above were reached, in the payload that carries them. `by_basis` is the part
+    # that makes the suggestion auditable at a glance: a file whose every row priced off `cost` is
+    # a file with no market comparables behind it, and that is a materially weaker suggestion than
+    # one priced off a hundred sold units - which the operator can only tell if the split is shown.
+    by_basis: dict[str, int] = {}
+    for record in parsed:
+        basis = record["pricing"]["basis"]
+        by_basis[basis] = by_basis.get(basis, 0) + 1
+    # Every basis gets a zero it did not earn, so the UI and any client can read a fixed set of keys
+    # rather than distinguishing "no rows used this" from "this key is missing". A basis the engine
+    # grows later is still counted - the seed only guarantees the ones this report documents.
+    for basis in (*describe_method()["bases"], BASIS_NONE):
+        by_basis.setdefault(basis, 0)
+    report["pricing"] = {
+        **describe_method(),
+        "suggested": report["summary"]["suggested"],
+        "low_margin": report["summary"]["low_margin"],
+        "cost_unknown": report["summary"]["cost_unknown"],
+        "by_basis": by_basis,
+        "comparable_pairs": len(comparables),
     }
     return {"report": report, "parsed": parsed, "blocked": len(blocked) > 0}
 
@@ -847,6 +969,14 @@ async def _run_import(db, staff: dict, parsed: list[dict], filename: str) -> dic
             # The margin guard's input, carried onto the unit so every later door (pricing, listing,
             # the storefront) has the cost to check against without re-reading the sheet.
             cost_cents=record["cost_cents"],
+            # The suggestion the preview showed, recorded so the workbench can still see it weeks
+            # later - see 0016_price_intelligence for why an advisory that only lives in a preview
+            # payload is not worth computing. It is written BESIDE sale_price_cents and never into
+            # it: the sheet's price is the price, and the basis is stored only when there is a
+            # number for it to explain (the column's CHECK allows either).
+            suggested_price_cents=record["pricing"]["suggested_price_cents"],
+            suggested_price_basis=(record["pricing"]["basis"]
+                                   if record["pricing"]["suggested_price_cents"] is not None else None),
             notes=record["technical_notes"] or None,
             condition_report=_condition_report(record),
             lot_id=lot_ids[record["lot_number"]],
@@ -883,7 +1013,12 @@ async def _run_import(db, staff: dict, parsed: list[dict], filename: str) -> dic
                            "status": record["status"], "row": record["row"]})
     await audit(db, "staff", entity="import", action="product_import", actor_id=staff["id"],
                 after={"file": filename, "rows": len(parsed), "lots": len(lot_ids),
-                       "listed": len([r for r in parsed if r["status"] == "listed"])},
+                       "listed": len([r for r in parsed if r["status"] == "listed"]),
+                       # The margin guard's finding goes on the trail with the file it read. It
+                       # refused nothing, but "this lot went in thin and nobody looked" is exactly
+                       # the question an auditor asks later, and the count is the cheapest way to
+                       # answer it.
+                       "low_margin": len([r for r in parsed if r["margin"]["band"] == "low"])},
                 meta={"source": "product_import", "products_created": len(products_created)})
     return {"lots_created": lots_created, "lots_reused": lots_reused,
             "products_created": products_created,
@@ -895,6 +1030,8 @@ async def _run_import(db, staff: dict, parsed: list[dict], filename: str) -> dic
                         "lot_number": r["lot_number"], "status": a.status, "grade": a.grade,
                         "sale_price_cents": a.sale_price_cents,
                         "cost_cents": a.cost_cents,
+                        "suggested_price_cents": a.suggested_price_cents,
+                        "suggested_price_basis": a.suggested_price_basis,
                         "asset": a.asset, "class": a.asset_class, "model_number": a.model_number,
                         "upgrade": a.upgrade, "upgrade_desc": a.upgrade_desc,
                         "fmv_cents": a.fmv_cents, "settlement_cents": a.settlement_cents,
