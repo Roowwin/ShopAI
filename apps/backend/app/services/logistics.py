@@ -40,6 +40,7 @@ case.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
@@ -390,19 +391,36 @@ def _reference_hit(bank_ref: str, provider_ref: str | None, order_id: int) -> bo
     """Does the bank's own reference mention this payment or its order?
 
     Compared on letters and digits only, so `RF-501`, `rf 501` and `RF/000501` all hit order 501 -
-    banks punctuate a reference their own way and a strict comparison would miss the strongest
-    signal there is. Guarded to >= 3 characters so a two-digit reference cannot match a large
-    fraction of the order book by accident.
+    banks punctuate a reference their own way and a strict comparison would miss the strongest signal
+    there is. Guarded to >= 3 characters so a two-digit reference cannot match a large fraction of
+    the order book by accident.
+
+    A BARE NUMBER MUST BE A TOKEN, which is a second guard the first one does not give you. Three
+    digits is common enough to hide inside anything: a reference carrying an operator's own free-text
+    tag (`PYTEST-LOG-ABC123 ORDER 716`) collapses to a run of hex in which some other order's id -
+    `123` here - appears as a substring, and that order's payment would earn the full reference bonus
+    for a coincidence. Observed for real: it put a stranger's payment at the top of the list, ahead of
+    the one the reference actually named. So a digits-only candidate is matched against the ORIGINAL
+    reference, delimited by a non-alphanumeric character or an end - `ORDER 716`, `INV-716`, `716` all
+    hit; `ABC716` and `7160` do not. Alphanumeric references keep the substring test, because a
+    provider's `stub-4f2a` is not a thing that occurs by accident.
     """
     def core(s: str) -> str:
         return "".join(ch for ch in s.lower() if ch.isalnum())
 
-    ref = core(bank_ref or "")
+    raw = (bank_ref or "").lower()
+    ref = core(raw)
     if not ref:
         return False
     for candidate in (provider_ref, str(order_id)):
         c = core(candidate or "")
-        if len(c) >= 3 and c in ref:
+        if len(c) < 3:
+            continue
+        if c.isdigit():
+            if re.search(r"(?<![0-9a-z])" + c + r"(?![0-9a-z])", raw):
+                return True
+            continue
+        if c in ref:
             return True
     return False
 
