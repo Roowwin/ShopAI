@@ -61,31 +61,67 @@ class ExpenseIn(BaseModel):
     paid: bool = False
 
 
+class ExpensePatch(BaseModel):
+    """An edit to a recorded expense. Every field is optional and ONLY THE NAMED ONES are written,
+    so correcting a description cannot silently re-date a cost a period has already been reported
+    on. `paid` is a boolean rather than a timestamp: the database derives `paid_at` from it."""
+
+    category: str | None = Field(default=None, max_length=60)
+    vendor: str | None = Field(default=None, max_length=120)
+    description: str | None = Field(default=None, max_length=400)
+    amount_cents: int | None = Field(default=None, ge=0)
+    tax_cents: int | None = Field(default=None, ge=0)
+    incurred_on: date | None = None
+    paid: bool | None = None
+
+
 def _range(since: date | None, until: date | None) -> tuple[date, date]:
     """An inclusive window, defaulting to the current month so a bare call is always answerable."""
     today = date.today()
     return (since or today.replace(day=1), until or today)
 
 
+def _like(needle: str | None) -> str | None:
+    """A `%`-wrapped needle, or None. The wrap is done in Python rather than by the SQL so the query
+    stays one parameter - the same shape `staff_views` uses for its own searches."""
+    q = (needle or "").strip()
+    return f"%{q}%" if q else None
+
+
 @router.get("/invoices")
 async def list_invoices(since: date | None = Query(None, alias="from"), until: date | None = Query(None, alias="to"),
-                        status: str | None = None, limit: int = Query(50, ge=1, le=200),
+                        status: str | None = None, customer: str | None = None,
+                        amount_min: int | None = Query(None, ge=0),
+                        amount_max: int | None = Query(None, ge=0),
+                        limit: int = Query(50, ge=1, le=200),
                         offset: int = Query(0, ge=0),
                         staff: dict = Depends(require_roles(*ROLES_FINANCE_READ)), db=Depends(get_db)):
+    """The invoice register, filtered by date, status, customer and amount.
+
+    `amount_min`/`amount_max` are cents, like every other money field in this API - the browser
+    converts, because a form that thinks in dollars and an API that stores cents is exactly where a
+    factor of 100 goes missing. A range whose ends are the wrong way round is refused rather than
+    quietly returning nothing: an empty register and an impossible one look identical on a table.
+    """
     await _require_role(staff, ROLES_FINANCE_READ, ACTION_READ_FINANCE, None)
     if status is not None and status not in ledger.INVOICE_STATUSES:
         raise HTTPException(status_code=422,
                             detail="status must be one of: " + ", ".join(ledger.INVOICE_STATUSES))
+    if amount_min is not None and amount_max is not None and amount_max < amount_min:
+        raise HTTPException(status_code=422, detail="the maximum amount is below the minimum")
     total, rows = await ledger.list_invoices(db, since=since, until=until, status=status,
-                                             limit=limit, offset=offset)
+                                             customer=_like(customer), amount_min=amount_min,
+                                             amount_max=amount_max, limit=limit, offset=offset)
     return {"total": total, "invoices": rows}
 
 
 @router.get("/invoices/{invoice_id}")
 async def get_invoice(invoice_id: int,
                       staff: dict = Depends(require_roles(*ROLES_FINANCE_READ)), db=Depends(get_db)):
+    """One invoice as a DOCUMENT: its own header amounts, plus who it is billed to and the lines the
+    subtotal is made of. This is what the printable screen renders."""
     await _require_role(staff, ROLES_FINANCE_READ, ACTION_READ_FINANCE, None)
-    inv = await ledger.get_invoice(db, invoice_id)
+    inv = await ledger.invoice_document(db, invoice_id)
     if inv is None:
         raise HTTPException(status_code=404, detail="invoice not found")
     return inv
@@ -159,6 +195,46 @@ async def create_expense(body: ExpenseIn,
     await audit(db, "staff", entity="expense", entity_id=row["id"], action="expense_recorded",
                 actor_id=staff["id"],
                 after={"category": category, "amount_cents": body.amount_cents})
+    try:
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    return row
+
+
+@router.patch("/expenses/{expense_id}")
+async def patch_expense(expense_id: int, body: ExpensePatch,
+                        staff: dict = Depends(require_roles(*ROLES_FINANCE_WRITE)), db=Depends(get_db)):
+    """Correct a recorded expense. Only the fields sent are written.
+
+    THE AUDIT ROW CARRIES THE BEFORE AS WELL AS THE AFTER, and that is the whole point of editing a
+    financial record rather than deleting and re-adding it: a report that has already been read can
+    be reconciled against what it said, and a corrected cost leaves a trail showing what it was.
+
+    The BEFORE state is read inside this transaction before the write, so the pair describes one
+    change rather than two.
+    """
+    await _require_role(staff, ROLES_FINANCE_WRITE, ACTION_WRITE_EXPENSE, None)
+    before = await ledger.get_expense(db, expense_id)
+    if before is None:
+        raise HTTPException(status_code=404, detail="expense not found")
+    # `exclude_unset` is what makes this a partial edit: a field the caller did not send is absent
+    # from `changes` and is therefore not in the UPDATE at all, rather than being written as None.
+    changes = body.model_dump(exclude_unset=True)
+    if "category" in changes:
+        changes["category"] = (changes["category"] or "").strip()
+        if not changes["category"]:
+            raise HTTPException(status_code=422, detail="category must not be blank")
+    row = await ledger.update_expense(db, expense_id, changes=changes)
+    if row is None:
+        raise HTTPException(status_code=404, detail="expense not found")
+    await audit(db, "staff", entity="expense", entity_id=expense_id, action="expense_edited",
+                actor_id=staff["id"],
+                before={"amount_cents": before["amount_cents"], "category": before["category"],
+                        "incurred_on": before["incurred_on"], "paid_at": before["paid_at"]},
+                after={"amount_cents": row["amount_cents"], "category": row["category"],
+                       "incurred_on": row["incurred_on"], "paid_at": row["paid_at"],
+                       "fields": sorted(changes)})
     try:
         await db.commit()
     except SQLAlchemyError as e:
