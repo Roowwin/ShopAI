@@ -2,13 +2,20 @@
 
 /* Product import: a supplier workbook in, lots and units out.
 
-   THREE STATES, ONE PAGE. Upload -> mapping preview -> summary. The middle state is the whole
-   point of the screen: a product sheet names its columns the way the supplier's system does
-   (Class, Mfg, Model, Serial#, Resale), and the operator's question before any stock is created
-   is "did it read my columns the way I meant them?". So the preview shows the mapping the server
-   actually found - source header to target field - and lists the headers it did NOT use, by name.
-   A column that silently failed to map is the expensive failure here, and it is invisible in a
-   summary that only counts rows.
+   FOUR STAGES, NAMED. Drop the sheet -> see the column mapping -> preview the rows -> read the
+   result report. The rail at the top of the page names them and marks where the operator is, because
+   the two middle stages used to share one card and the question they answer is not the same one: the
+   mapping asks "did it read my columns the way I meant them?", and the preview asks "what will
+   happen to my rows?". The first is about the SHAPE of the sheet and the second about its CONTENT,
+   and an operator checking the first should not have to scroll past the second to find it.
+
+   DROPPING THE SHEET READS IT, because reading writes nothing. The middle state is the whole point
+   of the screen: a product sheet names its columns the way the supplier's system does (Class, Mfg,
+   Model, Serial#, Resale), and the operator's question before any stock is created is the mapping
+   the server actually found - source header to target field - plus the headers it did NOT use, by
+   name. A column that silently failed to map is the expensive failure here, and it is invisible in a
+   summary that only counts rows. So the drop goes straight to the read; the only press that writes
+   is still the one on the mapping's own "Import" button.
 
    NOTHING ON THIS SCREEN IS COUNTED LOCALLY. Every figure - rows, ready, blocked, lots - is a
    field the server returned. The browser holds no row list of its own; the sample below is the
@@ -45,12 +52,14 @@
    the row rendering are only exercised by a browser. The build proves it compiles and the payload
    shapes match what the server sends; it does not prove the screen looks right. */
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import { Badge, Button, Card, Heading, Stat, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
 import { aud } from "@/lib/format";
 import { gradeTone, kickerClass, statusTone } from "@/lib/ui";
+
+import SheetDrop from "./SheetDrop";
 
 type ColumnHit = { header: string; field: string; label: string; index: number };
 type Issue = { row: number; field: string; message: string };
@@ -174,7 +183,6 @@ type Commit = {
   assets: { row: number; asset_id: number; serial_number: string; lot_number: string; status: string; grade: string | null; sale_price_cents: number | null; suggested_price_cents?: number | null; suggested_price_basis?: string | null }[];
 };
 
-const ACCEPT = ".csv,.tsv,.xlsx,.xlsm";
 /* How many issue lines to render before collapsing the tail. The COUNT is never truncated - only
    the list - so a reader always knows how many there are. */
 const ISSUE_SHOWN = 12;
@@ -194,6 +202,12 @@ const BASIS_SHORT: Record<string, string> = {
    for "look at this" (Sample data, role notices) rather than the danger tone that means refused. */
 const LOW_MARGIN_TONE = "bg-accent-100 text-accent-700";
 
+/* The four stages, in the order the operator walks them. One list, drawn twice: as the rail at the
+   top of the page and as each card's own heading, so a stage cannot be renamed in one place and
+   left behind in the other. `done` is what the rail dims - a stage the operator has already passed
+   is not the one they are being asked about. */
+const STAGES = ["Drop the sheet", "Column mapping", "Preview", "Result report"] as const;
+
 export default function ProductImportPanel() {
   const [file, setFile] = useState<File | null>(null);
   const [report, setReport] = useState<Preview | null>(null);
@@ -201,7 +215,6 @@ export default function ProductImportPanel() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
   function reset() {
     setFile(null);
@@ -209,17 +222,30 @@ export default function ProductImportPanel() {
     setResult(null);
     setMsg("");
     setErr("");
-    if (inputRef.current) inputRef.current.value = "";
   }
 
-  async function send(phase: "preview" | "commit") {
-    if (!file || busy) return;
+  /* A dropped or chosen sheet is read at once - the read writes nothing, so waiting for a second
+     press would ask the operator to confirm something that has no consequence. `picked` is passed
+     explicitly rather than read from state: `setFile` above has not landed yet in the same tick, and
+     a read that posted the PREVIOUS file would be the worst kind of quiet bug. */
+  function picked(f: File | null) {
+    setFile(f);
+    setReport(null);
+    setResult(null);
+    setMsg("");
+    setErr("");
+    if (f) void send("preview", f);
+  }
+
+  async function send(phase: "preview" | "commit", explicit?: File | null) {
+    const sheet = explicit ?? file;
+    if (!sheet || busy) return;
     setBusy(true);
     setErr("");
     setMsg("");
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", sheet);
       const r = await apiFetch(`/staff/imports/products/${phase}`, { method: "POST", body: fd });
       const j: any = await r.json().catch(() => ({}));
       if (phase === "preview") {
@@ -252,48 +278,35 @@ export default function ProductImportPanel() {
     }
   }
 
+  /* Where the operator is, from what the page actually holds: a result means the last stage, a
+     report means the preview, a chosen sheet means the read is out, and nothing means the drop. */
+  const stage = result ? 3 : report ? 2 : 1;
+
   return (
     <div className="space-y-6">
 
+      <StageRail current={stage} result={!!result} />
+
       <Card className="p-6">
-        <Heading level="h3" as="h2">1. The sheet</Heading>
+        <Heading level="h3" as="h2" className={cn(!report && !result && "!text-brand-300")}>
+          1. {STAGES[0]}
+        </Heading>
         <p className="mt-1 pb-4 text-xs text-ink-500">
           A CSV, TSV or XLSX export with the product headers: Asset, Status, Lot, Class, Mfg,
           Model, Grade, Serial#, Resale, and the Audit / Cosmetic / Functional description columns.
           Columns are matched by name, so their order does not matter. Supplier wording is
           translated where it differs - "Active" is imported as received, "Unassessed" as no grade -
-          and every translation is listed in the preview before anything is created.
+          and every translation is listed in the mapping before anything is created.
         </p>
-        <input
-          ref={inputRef}
-          type="file"
-          accept={ACCEPT}
-          disabled={busy}
-          onChange={(e) => {
-            const picked = e.target.files?.[0] ?? null;
-            setFile(picked);
-            setReport(null);
-            setResult(null);
-            setMsg("");
-            setErr("");
-          }}
-          aria-label="Choose a product stock sheet"
-          className={cn(
-            "block w-full max-w-md text-sm text-ink-500",
-            "file:mr-3 file:rounded-control file:border-0 file:bg-brand-700 file:px-4 file:py-2",
-            "file:text-sm file:font-semibold file:text-ink-900",
-            "disabled:opacity-50 disabled:pointer-events-none",
-            "outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2",
-          )}
-        />
+        <SheetDrop file={file} busy={busy} onFile={picked} />
         <div className="mt-4 flex flex-wrap gap-3">
-          <Button onClick={() => send("preview")} disabled={!file || busy}>
-            {busy ? "Working..." : "Read the sheet"}
-          </Button>
           {(report || result || file) && (
             <Button variant="secondary" onClick={reset} disabled={busy}>
               Start over
             </Button>
+          )}
+          {file && !busy && !report && (
+            <Button variant="secondary" onClick={() => send("preview")}>Read it again</Button>
           )}
         </div>
       </Card>
@@ -301,14 +314,44 @@ export default function ProductImportPanel() {
       {msg && <p className="text-brand-300 text-sm">{msg}</p>}
       {err && <p className="text-danger-600 text-sm">{err}</p>}
 
+      {report && <MappingPanel report={report} />}
       {report && <PreviewPanel report={report} busy={busy} onCommit={() => send("commit")} />}
       {result && <ResultPanel result={result} />}
     </div>
   );
 }
 
-/* The mapping preview. Ordered so the operator's eye lands on a mapping mistake before the row
-   data: columns first, then the counts, then the rows themselves. */
+/* The four stages, and which one the operator is on. It is aria-current, not a colour alone: the
+   current stage is announced, so the rail is not a decoration only a sighted reader can use. */
+function StageRail({ current, result }: { current: number; result: boolean }) {
+  return (
+    <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" aria-label="Import stages">
+      {STAGES.map((s, i) => {
+        const here = i === current && !(result && i < 3);
+        const done = i < current || (result && i < 3);
+        return (
+          <li key={s} className="flex items-center gap-2">
+            {i > 0 && <span aria-hidden="true" className="text-ink-400">/</span>}
+            <span
+              aria-current={here ? "step" : undefined}
+              className={cn(
+                "inline-flex items-center gap-1.5",
+                here ? "font-semibold text-brand-300" : done ? "text-ink-500" : "text-ink-400",
+              )}
+            >
+              <span className={cn(
+                "inline-flex h-5 w-5 items-center justify-center rounded-full text-xs",
+                here ? "bg-brand-700 text-white" : done ? "bg-surface-sunken text-ink-600" : "bg-surface-sunken text-ink-400",
+              )}>{i + 1}</span>
+              {s}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 /* One optional text cell in the sample grid. A blank prints as a dash so a column the sheet did
    not carry is visibly empty rather than visually absent - with twenty-six columns on screen, a
    missing cell and a missing column look identical otherwise. */
@@ -432,29 +475,21 @@ function PricingSection({ report }: { report: Preview }) {
 }
 
 
-function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boolean; onCommit: () => void }) {
-  const { summary, columns } = report;
-  const blocked = summary.blocked > 0;
-  const shown = report.issues.slice(0, ISSUE_SHOWN);
+/* Stage two: the mapping the server found. It answers a question about the sheet's SHAPE, which is
+   why it stands on its own card - an operator whose "Model #" column matched nothing is looking for
+   that, not for a row count, and the two used to share a heading. */
+function MappingPanel({ report }: { report: Preview }) {
+  const { columns } = report;
 
   return (
     <Card className="p-6 space-y-6">
       <div>
-        <Heading level="h3" as="h2">2. Mapping preview</Heading>
+        <Heading level="h3" as="h2">2. {STAGES[1]}</Heading>
         <p className="mt-1 text-xs text-ink-500">
           {report.file.name}
-          {report.file.sheet ? ` - sheet "${report.file.sheet}"` : ""}. This is a preview: nothing
-          below has touched stock.
+          {report.file.sheet ? ` - sheet "${report.file.sheet}"` : ""}. Did it read your columns the
+          way you meant them? A header it did not use is named below rather than dropped quietly.
         </p>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat label="Rows read" value={summary.rows} sub="data rows, header excluded" />
-        <Stat label="Ready" value={summary.ready} sub="rows that would import" />
-        <Stat label="Blocked" value={summary.blocked} sub={blocked ? "these stop the whole import" : "none - the file is clean"} />
-        <Stat label="Translated" value={summary.translated} sub={summary.translated ? "rows rewritten - see below" : "no supplier wording needed translating"} />
-        <Stat label="Suggested" value={summary.suggested} sub={summary.suggested ? "rows with a price to consider" : "no row had anything to price from"} />
-        <Stat label="Low margin" value={summary.low_margin} sub={summary.low_margin ? "flagged below - none of them blocked" : "every priced row clears the guard"} />
       </div>
 
       {report.translations.length > 0 && (
@@ -487,18 +522,6 @@ function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boole
             </TBody>
           </Table>
         </section>
-      )}
-
-      {blocked && (
-        <div className="rounded-card bg-danger-50 ring-1 ring-danger-200 p-4">
-          <p className="text-sm font-semibold text-danger-600">
-            {summary.blocked} of {summary.rows} rows cannot be imported.
-          </p>
-          <p className="mt-1 text-xs text-ink-500">
-            An import is all or nothing, so pressing the button below would create nothing at all.
-            Fix these rows in the sheet and read it again.
-          </p>
-        </div>
       )}
 
       <section>
@@ -546,6 +569,50 @@ function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boole
             </p>
           )}
         </section>
+      )}
+    </Card>
+  );
+}
+
+/* The row preview. Ordered so the operator's eye lands on a blocked row before the row data: the
+   counts first, then the reason nothing would be written, then the rows themselves. */
+function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boolean; onCommit: () => void }) {
+  const { summary } = report;
+  const blocked = summary.blocked > 0;
+  const shown = report.issues.slice(0, ISSUE_SHOWN);
+
+  return (
+    <Card className="p-6 space-y-6">
+      <div>
+        <Heading level="h3" as="h2">3. {STAGES[2]}</Heading>
+        <p className="mt-1 text-xs text-ink-500">
+          {report.file.name} - what would happen to these rows. Nothing below has touched stock.
+        </p>
+      </div>
+
+      {/* Six counts, because the sibling job's suggested price and margin guard are as much a part
+          of "what would happen to these rows" as the row counts are - and they belong on THIS card
+          rather than the mapping's, since they are claims about the rows and not about the sheet's
+          shape. The grid widens on a roomy screen so six tiles do not wrap into two uneven rows. */}
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <Stat label="Rows read" value={summary.rows} sub="data rows, header excluded" />
+        <Stat label="Ready" value={summary.ready} sub="rows that would import" />
+        <Stat label="Blocked" value={summary.blocked} sub={blocked ? "these stop the whole import" : "none - the file is clean"} />
+        <Stat label="Translated" value={summary.translated} sub={summary.translated ? "rows rewritten - see the mapping above" : "no supplier wording needed translating"} />
+        <Stat label="Suggested" value={summary.suggested} sub={summary.suggested ? "rows with a price to consider" : "no row had anything to price from"} />
+        <Stat label="Low margin" value={summary.low_margin} sub={summary.low_margin ? "flagged below - none of them blocked" : "every priced row clears the guard"} />
+      </div>
+
+      {blocked && (
+        <div className="rounded-card bg-danger-50 ring-1 ring-danger-200 p-4">
+          <p className="text-sm font-semibold text-danger-600">
+            {summary.blocked} of {summary.rows} rows cannot be imported.
+          </p>
+          <p className="mt-1 text-xs text-ink-500">
+            An import is all or nothing, so pressing the button below would create nothing at all.
+            Fix these rows in the sheet and read it again.
+          </p>
+        </div>
       )}
 
       {report.issues.length > 0 && (
@@ -726,14 +793,14 @@ function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boole
   );
 }
 
-/* The success summary. Counts first, then the lots that were minted, then the units - because a
-   lot is what the operator recognises and the units are what they will go and look at. */
+/* Stage four, the result report. Counts first, then the lots that were minted, then the units -
+   because a lot is what the operator recognises and the units are what they will go and look at. */
 function ResultPanel({ result }: { result: Commit }) {
   const { summary } = result;
   return (
     <Card className="p-6 space-y-6">
       <div>
-        <Heading level="h3" as="h2">3. Imported</Heading>
+        <Heading level="h3" as="h2" className="!text-brand-300">4. {STAGES[3]}</Heading>
         <p className="mt-1 text-xs text-ink-500">
           {result.file.name} - {summary.rows} rows read, {summary.assets_created} units created.
         </p>
