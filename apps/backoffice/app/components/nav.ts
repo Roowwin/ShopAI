@@ -71,6 +71,9 @@ export const GROUPS: NavGroup[] = [
      reads as a system surface beside the channels that reach outside this building. */
   { id: "system", heading: "System", icon: "shield", items: [
     { href: "/admin/security", label: "Security" },
+    /* Team sits here rather than under a commerce heading: the roster decides what every other
+       entry in this file opens, which makes it a system surface, not a staffing one. */
+    { href: "/admin/team", label: "Team" },
   ] },
 ];
 
