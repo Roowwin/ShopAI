@@ -25,23 +25,25 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   try { best = await apiInternal("/store/best-sellers", 60); } catch { void 0; }
   let cats: any[] = [];
   try { cats = await apiInternal("/store/categories", 60); } catch { void 0; }
-  /* Still fetched for `deal_of_month` alone - the headline and CTA it also carries went with the
-     hero (see below), and the shop's live offer reaches the page through the layout's promo band. */
+  /* Still fetched for `deal_of_month` alone. The headline and CTA it also carries went with the
+     hero (see below), and the promo band the homepage once read for itself came out of the layout,
+     so a live offer now shows on product pages only. */
   let hero: any = { hero_title: "Renewed tech. Zero waste.",
     hero_sub: "Certified refurbished devices - serialised, graded, warehouse-tracked.", cta_label: "Shop devices" };
   try { hero = await apiInternal("/store/home-content", 60); } catch { void 0; }
   return (
     <main>
-      {/* THE HERO IS REMOVED, and the page now opens on the deal (or, with no deal pinned, on the
-          first shelf). Everything the hero carried still exists elsewhere: the offer runs as the
-          promo band in the layout, the products it previewed are the shelves below, and the CMS
-          headline it showed can be reached from /admin/cms.
+      {/* THE HERO IS REMOVED, and the page now opens on the catalogue (or, with no deal pinned,
+          straight into its grid). The CMS headline it showed can still be edited at /admin/cms but
+          no longer reaches the shop; the products it previewed are the shelves below; and the offer
+          it used to headline shows on product pages, where the layout's promo band no longer
+          reaches.
 
           Removing an element removes the page's only <h1> with it, so one stays - the shop's own
           name, which the header wordmark already carries, not new copy. A page with no top-level
           heading loses its place in the document outline for anyone navigating by headings, and
           that is a screen-reader problem rather than a visual one, which is why this one is
-          `sr-only`. The first visible heading below is "New arrivals". */}
+          `sr-only`. The first visible heading below is "Our products". */}
       <h1 className="sr-only">RFO Store - certified refurbished devices</h1>
       {/* THE CATALOGUE LEADS. It used to be the last section on the page, under New arrivals and
           the best sellers, with the filter bar at the very bottom - so the shop's actual controls

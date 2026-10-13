@@ -5,7 +5,6 @@ import { Inter, Space_Grotesk } from "next/font/google";
 import Header from "./components/Header";
 import FooterNewsletter from "./components/FooterNewsletter";
 import { navLinkClass } from "./components/ui";
-import { apiInternal } from "@/lib/api";
 
 /* Both faces are self-hosted at build time by next/font/google (no runtime third-party request,
    no layout shift) and exposed as CSS variables that tailwind.config.ts maps to `sans`/`display`.
@@ -40,20 +39,14 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { themeColor: "#245B45" };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  let promo: string | null = null;
-  try {
-    const p: any[] = await apiInternal("/store/promotions", 60);
-    if (p.length) { promo = p[0].name + (p[0].kind === "percent" ? " - " + p[0].value + "% off" : ""); }
-  } catch { void 0; }
   return (
     <html lang="en-AU" className={inter.variable + " " + grotesk.variable}>
       <body className="bg-surface-page text-ink-900 min-h-screen flex flex-col">
         <Header />
-        {/* The promo band and the footer are the two full-bleed strips. They were `bg-ink-900`,
-            which was a deliberate dark band under white text on the light ground - and ink-900 is
-            now WARM WHITE, so both would have been white on white. `surface-deep` is a fill by
-            name and cannot invert into an ink. */}
-        {promo && (<div className="bg-surface-deep text-ink-700 text-xs px-6 py-2 text-center tracking-wide">{promo}</div>)}
+        {/* The promo band that sat here is gone, and with it the layout's only reason to read
+            /store/promotions - the homepage had already stopped showing an offer when its hero was
+            removed. A live promotion is still reachable: the product page prints "Sale event: ..."
+            under the title. Nothing else on the shop renders one. */}
         <div className="flex-1">{children}</div>
         <footer className="bg-surface-deep text-ink-500 mt-12">
           <div className="max-w-6xl mx-auto px-6 py-8 grid gap-6 md:grid-cols-3 text-sm">

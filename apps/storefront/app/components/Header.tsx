@@ -63,18 +63,17 @@ export default function Header() {
     }, 300);
   }
 
-  /* Two bands, both tightened: the shape stays (a micro strip over one control row), the height
-     comes off the padding. The announcement line is the smallest step this type scale sanctions -
-     the eyebrow size, 11px - and keeps its own sentence tracking rather than the eyebrow's 0.1em,
-     which is for a two-word kicker. That sentence is copy, not chrome: it is shrunk, never dropped. */
+  /* ONE BAND NOW. The announcement strip above the control row is gone, so the header is a single
+     row of chrome - wordmark, search, cart - and the page begins immediately under it. The tagline
+     it carried ("Renewed tech. Zero waste. - Certified refurbished, delivered AU & NZ") is not
+     reprinted anywhere else: the footer's own sentence is a different one, and the homepage's
+     sr-only h1 uses only the second half of this one. */
   return (
     <header className="sticky top-0 z-50">
-      {/* FLOATING. The header is no longer an opaque bar laid across the page: both strips are the
-          same 5% glass wash over a backdrop blur with a single brand hairline, so the ground
-          gradient reads straight through and the chrome sits ON the page rather than over it.
-          `sticky` stays - a catalog is long, and the search and the cart have to be reachable from
-          the bottom of it. */}
-      <div className="bg-surface-glass/5 backdrop-blur-md text-ink-500 border-b border-brand-500/20 text-eyebrow px-6 py-1 text-center">Renewed tech. Zero waste. - Certified refurbished, delivered AU &amp; NZ</div>
+      {/* FLOATING. The header is not an opaque bar laid across the page: it is a 5% glass wash over a
+          backdrop blur with a single brand hairline, so the ground gradient reads straight through
+          and the chrome sits ON the page rather than over it. `sticky` stays - a catalog is long,
+          and the search and the cart have to be reachable from the bottom of it. */}
       <div className="bg-surface-glass/5 backdrop-blur-md border-b border-brand-500/20 text-ink-900 px-4 md:px-6 py-2 flex items-center gap-2 md:gap-3">
         {/* The left and right groups both take `flex-1`, which is what actually CENTRES the search:
             two equal-grow flanks around it put the field on the page's centre line whatever the
