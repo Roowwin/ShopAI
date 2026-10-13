@@ -10,7 +10,7 @@ from sqlalchemy import text
 from app.api.v1 import (staff, staff_ops, store, store_catalog, store_ops, staff_ai, store_assistant,
                         staff_overview, staff_views, staff_imports)
 from app.api.v1 import (staff_agents, staff_finance, staff_logistics, staff_orders, staff_settings,
-                        staff_shipping, staff_team)
+                        staff_team)
 from app.core.config import get_settings
 from app.core.db import get_engine
 
@@ -50,7 +50,6 @@ app.include_router(staff_overview.router)
 app.include_router(staff_views.router)
 app.include_router(staff_agents.router)
 app.include_router(staff_imports.router)
-app.include_router(staff_shipping.router)
 app.include_router(staff_team.router)
 app.include_router(staff_settings.router)
 app.include_router(staff_orders.router)

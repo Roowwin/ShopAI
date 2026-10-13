@@ -73,7 +73,7 @@ export default function OrdersPage() {
     setMsg("");
     // `limit=1` because only the total is wanted: the count comes from the fulfilment queue so this
     // page and Pick & Pack cannot disagree about what "awaiting" means.
-    void apiFetch("/staff/shipping/queue?limit=1")
+    void apiFetch("/staff/logistics/queue?limit=1")
       .then(async (r) => setAwaiting(r.ok ? ((await r.json()).total ?? 0) : null))
       .catch(() => setAwaiting(null));
     const p = new URLSearchParams();

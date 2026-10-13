@@ -74,6 +74,16 @@ async def _staff(client, role: str) -> str:
     return r.json()["access_token"]
 
 
+async def _ship_it(oid: int, carrier: str = "AusPost", tracking: str = "TRK-PYTEST-1") -> None:
+    """Record a parcel and move the order, in ONE transaction - the shape the rail uses, and the only
+    shape 0020's trigger admits (it sees the same transaction's uncommitted shipment)."""
+    eng = get_engine()
+    async with eng.begin() as c:
+        await c.execute(text("INSERT INTO shipments (order_id, carrier, tracking_ref)"
+                             " VALUES (:o, :c, :t)"), {"o": oid, "c": carrier, "t": tracking})
+        await c.execute(text("UPDATE orders SET status = 'shipped' WHERE id = :o"), {"o": oid})
+
+
 async def _order(*, status: str = "paid", postcode: str | None = "2000", with_line: bool = True,
                  subtotal: int = 1000) -> dict:
     """One order this test owns, with a consistent total (the table CHECKs the arithmetic) and lines
@@ -107,11 +117,15 @@ async def test_the_queue_is_paid_and_unshipped_with_its_address(client):
     await _cleanup()
     try:
         paid = await _order(status="paid")
-        shipped = await _order(status="shipped")
+        # Shipped the way the platform actually ships: a parcel row FIRST, then the status. An
+        # INSERT that claimed `shipped` outright is refused by 0020's trigger now, which is the point
+        # of this job - a fixture that could still do it would be testing a state nothing can reach.
+        shipped = await _order(status="paid")
+        await _ship_it(shipped["id"])
         pending = await _order(status="pending")
 
         tok = await _staff(client, "warehouse")
-        r = await client.get("/staff/shipping/queue", headers=_h(tok))
+        r = await client.get("/staff/logistics/queue", headers=_h(tok))
         assert r.status_code == 200, r.text
         body = r.json()
         ids = [o["id"] for o in body["orders"]]
@@ -134,7 +148,7 @@ async def test_the_fulfilment_document_carries_the_recipient(client):
     try:
         o = await _order()
         tok = await _staff(client, "warehouse")
-        r = await client.get(f"/staff/shipping/orders/{o['id']}", headers=_h(tok))
+        r = await client.get(f"/staff/logistics/orders/{o['id']}/fulfilment", headers=_h(tok))
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["recipient"]["city"] == "Melbourne"
@@ -142,7 +156,7 @@ async def test_the_fulfilment_document_carries_the_recipient(client):
         assert body["lines"][0]["unit_price_cents"] == 1000
         assert body["shipment"] is None, "nothing has been sent yet, so there is no parcel to report"
 
-        r = await client.get("/staff/shipping/orders/999999999999", headers=_h(tok))
+        r = await client.get("/staff/logistics/orders/999999999999/fulfilment", headers=_h(tok))
         assert r.status_code == 404, r.text
     finally:
         await _cleanup()
@@ -157,10 +171,10 @@ async def test_the_shipping_doors_are_warehouse_or_above(client):
     try:
         o = await _order()
         probes = [
-            ("get", "/staff/shipping/queue", None),
-            ("get", "/staff/shipping/carriers", None),
-            ("get", f"/staff/shipping/orders/{o['id']}", None),
-            ("post", f"/staff/shipping/orders/{o['id']}/label", {"carrier": "auspost"}),
+            ("get", "/staff/logistics/queue", None),
+            ("get", "/staff/logistics/carriers", None),
+            ("get", f"/staff/logistics/orders/{o['id']}/fulfilment", None),
+            ("post", f"/staff/logistics/orders/{o['id']}/label", {"carrier": "auspost"}),
         ]
         for method, path, payload in probes:
             call = getattr(client, method)
@@ -207,13 +221,18 @@ async def test_an_unconfigured_carrier_refuses_and_invents_nothing(client, monke
         o = await _order()
         tok = _h(await _staff(client, "warehouse"))
 
-        r = await client.get("/staff/shipping/carriers", headers=tok)
+        r = await client.get("/staff/logistics/carriers", headers=tok)
         assert r.status_code == 200, r.text
-        auspost = next(c for c in r.json()["carriers"] if c["key"] == "auspost")
+        body = r.json()
+        # ONE endpoint, two answers: the rail's own carrier PERFORMANCE under `carriers`, and the
+        # label-readiness this bench needs under `label_readiness`. Reading the wrong key here is the
+        # mistake the merge exists to prevent, so both are asserted by name.
+        assert "carriers" in body and "recommendation" in body, sorted(body)
+        auspost = next(c for c in body["label_readiness"] if c["key"] == "auspost")
         assert auspost["configured"] is False, auspost
         assert len(auspost["missing"]) == 3, auspost["missing"]
 
-        r = await client.post(f"/staff/shipping/orders/{o['id']}/label",
+        r = await client.post(f"/staff/logistics/orders/{o['id']}/label",
                               json={"carrier": "auspost", "weight_grams": 900}, headers=tok)
         assert r.status_code == 409, r.text
         detail = r.json()["detail"]
@@ -239,7 +258,7 @@ async def test_a_label_for_an_unpaid_order_is_refused_and_recorded(client, monke
     try:
         o = await _order(status="refunded")
         tok = _h(await _staff(client, "warehouse"))
-        r = await client.post(f"/staff/shipping/orders/{o['id']}/label",
+        r = await client.post(f"/staff/logistics/orders/{o['id']}/label",
                               json={"carrier": "auspost"}, headers=tok)
         assert r.status_code == 409, r.text
         assert "only a paid order" in r.json()["detail"], r.json()
@@ -353,7 +372,7 @@ async def test_the_label_route_returns_the_document_and_audits_it(client, monkey
 
         monkeypatch.setattr(carriers, "book_label", _fake_book)
 
-        r = await client.post(f"/staff/shipping/orders/{o['id']}/label",
+        r = await client.post(f"/staff/logistics/orders/{o['id']}/label",
                               json={"carrier": "auspost", "weight_grams": 1200}, headers=tok)
         assert r.status_code == 200, r.text
         body = r.json()
@@ -371,5 +390,99 @@ async def test_the_label_route_returns_the_document_and_audits_it(client, monkey
         assert row is not None, "a booking is not recorded"
         assert row["after"]["tracking_ref"] == "7AB0000000001", dict(row)
         assert shipments == 0, "booking a label is NOT recording a parcel - that stays the sibling's write"
+    finally:
+        await _cleanup()
+
+
+# --------------------------------------------------------------------------- one owner, proved
+
+async def test_the_ghost_label_door_is_gone_and_nothing_answers_under_shipping(client):
+    """The consolidation, asserted as ABSENCE.
+
+    `GET /staff/orders/{id}/label` printed a label from the `orders.carrier` mirror, and the whole
+    `/staff/shipping` prefix was a fourth surface for the same facts. Both are gone; a redirect that
+    left a route behind would be the same duplication with a new address.
+    """
+    await _cleanup()
+    try:
+        o = await _order()
+        tok = _h(await _staff(client, "admin"))
+        for path in (f"/staff/orders/{o['id']}/label",
+                     "/staff/shipping/queue",
+                     "/staff/shipping/carriers",
+                     f"/staff/shipping/orders/{o['id']}"):
+            r = await client.get(path, headers=tok)
+            assert r.status_code in (404, 405), (path, r.status_code, r.text[:80])
+    finally:
+        await _cleanup()
+
+
+async def test_the_unified_label_reads_the_shipment_and_refuses_before_dispatch(client):
+    """The replacement door, with the contract it inherited: refused until a parcel exists, then the
+    PARCEL's own carrier and tracking reference - not the `orders` mirror."""
+    await _cleanup()
+    try:
+        o = await _order()
+        tok = _h(await _staff(client, "warehouse"))
+
+        r = await client.get(f"/staff/logistics/orders/{o['id']}/label", headers=tok)
+        assert r.status_code == 409, r.text
+        assert "must be shipped" in r.json()["detail"], r.json()
+
+        r = await client.post(f"/staff/logistics/orders/{o['id']}/ship",
+                              json={"carrier": "AusPost", "service": "PARCEL_POST",
+                                    "tracking_ref": "TRK-REAL-1"}, headers=tok)
+        assert r.status_code == 201, r.text
+
+        r = await client.get(f"/staff/logistics/orders/{o['id']}/label", headers=tok)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["carrier"] == "AusPost"
+        assert body["tracking_number"] == "TRK-REAL-1"
+        assert body["barcode"] == "TRK-REAL-1"
+        assert body["ship_to"]["postcode"] == "2000", body["ship_to"]
+        assert body["declared_value_cents"] == 1100
+
+        # And the shipment is the thing it read: the same carrier and reference, from the table.
+        eng = get_engine()
+        async with eng.connect() as c:
+            row = (await c.execute(text("SELECT carrier, tracking_ref FROM shipments WHERE order_id = :i"),
+                                   {"i": o["id"]})).mappings().first()
+        assert row["carrier"] == body["carrier"] and row["tracking_ref"] == body["tracking_number"], dict(row)
+    finally:
+        await _cleanup()
+
+
+async def test_the_database_refuses_a_shipped_order_without_a_parcel(client):
+    """Item 3, made structural rather than conventional.
+
+    A bare `UPDATE orders SET status='shipped'` - the shape the deleted door's sibling wrote - is
+    refused by the trigger, and the rail's own path (parcel first, same transaction) succeeds. This
+    is the difference between "we agreed to do it" and "it cannot be done otherwise".
+    """
+    await _cleanup()
+    try:
+        o = await _order()
+        eng = get_engine()
+        with pytest.raises(Exception) as caught:
+            async with eng.begin() as c:
+                await c.execute(text("UPDATE orders SET status = 'shipped' WHERE id = :i"),
+                                {"i": o["id"]})
+        assert "shipments row" in str(caught.value), str(caught.value)[:200]
+
+        async with eng.connect() as c:
+            still = (await c.execute(text("SELECT status FROM orders WHERE id = :i"),
+                                     {"i": o["id"]})).scalar_one()
+        assert still == "paid", "the refused write must not have landed"
+
+        tok = _h(await _staff(client, "warehouse"))
+        r = await client.post(f"/staff/logistics/orders/{o['id']}/ship",
+                              json={"carrier": "AusPost", "tracking_ref": "TRK-LEGAL"}, headers=tok)
+        assert r.status_code == 201, r.text
+        async with eng.connect() as c:
+            row = (await c.execute(text("SELECT o.status, s.carrier, s.tracking_ref"
+                                        " FROM orders o JOIN shipments s ON s.order_id = o.id"
+                                        " WHERE o.id = :i"), {"i": o["id"]})).mappings().first()
+        assert row["status"] == "shipped" and row["carrier"] == "AusPost", dict(row)
     finally:
         await _cleanup()

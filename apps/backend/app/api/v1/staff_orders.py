@@ -21,10 +21,12 @@ EVERY MOVE WRITES A TIMESTAMP AND AN AUDIT ROW. `orders.updated_at` is moved by 
 on any edit and so cannot answer "when did this ship"; the explicit columns can. The audit row is
 the before/after pair, which is the only thing that can answer "who cancelled this" later.
 
-THE LABEL IS A READ OF A DISPATCHED ORDER, NOT A SECOND WAY TO DISPATCH ONE. `GET /{id}/label`
-produces the printable parcel label - destination, carrier, tracking barcode - and REFUSES an order
-that has not shipped, because a label is a claim that the parcel exists. Issuing it is the same
-`shipped` move above; the label only ever renders what that move recorded.
+FULFILMENT BELONGS TO THE LOGISTICS RAIL, AND THIS MODULE ONLY REFUSES TO TAKE IT. `shipped` and
+`delivered` are in `FULFILMENT_ELSEWHERE` below, which names the rail's own door in the 409, and
+`GET /{id}/label` - which printed the parcel label from the `orders.carrier` mirror - has been
+DELETED rather than moved, because the rail answers it from the `shipments` row and two answers to
+one question is what this module was consolidated out of. Everything fulfilment-shaped lives at
+`/staff/logistics/*`; what remains here is the money and lifecycle half of an order.
 """
 
 from datetime import datetime, timezone
@@ -67,13 +69,13 @@ FULFILMENT_ELSEWHERE: dict[str, str] = {
 }
 _STATUSES = tuple(_TRANSITIONS)
 READ_ROLES = ("admin", "manager")
-# Fulfilment, so the three roles that may DISPATCH may also print what goes on the parcel.
-LABEL_ROLES = ("admin", "manager", "warehouse")
 # Action names for the audit rows and the in-body guard. NOT in GUARDED_ACTIONS - the chat rail does
 # not dispatch order fulfilment, so db=None below keeps the agent-grant branch unreachable.
+# `LABEL_ROLES` and `ACTION_ORDER_LABEL` were here for the label door and went with it: the tuple that
+# may print what goes on a parcel is the rail's `ROLES_SHIP` now, and two tuples naming the same three
+# roles is how they drift apart.
 ACTION_ORDER_STATUS = "order_status"
 ACTION_ORDER_REFUND = "order_refund"
-ACTION_ORDER_LABEL = "order_label"
 
 
 class OrderStatusIn(BaseModel):
@@ -181,39 +183,12 @@ async def set_order_status(order_id: int, body: OrderStatusIn,
     if invoice is not None:
         out["invoice"] = invoice
     return out
-
-
-@router.get("/{order_id}/label")
-async def shipping_label(order_id: int,
-                         staff: dict = Depends(require_roles(*LABEL_ROLES)), db=Depends(get_db)):
-    """The printable shipping label for a dispatched order.
-
-    REFUSED UNTIL THE ORDER HAS SHIPPED. A label is a claim that a parcel exists, so an order that
-    has not left is a 409 naming its current status rather than a document someone could print and
-    stick on an empty box. `delivered` is admitted as well as `shipped` - reprinting a label for a
-    parcel already on its way is an ordinary thing to need.
-
-    The payload is what a label physically carries: where it goes, who carries it, and the tracking
-    reference as the scannable barcode. `declared_value_cents` and the currency are there because a
-    carrier form asks for them, and they are read from the order rather than recomputed, so a label
-    and the invoice for the same sale cannot disagree.
-    """
-    await _require_role(staff, LABEL_ROLES, ACTION_ORDER_LABEL, None)
-    r = (await db.execute(text("""
-        SELECT public_id::text AS public_id, status, currency, total_cents,
-               carrier, tracking_number, shipped_at,
-               ship_to_name, ship_line1, ship_city, ship_state, ship_postcode, shipping_country
-        FROM orders WHERE id = :i"""), {"i": order_id})).mappings().first()
-    if r is None:
-        raise HTTPException(status_code=404, detail="order not found")
-    if r["status"] not in ("shipped", "delivered"):
-        raise HTTPException(status_code=409,
-                            detail=f"an order must be shipped before its label can be printed"
-                                   f" (it is {r['status']})")
-    return {"order_id": order_id, "order_public_id": r["public_id"], "status": r["status"],
-            "carrier": r["carrier"], "tracking_number": r["tracking_number"],
-            "barcode": r["tracking_number"], "dispatched_at": _iso(r["shipped_at"]),
-            "currency": r["currency"], "declared_value_cents": int(r["total_cents"]),
-            "ship_to": {"name": r["ship_to_name"], "line1": r["ship_line1"], "city": r["ship_city"],
-                        "state": r["ship_state"], "postcode": r["ship_postcode"],
-                        "country": r["shipping_country"]}}
+# `GET /{order_id}/label` USED TO LIVE HERE and is deliberately gone. It printed a shipping label by
+# reading `orders.carrier` / `orders.tracking_number` - the denormalised mirror of the parcel - which
+# made a second answer to a question the logistics rail already owned, and read the copy rather than
+# the source. The door is now `GET /staff/logistics/orders/{id}/label`, with the same contract and
+# the same refusals, reading the `shipments` row. Nothing in the backoffice called this path.
+#
+# The `carrier` / `tracking_number` / `shipped_at` columns stay on the payloads above and below: they
+# are the rail's mirror, this module only READS them, and removing them from the read shape would be
+# a different change with its own callers to migrate.

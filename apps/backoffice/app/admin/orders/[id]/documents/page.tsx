@@ -56,7 +56,7 @@ export default function OrderDocumentsPage() {
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
-    const r = await apiFetch(`/staff/shipping/orders/${id}`);
+    const r = await apiFetch(`/staff/logistics/orders/${id}/fulfilment`);
     if (!r.ok) {
       const j: any = await r.json().catch(() => ({}));
       setErr(typeof j?.detail === "string" ? j.detail : `Could not read the order (${r.status})`);
