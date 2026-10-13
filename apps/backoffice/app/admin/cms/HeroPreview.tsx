@@ -83,7 +83,7 @@ export default function HeroPreview({ hero, deal, promoActive }: Props) {
        the page colour at the edges. An inline style rather than a Tailwind arbitrary value - a
        two-stop radial with colour positions is unreadable once the spaces are escaped. */
     <div className="overflow-hidden rounded-card ring-1 ring-white/10 backdrop-blur-md"
-      style={{ backgroundImage: "radial-gradient(120% 90% at 50% 0%, #1a3a2a 0%, #0f172a 68%)" }}>
+      style={{ backgroundImage: "radial-gradient(120% 90% at 50% 0%, #122922 0%, #0d1f1a 68%)" }}>
       <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-2">
         <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#A8B1AA]">
           Preview &middot; homepage hero
@@ -131,7 +131,7 @@ export default function HeroPreview({ hero, deal, promoActive }: Props) {
                 }
               />
               <div className="flex w-1/2 flex-col justify-center p-3">
-                <span className="inline-flex self-start rounded-full bg-[#080E1A] px-2 py-0.5 text-[10px] font-semibold text-[#E2E7E2]">
+                <span className="inline-flex self-start rounded-full bg-[#060f0c] px-2 py-0.5 text-[10px] font-semibold text-[#E2E7E2]">
                   {d.badge}
                 </span>
                 <p className="mt-2 text-sm font-semibold text-[#F7F7F2]">{d.title}</p>

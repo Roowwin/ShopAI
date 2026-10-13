@@ -115,13 +115,13 @@ export default function Header() {
           {open && items.length > 0 && (
             <div className="absolute left-0 right-0 mt-1 bg-surface-glass/10 backdrop-blur-md text-ink-900 rounded-control shadow-glow-sm ring-1 ring-brand-500/20 overflow-hidden">
               {items.slice(0, 5).map((s) => (
-                <button key={s.slug} className="w-full text-left px-4 py-2.5 text-sm transition-colors duration-fast ease-out hover:bg-surface-glass/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset motion-reduce:transition-none"
+                <button key={s.slug} className="w-full text-left px-4 py-2.5 text-sm transition-colors duration-fast ease-out hover:bg-surface-pressed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset motion-reduce:transition-none"
                   onMouseDown={() => router.push("/products/" + s.slug)}>
                   <span className="font-medium">{s.title}</span>
                   <span className="text-xs text-ink-500 ml-2">{s.units_available} available{s.price_from_cents !== null ? " from " + aud(s.price_from_cents) : ""}</span>
                 </button>
               ))}
-              <button className="w-full text-left px-4 py-2 text-xs bg-surface-glass/5 text-brand-300 transition-colors duration-fast ease-out hover:bg-surface-glass/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset motion-reduce:transition-none"
+              <button className="w-full text-left px-4 py-2 text-xs bg-surface-glass/5 text-brand-300 transition-colors duration-fast ease-out hover:bg-surface-pressed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset motion-reduce:transition-none"
                 onMouseDown={() => router.push("/search?q=" + encodeURIComponent(q.trim()))}>See all results</button>
             </div>
           )}
@@ -138,7 +138,7 @@ export default function Header() {
           onClick={() => setMenu((v) => !v)}
           aria-label={menu ? "Close menu" : "Open menu"}
           aria-expanded={menu}
-          className="md:hidden shrink-0 h-11 w-11 flex items-center justify-center rounded-control text-ink-600 transition-colors duration-fast ease-out hover:bg-surface-glass/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 motion-reduce:transition-none">
+          className="md:hidden shrink-0 h-11 w-11 flex items-center justify-center rounded-control text-ink-600 transition-colors duration-fast ease-out hover:bg-surface-pressed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 motion-reduce:transition-none">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             {menu
               ? (<><path d="M5 5l10 10" /><path d="M15 5L5 15" /></>)
@@ -167,7 +167,7 @@ export default function Header() {
                     <button type="button" aria-expanded={isOpen}
                       aria-label={(isOpen ? "Hide " : "Show ") + c.name + " sub-categories"}
                       onClick={() => setOpenCat(isOpen ? null : c.name)}
-                      className="w-11 shrink-0 flex items-center justify-center text-ink-500 transition-colors duration-fast ease-out hover:bg-surface-glass/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 motion-reduce:transition-none">
+                      className="w-11 shrink-0 flex items-center justify-center text-ink-600 transition-colors duration-fast ease-out hover:bg-surface-pressed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 motion-reduce:transition-none">
                       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor"
                         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
                         className={cn("transition-transform duration-fast ease-out motion-reduce:transition-none", isOpen && "rotate-180")}>

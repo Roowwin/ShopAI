@@ -235,7 +235,7 @@ export default function NavDropdown({ label, links, open, onOpenChange }: Props)
         onKeyDown={(e) => { if (e.key === "ArrowDown" && !open) { e.preventDefault(); place(); onOpenChange(true); } }}
         className={cn(
           "min-h-[44px] inline-flex items-center gap-1.5 rounded-control px-3 text-sm font-medium text-ink-700",
-          "transition-colors duration-fast ease-out hover:bg-surface-sunken hover:text-brand-300 active:bg-surface-pressed",
+          "transition-colors duration-fast ease-out hover:bg-surface-pressed hover:text-brand-300 active:bg-surface-pressed",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2",
           "motion-reduce:transition-none",
           open && "bg-brand-500/15 text-brand-300",
@@ -268,7 +268,7 @@ export default function NavDropdown({ label, links, open, onOpenChange }: Props)
                     onClick={() => onOpenChange(false)}
                     className={cn(
                       "min-h-[44px] flex-1 flex items-center px-4 py-2.5 text-sm text-ink-700 truncate",
-                      "transition-colors duration-fast ease-out hover:bg-surface-sunken hover:text-brand-300 active:bg-surface-pressed",
+                      "transition-colors duration-fast ease-out hover:bg-surface-pressed hover:text-brand-300 active:bg-surface-pressed",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset",
                       "motion-reduce:transition-none",
                     )}>
@@ -291,7 +291,7 @@ export default function NavDropdown({ label, links, open, onOpenChange }: Props)
                       }}
                       className={cn(
                         "shrink-0 w-11 flex items-center justify-center text-ink-500",
-                        "transition-colors duration-fast ease-out hover:bg-surface-sunken hover:text-brand-300 active:bg-surface-pressed",
+                        "transition-colors duration-fast ease-out hover:bg-surface-pressed hover:text-brand-300 active:bg-surface-pressed",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset",
                         "motion-reduce:transition-none",
                         subOpen && "bg-brand-500/15 text-brand-300",
@@ -315,7 +315,7 @@ export default function NavDropdown({ label, links, open, onOpenChange }: Props)
                           href={c.href} onClick={() => onOpenChange(false)}
                           className={cn(
                             "min-h-[44px] flex items-center px-4 py-2.5 text-sm text-ink-700 truncate",
-                            "transition-colors duration-fast ease-out hover:bg-surface-sunken hover:text-brand-300 active:bg-surface-pressed",
+                            "transition-colors duration-fast ease-out hover:bg-surface-pressed hover:text-brand-300 active:bg-surface-pressed",
                             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset",
                             "motion-reduce:transition-none",
                           )}>

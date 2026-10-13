@@ -93,18 +93,27 @@
        have to carry light text at ~1.3:1. */
     --ink-inverse: 2 6 23;
 
-    /* The ladder keeps its DIRECTION: surface raised, muted the alternate band, sunken the PAGE.
-       The root layout paints the body with `surface-page`, so sunken/page are the deepest steps and
-       cards sit above them. A hover that darkens onto a card is simply a recessed row. */
-    --surface-page: 15 23 42;      /* the page - the edge of the ground gradient */
-    --surface-page-alt: 21 30 38;  /* the quiet band (the header's tagline strip) */
-    --surface: 26 45 36;           /* cards and panels - the raised step */
-    --surface-muted: 20 34 31;     /* the alternate band, between the two */
-    --surface-sunken: 10 16 30;    /* recessed fills: wells, disabled, the quantity stepper */
-    --surface-pressed: 40 62 50;   /* the pressed fill of a control */
+    /* The surface ladder, in four named steps from the design's own table. Every value here is one
+       of those four (or a step BETWEEN two of them, where the app needs a fifth tone the table does
+       not name), and the whole family is one green - no slate, no blue:
+
+         #0D1F1A  main page background   the darkest base canvas
+         #122922  hero banner & headers  slightly elevated
+         #1A382F  product cards & sidebar soft contrast layer for content
+         #234A3E  hover / active rows    interactive highlight
+
+       The ladder keeps its DIRECTION: `surface` is the raised step, `muted` the alternate band,
+       `page` the canvas. `sunken` and `deep` go the other way - they are wells and full-bleed
+       bands, which sit BELOW the canvas rather than above it. */
+    --surface-page: 13 31 26;      /* #0D1F1A - the main canvas */
+    --surface-page-alt: 18 41 34;  /* #122922 - hero band & the header's tagline strip */
+    --surface: 26 56 47;           /* #1A382F - product cards & sidebar */
+    --surface-muted: 22 48 40;     /* between the canvas and a card */
+    --surface-sunken: 9 22 18;     /* recessed fills: wells, disabled, the quantity stepper */
+    --surface-pressed: 35 74 62;   /* #234A3E - hover AND active rows; the press adds the sink */
     /* A fill that is dark BY NAME. This is the token the seven `bg-ink-900` sites needed and never
        had: something to paint a deliberately deep band with that cannot invert into an ink. */
-    --surface-deep: 8 14 26;
+    --surface-deep: 6 15 12;
     /* The glass tint. Held as CHANNELS and always used at a low alpha (`bg-surface-glass/5`), so
        the blur and the border are the only things the design has to get right. */
     --surface-glass: 255 255 255;
@@ -118,9 +127,18 @@
        Chrome paints over an autofilled field. Unset, all of them stay light on a dark page. */
     color-scheme: dark;
 
+    /* The error pair, re-measured for this ground. `danger-600` is TEXT only (the four inline error
+       messages and the danger Button's label), so it has to clear 4.5:1 wherever it sits - and the
+       lightest surface it lands on is now the `#234A3E` hover fill, not a card. On that the old
+       248 113 113 measured 3.58:1. This is 253 150 150: 4.70:1 on the hover fill, 5.20:1 on a
+       glass card, 8.13:1 on the canvas.
+       `danger-200` is the danger Button's only boundary - a 1px ring, no fill - so it is held to
+       the 3:1 non-text bar against the same two surfaces (3.65:1 and 3.30:1). It reads as a
+       brighter red on this green ground than the dark one it was, which is the cost of keeping the
+       control's edge visible. */
     --danger-50: 69 10 10;
-    --danger-200: 153 27 27;
-    --danger-600: 248 113 113;
+    --danger-200: 220 120 120;
+    --danger-600: 253 150 150;
 
     /* the A-D scale: the soft fill deepens, the ink lightens, the solid stays the saturated dot.
        Grade A is the brand hue by design, so it follows the forest ladder. */
@@ -137,12 +155,16 @@
     --grade-d-soft: 51 65 85;
     --grade-d-ink: 203 213 225;
 
-    /* The ground itself: a radial wash from a deep forest at the top of the viewport out to the
-       page colour at the edges. It is painted on the body (below) rather than on any element, so a
-       page cannot accidentally cover it - and `--surface-page` stays the flat colour underneath as
-       the fallback for anything that needs an opaque ground. */
-    --ground-core: 26 58 42;
-    --ground-edge: 15 23 42;
+    /* The ground itself: a radial wash from the elevated hero band out to the base canvas. It is
+       painted on the body (below) rather than on any element, so a page cannot accidentally cover
+       it - and `--surface-page` stays the flat colour underneath as the fallback for anything that
+       needs an opaque ground.
+
+       The two stops ARE two rows of the design table: the core is the "hero banner & headers"
+       green, so the top of every page is the elevated tone the hero sits on, and it settles to the
+       "main page background" canvas the products are laid out on. */
+    --ground-core: 18 41 34;       /* #122922 */
+    --ground-edge: 13 31 26;       /* #0D1F1A */
 
     /* Motion. Two durations and one ease-out curve that starts quickly and settles, which reads
        calmer than the browser default. Tailwind maps these in tailwind.config.ts, so components

@@ -184,7 +184,7 @@ export default function FacetDropdown({ label, value, options, onSelect, open, o
           // A facet with nothing in force is a quiet secondary control; the one in force is the
           // brand-marked one, so a glance down the toolbar says what is actually filtering.
           value === null
-            ? "bg-surface text-ink-700 ring-1 ring-line hover:bg-surface-sunken hover:ring-line-strong active:bg-surface-pressed"
+            ? "bg-surface text-ink-700 ring-1 ring-line hover:bg-surface-pressed hover:ring-line-strong active:bg-surface-pressed"
             : "bg-brand-500/15 text-brand-300 ring-1 ring-brand-500/50 hover:bg-brand-500/25",
         )}>
         <span className="truncate max-w-[12rem]">{text}</span>
@@ -210,7 +210,7 @@ export default function FacetDropdown({ label, value, options, onSelect, open, o
                   "min-h-[44px] flex items-center gap-2 px-3 text-sm cursor-pointer select-none",
                   "transition-colors duration-fast ease-out motion-reduce:transition-none",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset",
-                  isSel ? "bg-brand-500/15 text-brand-300 font-medium" : "hover:bg-surface-glass/10",
+                  isSel ? "bg-brand-500/15 text-brand-300 font-medium" : "hover:bg-surface-pressed",
                 )}>
                 {/* The check keeps its box when the option is not the value in force (transparent,
                     not removed), so the labels of a list do not shift sideways as you pick. */}
