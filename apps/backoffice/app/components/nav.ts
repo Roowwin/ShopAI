@@ -24,6 +24,16 @@ export type NavItem = {
      matching it). `href` is still the route the entry is FOR, so the next person to build it has the
      address the roadmap intended rather than having to invent one. */
   soon?: boolean;
+  /* A THIRD LEVEL, for an entry that is itself a small group of screens rather than one screen.
+     "Inventory Management" is the asset workbench AND the lot process; naming both under it keeps
+     the roadmap's grouping instead of flattening two different jobs into one list of peers.
+
+     A PARENT IS STILL A LINK. It has its own page and keeps it - the row's anchor goes to the route
+     and a separate chevron beside it opens the children, because a single control that both
+     navigated and expanded would have to guess which the operator meant. That is also why the
+     chevron is a SIBLING of the anchor rather than inside it: a button nested in an anchor is
+     invalid markup and unreachable by keyboard in more than one browser. */
+  children?: NavItem[];
 };
 
 /* The icons a category can name. Six, because there are six categories - `spark` and `plug` went
@@ -37,16 +47,28 @@ export const GROUPS: NavGroup[] = [
   {
     id: "core-operations", heading: "Dashboard & Core Operations", icon: "gauge", items: [
       { href: "/admin/dashboard", label: "Dashboard" },
-      { href: "/admin/orders", label: "Commerce / Orders" },
+      {
+        href: "/admin/orders", label: "Commerce / Orders",
+        children: [
+          { href: "/admin/customers", label: "Customers" },
+        ],
+      },
       /* Fulfilment points at Pick & Pack, the screen an order is actually packed and dispatched on. */
       { href: "/admin/shipping", label: "Fulfillment & Shipping" },
     ],
   },
   {
     id: "catalog-inventory", heading: "Product Catalog & Inventory", icon: "crate", items: [
-      /* The asset workbench: the unit-level inventory browser, which is what "Inventory Management"
-         names. Lot Process is the receiving station and lives at its own address. */
-      { href: "/admin/assets", label: "Inventory Management" },
+      {
+        /* The asset workbench: the unit-level inventory browser, which is what "Inventory
+           Management" names. Lot Process - the receiving and grading station - hangs under it, so
+           the inventory half of the platform is one entry with its two jobs inside it rather than
+           two peers that look like unrelated screens. */
+        href: "/admin/assets", label: "Inventory Management",
+        children: [
+          { href: "/admin/intake", label: "Lot Process" },
+        ],
+      },
       { href: "/admin/product-import", label: "Product Import" },
       /* The marketplace hubs. There are three of them (eBay, Amazon, Facebook) and the roadmap gives
          the group one entry, so this is the hub for the marketplace the platform is actually wired
@@ -72,7 +94,14 @@ export const GROUPS: NavGroup[] = [
   {
     id: "storefront-ai", heading: "Storefront & AI Tools", icon: "shop", items: [
       { href: "/admin/cms", label: "Storefront / CMS" },
-      { href: "/admin/assistant", label: "AI Intelligence" },
+      {
+        /* The assistant is the entry point and the listing studio is what it produces listings in,
+           so the studio hangs under the AI entry rather than beside it. */
+        href: "/admin/assistant", label: "AI Intelligence",
+        children: [
+          { href: "/admin/ai/listings", label: "AI Listing Studio" },
+        ],
+      },
     ],
   },
   {
@@ -94,9 +123,18 @@ export const GROUPS: NavGroup[] = [
    this same list, so a placeholder can never light up as the current page. */
 export type FlatItem = { href: string; label: string; heading: string };
 
+/* Every openable entry under `items`, at ANY depth. `soon` items are dropped here and their children
+   with them - a placeholder is not a destination, and neither is anything filed under one, since
+   there would be no way to reach the parent that reveals it. */
+function routable(items: NavItem[]): NavItem[] {
+  return items
+    .filter((it) => !it.soon)
+    .flatMap((it) => [it, ...routable(it.children ?? [])]);
+}
+
 export function flatNav(): FlatItem[] {
   return GROUPS.flatMap((g) =>
-    g.items.filter((it) => !it.soon).map((it) => ({ href: it.href, label: it.label, heading: g.heading })),
+    routable(g.items).map((it) => ({ href: it.href, label: it.label, heading: g.heading })),
   );
 }
 
@@ -104,6 +142,32 @@ export function flatNav(): FlatItem[] {
    exactly what it must show as muted rather than hide. */
 export function allNav(): (NavItem & { heading: string })[] {
   return GROUPS.flatMap((g) => g.items.map((it) => ({ ...it, heading: g.heading })));
+}
+
+/* The nested groups the sidebar draws a disclosure for: the entries that have children. `subGroupId`
+   is the stable key for one, and it is derived from the parent's href rather than from its label for
+   the same reason a category's id is not its heading - remembered state keyed by copy would quietly
+   forget itself the day someone reworded an entry. */
+export function subGroupId(href: string): string {
+  return "sub-" + href;
+}
+
+export function subGroupIds(): string[] {
+  return GROUPS.flatMap((g) => g.items.filter((it) => (it.children ?? []).length > 0).map((it) => it.href));
+}
+
+/* The nested group a route lives in, or null - what the sidebar opens so the operator can see where
+   they are. Only direct children count: an entry two levels down is still revealed by its own
+   parent, and a rule that walked the whole subtree would open groups that do not contain the page. */
+export function subGroupOf(pathname: string): string | null {
+  for (const g of GROUPS) {
+    for (const it of g.items) {
+      for (const child of it.children ?? []) {
+        if (pathname === child.href || pathname.startsWith(child.href + "/")) { return it.href; }
+      }
+    }
+  }
+  return null;
 }
 
 /* Route matching, defined ONCE here so the sidebar's current-page treatment cannot drift from any
@@ -137,7 +201,10 @@ export function activeGroupId(pathname: string): string | null {
   const href = activeHref(pathname);
   if (href === null) { return null; }
   for (const g of GROUPS) {
-    if (g.items.some((it) => it.href === href)) { return g.id; }
+    /* Searched at every depth: the current page can be a nested entry ("Lot Process" under
+       "Inventory Management"), and a rule that only looked at the top level would leave the
+       operator's own category closed around them. */
+    if (routable(g.items).some((it) => it.href === href)) { return g.id; }
   }
   return null;
 }
