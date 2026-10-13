@@ -58,7 +58,7 @@ export default function AccountPage() {
         <Heading level="h1">Your orders</Heading>
         <p className="text-sm text-ink-600 mt-3">
           Sign in to see every order you have placed and where each one has got to. You can also
-          open the link from your confirmation email without an account.
+          open the order link you were given without an account.
         </p>
         <div className="mt-6 flex gap-3 justify-center">
           <Button href="/account/sign-in">Sign in</Button>

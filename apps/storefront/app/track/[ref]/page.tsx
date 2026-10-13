@@ -116,7 +116,7 @@ export default async function TrackResultPage({ params }: { params: Promise<{ re
         </dl>
         <p className="mt-4 text-xs text-ink-400">
           This page shows where your parcel has got to. The items, totals and delivery address on
-          this order are on the confirmation link from your order email, or under{" "}
+          this order are on that order&apos;s own confirmation link, or under{" "}
           <a href="/account" className={linkClass}>your orders</a>.
         </p>
       </Card>
