@@ -116,9 +116,10 @@ export const GROUPS: NavGroup[] = [
           { href: "/admin/finance/pnl", label: "P&L Report" },
         ],
       },
-      /* Still unbuilt, and still shown rather than hidden: there is no reporting surface beyond the
-         statement, so this is the roadmap's one remaining placeholder under this category. */
-      { href: "/admin/reports", label: "Reports & Business Intelligence", soon: true },
+      /* LIVE: Reports & Business Intelligence - the sales trend, the product leaderboard, inventory
+         turnover and dead stock, each exportable as a CSV or a PDF headed with the business's own
+         legal identity. */
+      { href: "/admin/reports", label: "Reports & Business Intelligence" },
     ],
   },
   {
