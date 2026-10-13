@@ -5,89 +5,104 @@
    sidebar's rule is that every entry must have a page behind it, and a second list cannot keep that
    promise.
 
-   The order is the order it renders. A category is one edit rather than a second copy of the
-   markup, and BOTH surfaces follow from this file alone: the sidebar draws the categories as
-   disclosures and the palette derives its flat, searchable run from them with flatNav().
+   THE ORDER IS THE ENTERPRISE ROADMAP'S ORDER, category for category and child for child. The six
+   categories below are the roadmap's six; the labels are the roadmap's labels. Nothing was renamed,
+   reordered, merged or dropped to suit the code that happens to exist - where the roadmap names a
+   surface this build has not finished, the entry stays IN PLACE and is marked `soon` instead (see
+   below), because a navigation tree that quietly omits the unbuilt half of a roadmap stops being the
+   roadmap the day someone reads it.
 
-   Seven categories, sixteen entries, grouped by what an operator is doing rather than by which
-   store a route reads. The brief for this regroup also named an "Account (User profile)" category;
-   it is deliberately absent, because /admin/account has no page behind it and the chrome's own rule
-   outranks the brief. Every existing entry keeps the label it already had - a regroup moves entries
-   between headings, and renaming them would be a second change wearing the first one's clothes.
+   A CATEGORY THAT NAMES AN ICON THE SIDEBAR DOES NOT DRAW is a compile error rather than an empty
+   space in the rail: `NavIcon` is the union of the names, and the sidebar's map is typed by it. */
 
-   No icon markup lives here. A category names the icon it draws and the sidebar owns the one map
-   from that name to path data, so this file stays the taxonomy rather than becoming half a
-   component. `id` is the stable key - the disclosure's element ids and the one thing remembered
-   between visits - and it is not the heading, because a heading is copy: remembered state keyed by
-   copy would quietly forget itself the day someone reworded a category. */
+export type NavItem = {
+  href: string;
+  label: string;
+  /* THE INTENDED ROUTE, DRAWN AS A PLACEHOLDER. `soon` marks a roadmap surface this build has not
+     built: the sidebar renders it muted, unpressable and titled "Coming soon", and the palette does
+     not offer it at all (`flatNav` filters it out, which is also what stops `activeHref` from ever
+     matching it). `href` is still the route the entry is FOR, so the next person to build it has the
+     address the roadmap intended rather than having to invent one. */
+  soon?: boolean;
+};
 
-export type NavItem = { href: string; label: string };
-
-/* The icons a category can name. The sidebar's map is typed by this union, so naming an icon here
-   and not drawing it there is a compile error rather than an empty space in the rail. */
-export type NavIcon = "gauge" | "crate" | "receipt" | "shop" | "spark" | "plug" | "shield";
+/* The icons a category can name. Six, because there are six categories - `spark` and `plug` went
+   with the old taxonomy, whose AI and Omnichannel entries are now children rather than categories,
+   and an unused member here would be a glyph nobody draws. */
+export type NavIcon = "gauge" | "crate" | "receipt" | "chart" | "shop" | "shield";
 
 export type NavGroup = { id: string; heading: string; icon: NavIcon; items: NavItem[] };
 
 export const GROUPS: NavGroup[] = [
-  /* Two entries, one name each: the dashboard job added /admin/dashboard, and the entry that used
-     to be called "Dashboard" is now "Overview" - so the word Dashboard points at exactly one
-     route and the older /admin summary keeps a name of its own. */
-  { id: "command-center", heading: "Command Center", icon: "gauge", items: [
-    { href: "/admin/dashboard", label: "Dashboard" },
-    { href: "/admin", label: "Overview" },
-  ] },
-  /* The listing studio sits beside the lot it lists rather than under the AI heading it used to
-     share: an operator pricing stock is doing inventory work, and a page's heading is a statement
-     about who goes there. */
-  { id: "inventory", heading: "Inventory & Logistics", icon: "crate", items: [
-    { href: "/admin/intake", label: "Lot Process" },
-    { href: "/admin/product-import", label: "Product Import" },
-    { href: "/admin/assets", label: "Assets" },
-    { href: "/admin/ai/listings", label: "AI listings" },
-  ] },
-  { id: "commerce", heading: "Commerce", icon: "receipt", items: [
-    { href: "/admin/orders", label: "Orders" },
-    /* The order's own second half, in the order an operator lives it: take the money, pack and send
-       it, then watch it and reconcile what it earned. Both entries sit under Commerce rather than
-       in the inventory category because the category holds what happens to STOCK, and these two are
-       what happens to an ORDER - the heading is shared, the entries under it are this list's. */
-    { href: "/admin/shipping", label: "Pick & Pack" },
-    { href: "/admin/logistics", label: "Logistics" },
-    { href: "/admin/customers", label: "Customers" },
-    { href: "/admin/audit", label: "Audit" },
-  ] },
-  { id: "storefront", heading: "Storefront", icon: "shop", items: [
-    { href: "/admin/cms", label: "CMS" },
-    { href: "/admin/newsletter", label: "Newsletter" },
-  ] },
-  { id: "ai", heading: "AI Intelligence", icon: "spark", items: [
-    { href: "/admin/assistant", label: "Assistant" },
-    { href: "/admin/agents", label: "Agents" },
-  ] },
-  /* The three marketplace hubs, whose pages landed with this category. This build has no
-     marketplace integration behind them, so each page says so in its own words rather than drawing
-     a connected dashboard it cannot back. */
-  { id: "omnichannel", heading: "Omnichannel", icon: "plug", items: [
-    { href: "/admin/channels/ebay", label: "eBay Hub" },
-    { href: "/admin/channels/amazon", label: "Amazon Hub" },
-    { href: "/admin/channels/facebook", label: "FB Marketplace" },
-  ] },
-  /* Security is not an "Account" screen: it is the one page that guards the whole portal, and it
-     reads as a system surface beside the channels that reach outside this building. */
-  { id: "system", heading: "System", icon: "shield", items: [
-    { href: "/admin/security", label: "Security" },
-    /* Team sits here rather than under a commerce heading: the roster decides what every other
-       entry in this file opens, which makes it a system surface, not a staffing one. */
-    { href: "/admin/team", label: "Team" },
-  ] },
+  {
+    id: "core-operations", heading: "Dashboard & Core Operations", icon: "gauge", items: [
+      { href: "/admin/dashboard", label: "Dashboard" },
+      { href: "/admin/orders", label: "Commerce / Orders" },
+      /* Fulfilment points at Pick & Pack, the screen an order is actually packed and dispatched on. */
+      { href: "/admin/shipping", label: "Fulfillment & Shipping" },
+    ],
+  },
+  {
+    id: "catalog-inventory", heading: "Product Catalog & Inventory", icon: "crate", items: [
+      /* The asset workbench: the unit-level inventory browser, which is what "Inventory Management"
+         names. Lot Process is the receiving station and lives at its own address. */
+      { href: "/admin/assets", label: "Inventory Management" },
+      { href: "/admin/product-import", label: "Product Import" },
+      /* The marketplace hubs. There are three of them (eBay, Amazon, Facebook) and the roadmap gives
+         the group one entry, so this is the hub for the marketplace the platform is actually wired
+         toward; the other two keep their routes and are reached from this one's own links. */
+      { href: "/admin/channels/ebay", label: "Omnichannel Listings" },
+    ],
+  },
+  {
+    id: "post-purchase", heading: "Post-Purchase & Customer Service", icon: "receipt", items: [
+      { href: "/admin/returns", label: "Returns & RMA", soon: true },
+      /* The closest built surface: the storefront's signups and the list the shop mails from. */
+      { href: "/admin/newsletter", label: "Notifications" },
+    ],
+  },
+  {
+    id: "finance-analytics", heading: "Finance & Analytics", icon: "chart", items: [
+      /* Both unbuilt. The finance API exists on the rail (`/staff/finance`, `/staff/logistics/payouts`)
+         but neither has a screen yet, so both are placeholders rather than links to an empty shell. */
+      { href: "/admin/finance", label: "Financials", soon: true },
+      { href: "/admin/reports", label: "Reports & Business Intelligence", soon: true },
+    ],
+  },
+  {
+    id: "storefront-ai", heading: "Storefront & AI Tools", icon: "shop", items: [
+      { href: "/admin/cms", label: "Storefront / CMS" },
+      { href: "/admin/assistant", label: "AI Intelligence" },
+    ],
+  },
+  {
+    id: "administration", heading: "Administration & Security", icon: "shield", items: [
+      { href: "/admin/team", label: "Team & Access Control" },
+      { href: "/admin/audit", label: "Audit Logs" },
+      /* Named "Settings & System" by the roadmap and built as the Security screen today - the one
+         page that carries the platform's own system configuration (MFA enrolment, the CSP posture
+         and the session rules). It keeps the roadmap's label because that is the roadmap's name for
+         this seat in the tree, and the page it opens is the platform's system page. */
+      { href: "/admin/security", label: "Settings & System" },
+    ],
+  },
 ];
 
-/* Every entry, flattened, with the category it came from - the shape the palette searches. Derived
-   rather than written down, so adding a route to GROUPS is the only edit either surface needs. */
-export type FlatItem = NavItem & { heading: string };
+/* Every OPENABLE entry, flattened, with the category it came from - the shape the palette searches.
+   Derived rather than written down, and FILTERED to what can actually be opened: the palette is a
+   launcher, and a `soon` row it offered would be a launcher that cannot launch. `activeHref` reads
+   this same list, so a placeholder can never light up as the current page. */
+export type FlatItem = { href: string; label: string; heading: string };
 
 export function flatNav(): FlatItem[] {
+  return GROUPS.flatMap((g) =>
+    g.items.filter((it) => !it.soon).map((it) => ({ href: it.href, label: it.label, heading: g.heading })),
+  );
+}
+
+/* Everything, placeholders included - what the SIDEBAR draws, since the roadmap's unbuilt half is
+   exactly what it must show as muted rather than hide. */
+export function allNav(): (NavItem & { heading: string })[] {
   return GROUPS.flatMap((g) => g.items.map((it) => ({ ...it, heading: g.heading })));
 }
 

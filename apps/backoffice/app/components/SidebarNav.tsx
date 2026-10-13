@@ -6,7 +6,7 @@ import { GROUPS, activeGroupId, activeHref, type NavIcon } from "./nav";
 import { kickerClass } from "@/lib/ui";
 import { cn } from "./ui";
 
-/* The admin sidebar: the taxonomy in nav.ts, drawn as seven collapsible categories.
+/* The admin sidebar: the taxonomy in nav.ts, drawn as six collapsible categories.
 
    This file is the taxonomy's other half. nav.ts is the ONE list of routes; this is the ONE map from
    a category's icon name to the path data that draws it, and the map is typed by nav.ts's own union
@@ -83,6 +83,11 @@ const ITEM_BASE =
    edit in globals.css and not a hunt through the chrome. */
 const ITEM_CURRENT = "bg-brand-50 font-semibold text-brand-300 shadow-glow-sm";
 const ITEM_IDLE = "text-ink-600 hover:bg-surface-sunken hover:text-ink-900";
+/* A roadmap surface with no page behind it. `ink-400` rather than the idle `ink-600`: the row has to
+   read as present-but-unavailable, which is a step further back than an entry nobody is hovering -
+   and it carries no hover fill at all, because a row that lights up under the pointer is a row that
+   promises it can be pressed. */
+const ITEM_SOON = "text-ink-400";
 
 const RAIL_BASE =
   "mx-auto flex h-9 w-9 items-center justify-center rounded-control " +
@@ -100,10 +105,8 @@ const ICONS: Record<NavIcon, ReactNode> = {
   receipt: <><path d="M4 1.5h8v13l-2-1.5-2 1.5-2-1.5-2 1.5z" /><path d="M6 5.5h4" /><path d="M6 8.5h4" /></>,
   /* a shopfront: awning over a door */
   shop: <><path d="M2.5 6.5h11" /><path d="M3.5 6.5V3.5l1-1.5h7l1 1.5v3" /><path d="M4.5 6.5V14h7V6.5" /><path d="M6.5 14v-4h3v4" /></>,
-  /* a four-point spark */
-  spark: <path d="M8 2l1.5 4.5L14 8l-4.5 1.5L8 14l-1.5-4.5L2 8l4.5-1.5z" />,
-  /* a plug: two pins, a body and a lead */
-  plug: <><path d="M5.5 1.5v4" /><path d="M10.5 1.5v4" /><path d="M3.5 5.5h9v2a4.5 4.5 0 0 1-9 0z" /><path d="M8 12v2.5" /></>,
+  /* three columns on a baseline - the finance and analytics category */
+  chart: <><path d="M2 13.5h12" /><path d="M4.5 13.5V8" /><path d="M8 13.5V4.5" /><path d="M11.5 13.5v-3.5" /></>,
   /* a shield with a tick */
   shield: <><path d="M8 1.5l5.5 2.2v4.1c0 3-2.2 5.6-5.5 6.9-3.3-1.3-5.5-3.9-5.5-6.9V3.7z" /><path d="M5.8 7.9l1.6 1.6 3-3.4" /></>,
 };
@@ -211,7 +214,12 @@ export default function SidebarNav({ rail = false, onNavigate, onExpand }: Props
               className={cn(CATEGORY_BASE, g.id === current ? CATEGORY_CURRENT : CATEGORY_IDLE)}
             >
               <Glyph name={g.icon} />
-              <span className={cn(kickerClass, "min-w-0 flex-1")}>{g.heading}</span>
+              {/* The roadmap asks for BOLD category headers, and the eyebrow class carries no
+                  font-weight of its own - so this adds one rather than fighting it. Appended after
+                  the shared class on purpose: `cn` joins rather than merges, so a later utility
+                  cannot be dropped by an earlier one, and the eyebrow stays the single definition of
+                  the small-caps label its own comment promises. */}
+              <span className={cn(kickerClass, "min-w-0 flex-1 font-semibold")}>{g.heading}</span>
               <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor"
                 strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
                 className={cn("shrink-0 transition-transform duration-fast ease-out motion-reduce:transition-none",
@@ -227,6 +235,28 @@ export default function SidebarNav({ rail = false, onNavigate, onExpand }: Props
             <div id={panelId} hidden={!expanded}>
               <ul className="space-y-0.5 pt-0.5">
                 {g.items.map((l) => {
+                  /* NOT YET BUILT: drawn, muted and unpressable, with the roadmap's intended route
+                     recorded in nav.ts but never linked. It is a <span> and not a disabled <a>,
+                     because a link that goes nowhere should not be reachable by keyboard or offered
+                     to a screen reader as a destination - there is nothing to activate. */
+                  if (l.soon) {
+                    return (
+                      /* THE TOOLTIP LIVES ON THE WRAPPER, NOT ON THE MUTED ROW - and that is not a
+                         style choice. `pointer-events-none` on the row means it never receives a
+                         hover, so a `title` on it would be a tooltip that cannot appear; the two
+                         requirements only coexist if the element that cannot be pressed and the
+                         element that answers the hover are different elements. The wrapper is inert
+                         too (it is a plain <li>), so nothing here is clickable either way. */
+                      <li key={l.href} title="Coming soon" aria-label={l.label + " - coming soon"}>
+                        <span
+                          aria-disabled="true"
+                          className={cn(ITEM_BASE, ITEM_SOON, "pointer-events-none")}
+                        >
+                          {l.label}
+                        </span>
+                      </li>
+                    );
+                  }
                   const on = l.href === href;
                   return (
                     <li key={l.href}>
