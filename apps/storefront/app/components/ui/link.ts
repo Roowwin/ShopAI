@@ -39,3 +39,14 @@ export const footerLinkClass =
   "transition-colors duration-fast ease-out hover:text-brand-300 " +
   "rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 " +
   "focus-visible:ring-offset-2 focus-visible:ring-offset-ink-900 motion-reduce:transition-none";
+
+/* The inline link on a DARK ground - the dark product page's breadcrumbs, its spec meta line and
+   its grade-scale link. It is `linkClass`'s underlined treatment with the footer's colours: on
+   charcoal, `text-brand-700` measures 2.3:1, so both the ink and the focus ring move to
+   brand-300 (6.9:1). The offset band is left to the page's own scope - see `.pdp-dark` in
+   globals.css, which sets --tw-ring-offset-color to the ground it sits on. */
+export const linkOnDarkClass =
+  "text-brand-300 font-medium underline underline-offset-2 decoration-brand-700 rounded-sm " +
+  "transition-colors duration-fast ease-out hover:text-brand-100 hover:decoration-brand-300 " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 " +
+  "motion-reduce:transition-none";

@@ -125,4 +125,66 @@
       --motion-base: 0ms;
     }
   }
+
+  /* The dark product page. One route in this shop is drawn on charcoal instead of the warm
+     ground: the product detail page, where the photograph and the price are the whole screen
+     and a dark ground makes both carry. Everything around it - the header above, the catalog
+     that links here, the cart - stays light.
+
+     It is a SCOPE, not a second theme, and for the same reason the backoffice's print documents
+     are one: the page's markup keeps writing `bg-surface`, `text-ink-900` and `ring-line`, and
+     resolves them against the ladder below. Nothing in the page file names a hex, so the dark
+     treatment is one block here rather than forty class strings over there.
+
+     Two values are deliberately NOT rebound, and both are the "one token, two jobs" trap this
+     palette has hit before:
+       - brand-700 stays #245B45. It is the CTA FILL, and white on it measures 7.9:1 on any
+         ground. It is NOT usable as ink here (2.26:1 on this charcoal), so links and the price
+         point at brand-300 (6.9:1) - which is the same split the charcoal footer already makes.
+       - the brand fill steps 500/800/900 are unchanged for the same reason. */
+  .pdp-dark {
+    --surface-page: 37 43 40;      /* the charcoal ground */
+    --surface-page-alt: 31 36 33;
+    --surface: 46 54 49;           /* panels and cards - the raised step */
+    --surface-muted: 41 48 44;
+    --surface-sunken: 30 35 32;    /* recessed: the image well, the quantity well */
+    --surface-pressed: 60 70 64;
+
+    --line: 66 76 70;
+    --line-strong: 92 104 96;
+
+    /* The ink scale inverts: on a dark ground the strongest text is the lightest value. */
+    --ink-900: 247 247 242;        /* headings */
+    --ink-700: 226 231 226;
+    --ink-600: 198 206 199;        /* body copy */
+    --ink-500: 168 177 170;        /* meta */
+    --ink-400: 140 150 143;        /* the kicker - 4.7:1, still readable on this ground */
+    --ink-300: 110 120 113;        /* the deliberately dim step: placeholders, disabled */
+
+    /* The soft brand fills deepen and the link ink lightens, exactly as the footer's do. */
+    --brand-50: 12 42 32;
+    --brand-100: 17 56 43;
+    --brand-300: 135 191 160;
+
+    --danger-600: 248 113 113;
+
+    /* Grade A is the brand hue; the soft fills deepen and the inks lighten with it. Same values
+       the backoffice uses on its dark ground, so a grade chip reads the same in both apps. */
+    --grade-a-soft: 12 42 32;   --grade-a-ink: 135 191 160;
+    --grade-b-soft: 12 74 110;  --grade-b-ink: 125 211 252;
+    --grade-c-soft: 120 53 15;  --grade-c-ink: 252 211 77;
+    --grade-d-soft: 51 65 85;   --grade-d-ink: 203 213 225;
+
+    /* The user agent's own palette follows the ground: unset, this page would draw light
+       scrollbars, light <select> popups and a light spinner on charcoal. */
+    color-scheme: dark;
+  }
+
+  /* The focus ring's offset band, on the same selector Tailwind's base uses - see the note in the
+     backoffice's stylesheet for why `:root` cannot do this. It must be the PAGE ground, not
+     `--surface`: a control sitting directly on the charcoal (the CTA, the quantity buttons) would
+     otherwise draw its gap in the panel colour and show a visible seam. */
+  .pdp-dark, .pdp-dark *, .pdp-dark ::before, .pdp-dark ::after {
+    --tw-ring-offset-color: rgb(var(--surface-page));
+  }
 }

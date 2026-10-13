@@ -12,8 +12,8 @@
    badge background was missing from the built CSS entirely. `content` now covers ./lib; keep these as
    plain literals so the scanner can still see them.
 
-   A is the brand hue (emerald). B is deliberately sky, not emerald: with both A and B emerald the two
-   badges were indistinguishable at a glance. */
+   A is the brand hue (forest green). B is deliberately sky, not the brand hue: with both A and B
+   green the two badges were indistinguishable at a glance. */
 export type Grade = {
   letter: string;
   label: string;
