@@ -295,7 +295,7 @@ export default function CmsPage() {
     <main className="max-w-6xl mx-auto p-4 min-h-screen">
       <div className="bg-surface-muted text-ink-900 rounded-card px-5 py-3 mb-4 flex flex-wrap items-center gap-3">
         <Heading level="h1">Website CMS</Heading>
-        <span className="text-xs text-ink-400">homepage hero &middot; offers &middot; models - changes go live immediately</span>
+        <span className="text-xs text-ink-400">homepage &middot; offers &middot; models - changes go live immediately</span>
         <a className="ml-auto text-xs text-brand-300 hover:underline" href={SITE}>Open the storefront</a>
       </div>
 
