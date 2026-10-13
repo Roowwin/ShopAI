@@ -40,9 +40,10 @@ No stock movement on a shipment, either: the ledger's -1 fired at checkout when 
 second movement for the parcel would count the same unit twice.
 """
 
+import base64
 from datetime import date, datetime, time, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -51,6 +52,7 @@ from app.api.v1.deps import require_roles
 # Reused rather than re-declared: one 409 translator and one in-body guard for the whole app.
 from app.api.v1.staff_ops import _409, _require_role
 from app.core.db import get_db
+from app.services import carriers as carrier_svc
 from app.services import logistics as lg
 from app.services.audit import audit
 
@@ -73,6 +75,11 @@ ACTION_DELIVER_SHIPMENT = "deliver_shipment"
 ACTION_READ_PAYOUTS = "read_payouts"
 ACTION_CREATE_PAYOUT = "create_payout"
 ACTION_MATCH_PAYOUT = "match_payout"
+# The label doors moved here from `/staff/shipping` and from `staff_orders`, so their action names
+# came with them: the audit trail of a booking should not look like a different act because the path
+# it was booked through changed.
+ACTION_BOOK_LABEL = "book_label"
+ACTION_READ_LABEL = "read_label"
 
 # How many alert rows the scan will hand the engine, oldest order first. A cap with a REPORTED
 # truncation, never a silent one: an operator who cannot see that the list was cut will read the
@@ -268,7 +275,13 @@ async def carriers(preference: str = "balanced",
     return {"rules": lg.describe_rules(), "window_days": CARRIER_WINDOW_DAYS,
             "shipments_in_window": len(rows),
             "carriers": [s.as_dict() for s in stats],
-            "recommendation": lg.recommend_carrier(stats, preference=preference)}
+            "recommendation": lg.recommend_carrier(stats, preference=preference),
+            # The other half of "which carrier", merged in rather than given a second endpoint: the
+            # stats above say what each carrier HAS DONE, and this says whether a label can be booked
+            # with one RIGHT NOW and what is missing if not. A packer asking "can I send this today"
+            # would otherwise have to know that the answer lives at a different address from the
+            # question - which is how `/staff/shipping/carriers` came to exist as a duplicate.
+            "label_readiness": await carrier_svc.available(db)}
 
 
 # ---------------------------------------------------------------------------
@@ -600,3 +613,281 @@ async def match_payout(payout_id: int, body: MatchIn,
     return {"payout": _payout_row(fresh, int(fresh["matched_cents"]), int(fresh["matched_count"])),
             "matched_payment_ids": ids,
             "order_ids": [int(r["order_id"]) for r in rows]}
+
+
+# ---------------------------------------------------------------------------
+# Fulfilment: the queue a packer works from, and the label for one order.
+#
+# THESE MOVED HERE. The queue and the fulfilment document lived in `staff_shipping.py`, and the label
+# read lived in `staff_orders.py` as `GET /staff/orders/{id}/label` - which read the DENORMALISED
+# `orders.carrier`/`orders.tracking_number` mirror rather than the parcel itself. Three sessions had
+# grown three answers to "where is this order's fulfilment state"; the owner's ruling is that
+# `shipments` is the source of truth and this module is the only rail. So that door is closed, its
+# callers redirected here, and its contract preserved key for key - a removal that also changed the
+# payload would be a migration for its callers rather than a consolidation.
+#
+# WHAT IS DELIBERATELY NOT HERE: `services/carriers.py` stays a service. This module owns the ROUTES;
+# the client that speaks to Australia Post is not a route and has no business in a router.
+# ---------------------------------------------------------------------------
+
+# The page bounds for the queue. A packing bench reads a worklist, not a report - and the address is
+# on every row, so an unbounded read would be an enumeration of the customer base's addresses.
+DEFAULT_PAGE = 25
+MAX_PAGE = 100
+
+
+def _iso(value) -> str | None:
+    return value.isoformat() if isinstance(value, datetime) else (str(value) if value else None)
+
+
+def _recipient(row) -> dict:
+    """The address block, in one place, so the queue, the document and the label read it alike. A
+    NULL column becomes an empty string rather than an absent key: a packing slip wants the blank
+    line, and `services/carriers.py` checks the postcode for itself."""
+    return {
+        "name": row["ship_to_name"] or "",
+        "line1": row["ship_line1"] or "",
+        "line2": row["ship_line2"] or "",
+        "city": row["ship_city"] or "",
+        "state": row["ship_state"] or "",
+        "postcode": row["ship_postcode"] or "",
+        "country": row["shipping_country"] or "AU",
+    }
+
+
+# `status = 'paid'` AND no shipment row is the whole definition of "waiting to go out" - the same
+# condition the `overdue` alert narrows further with a clock. `shipments.order_id` is UNIQUE, so the
+# anti-join cannot multiply a row.
+_QUEUE_WHERE = """
+    o.status = 'paid'
+    AND NOT EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.id)
+"""
+
+_ORDER_COLUMNS = """
+    o.id, o.public_id::text AS public_id, o.status, o.currency, o.subtotal_cents, o.tax_cents,
+    o.shipping_cents, o.total_cents, o.placed_at, o.customer_id,
+    o.ship_to_name, o.ship_line1, o.ship_line2, o.ship_city, o.ship_state, o.ship_postcode,
+    o.shipping_country
+"""
+
+
+async def _lines(db, order_ids: list[int]) -> dict[int, list[dict]]:
+    """Every line for every order on this page, in ONE query keyed by order - the alternative is a
+    query per order, which is the N+1 this endpoint would otherwise be."""
+    if not order_ids:
+        return {}
+    rows = (await db.execute(text("""
+        SELECT ol.order_id, ol.asset_id, ol.sku_title, ol.unit_price_cents, ol.line_total_cents,
+               a.grade, right(a.serial_number::text, 4) AS serial_tail
+        FROM order_lines ol LEFT JOIN assets a ON a.id = ol.asset_id
+        WHERE ol.order_id = ANY(:ids) ORDER BY ol.order_id, ol.id
+    """), {"ids": order_ids})).mappings().all()
+    out: dict[int, list[dict]] = {i: [] for i in order_ids}
+    for r in rows:
+        out[r["order_id"]].append({
+            "asset_id": r["asset_id"], "sku_title": r["sku_title"],
+            "unit_price_cents": int(r["unit_price_cents"]),
+            "line_total_cents": int(r["line_total_cents"]),
+            "grade": r["grade"], "serial_tail": r["serial_tail"],
+        })
+    return out
+
+
+async def _customer_email(db, customer_id: int | None) -> str | None:
+    if customer_id is None:
+        return None
+    return (await db.execute(text("SELECT email::text AS email FROM users WHERE id = :i"),
+                             {"i": customer_id})).scalar()
+
+
+async def _shipment_for_order(db, order_id: int) -> dict | None:
+    """The parcel for this order, in `_shipment_payload`'s own shape - one builder, so the fulfilment
+    document and `GET /orders/{id}/shipment` cannot describe the same parcel differently."""
+    row = (await db.execute(text("SELECT id FROM shipments WHERE order_id = :i"),
+                            {"i": order_id})).first()
+    return None if row is None else await _shipment_payload(db, int(row[0]))
+
+
+@router.get("/queue")
+async def fulfilment_queue(limit: int = Query(DEFAULT_PAGE, ge=1, le=MAX_PAGE),
+                           offset: int = Query(0, ge=0),
+                           staff: dict = Depends(require_roles(*ROLES_SHIP)),
+                           db=Depends(get_db)):
+    """Paid orders with no parcel yet, oldest first - the worklist, and the packing-slip source.
+
+    Oldest first because this is a queue and not a browse: the order that has been waiting longest is
+    closest to breaking the dispatch promise, and a screen that opened on the newest would hide
+    exactly the orders that need attention.
+    """
+    await _require_role(staff, ROLES_SHIP, ACTION_READ_LOGISTICS, None)
+    total = (await db.execute(text(
+        f"SELECT count(*) FROM orders o WHERE {_QUEUE_WHERE}"))).scalar_one()
+    rows = (await db.execute(text(f"""
+        SELECT {_ORDER_COLUMNS} FROM orders o
+        WHERE {_QUEUE_WHERE}
+        ORDER BY o.placed_at ASC, o.id ASC
+        LIMIT :lim OFFSET :off
+    """), {"lim": limit, "off": offset})).mappings().all()
+    by_order = await _lines(db, [r["id"] for r in rows])
+    return {
+        "total": int(total), "limit": limit, "offset": offset,
+        "orders": [{
+            "id": r["id"], "public_id": r["public_id"], "status": r["status"],
+            "currency": r["currency"], "total_cents": int(r["total_cents"]),
+            "subtotal_cents": int(r["subtotal_cents"]), "tax_cents": int(r["tax_cents"]),
+            "shipping_cents": int(r["shipping_cents"]),
+            "placed_at": _iso(r["placed_at"]),
+            "customer_email": await _customer_email(db, r["customer_id"]),
+            "recipient": _recipient(r),
+            "lines": by_order.get(r["id"], []),
+        } for r in rows],
+    }
+
+
+@router.get("/orders/{order_id}/fulfilment")
+async def fulfilment_order(order_id: int, staff: dict = Depends(require_roles(*ROLES_SHIP)),
+                           db=Depends(get_db)):
+    """One order as a fulfilment document: what to pack, where it goes, and how it is being sent.
+
+    Unlike the label read below, this one ANSWERS BEFORE DISPATCH - the packing slip is written while
+    the box is being filled, and a document that refused until the parcel had left would refuse at
+    the only moment anyone needs it.
+    """
+    await _require_role(staff, ROLES_SHIP, ACTION_READ_LOGISTICS, None)
+    r = (await db.execute(text(f"SELECT {_ORDER_COLUMNS} FROM orders o WHERE o.id = :i"),
+                          {"i": order_id})).mappings().first()
+    if r is None:
+        raise HTTPException(status_code=404, detail="order not found")
+    lines = (await _lines(db, [order_id])).get(order_id, [])
+    return {
+        "order": {
+            "id": r["id"], "public_id": r["public_id"], "status": r["status"],
+            "currency": r["currency"], "total_cents": int(r["total_cents"]),
+            "subtotal_cents": int(r["subtotal_cents"]), "tax_cents": int(r["tax_cents"]),
+            "shipping_cents": int(r["shipping_cents"]),
+            "placed_at": _iso(r["placed_at"]),
+            "customer_email": await _customer_email(db, r["customer_id"]),
+        },
+        "recipient": _recipient(r),
+        "lines": lines,
+        "shipment": await _shipment_for_order(db, order_id),
+    }
+
+
+class LabelIn(BaseModel):
+    """What the operator knows at the bench. Every field has a default because a label does not need
+    dimensions to be valid - a carrier rates on weight, and a missing dimension is a smaller number,
+    not a refusal."""
+
+    carrier: str = Field(default="auspost", max_length=40)
+    service: str | None = Field(default=None, max_length=60)
+    weight_grams: int = Field(default=0, ge=0, le=100_000)
+    length_cm: int = Field(default=0, ge=0, le=300)
+    width_cm: int = Field(default=0, ge=0, le=300)
+    height_cm: int = Field(default=0, ge=0, le=300)
+
+
+@router.post("/orders/{order_id}/label")
+async def book_label(order_id: int, body: LabelIn,
+                     staff: dict = Depends(require_roles(*ROLES_SHIP)), db=Depends(get_db)):
+    """Book a real label with the carrier and hand back its document and tracking reference.
+
+    The bytes come back base64 in the JSON body rather than as a redirect to a carrier URL: the label
+    is a document this platform paid for, and a URL that lives only as long as the carrier's session
+    is not something an operator can reprint from tomorrow.
+
+    THIS DOES NOT WRITE THE SHIPMENT. Booking a label and recording a parcel are two decisions - the
+    first can be repeated, because a label can be spoiled at the printer; the second cannot, because
+    one parcel per order is a UNIQUE index. The tracking reference returned here is what
+    `POST /orders/{id}/ship` records next.
+    """
+    await _require_role(staff, ROLES_SHIP, ACTION_BOOK_LABEL, None)
+    r = (await db.execute(text("""
+        SELECT id, status, public_id::text AS public_id, ship_to_name, ship_line1, ship_line2,
+               ship_city, ship_state, ship_postcode, shipping_country
+        FROM orders WHERE id = :i
+    """), {"i": order_id})).mappings().first()
+    if r is None:
+        raise HTTPException(status_code=404, detail="order not found")
+    if r["status"] != "paid":
+        # An act against a real order, so it is recorded: a label booked for an order that was
+        # refunded or cancelled is exactly what someone asks about later. A configuration gap is NOT
+        # recorded - that is not about an order, and it would fill the trail with one operator's
+        # setup mistakes.
+        await audit(db, "staff", entity="order", entity_id=order_id, action="label_refused",
+                    actor_id=staff["id"], meta={"reason": "not paid", "status": r["status"]})
+        await db.commit()
+        raise HTTPException(status_code=409,
+                            detail=f"only a paid order can be labelled - order #{order_id} is {r['status']}")
+
+    lines = (await _lines(db, [order_id])).get(order_id, [])
+    parcel = {
+        "service": body.service, "weight_grams": body.weight_grams, "length_cm": body.length_cm,
+        "width_cm": body.width_cm, "height_cm": body.height_cm,
+    }
+    try:
+        label = await carrier_svc.book_label(
+            db, body.carrier,
+            order={"id": order_id, "public_id": r["public_id"], "lines": lines},
+            recipient=_recipient(r), parcel=parcel)
+    except carrier_svc.CarrierError as e:
+        # 409, not 500: the request was understood and the platform is not broken - the carrier is
+        # simply not usable yet, and the message names what to configure.
+        raise HTTPException(status_code=409, detail=str(e))
+
+    await audit(db, "staff", entity="order", entity_id=order_id, action="label_booked",
+                actor_id=staff["id"],
+                after={"carrier": label.carrier, "service": label.service,
+                       "tracking_ref": label.tracking_ref, "bytes": len(label.label_bytes),
+                       "note": label.note})
+    await db.commit()
+    return {
+        "order_id": order_id, "carrier": label.carrier, "service": label.service,
+        "tracking_ref": label.tracking_ref, "label_format": label.label_format,
+        "label_base64": base64.b64encode(label.label_bytes).decode("ascii"),
+        "bytes": len(label.label_bytes), "note": label.note,
+    }
+
+
+@router.get("/orders/{order_id}/label")
+async def shipping_label(order_id: int, staff: dict = Depends(require_roles(*ROLES_SHIP)),
+                         db=Depends(get_db)):
+    """The printable label for a DISPATCHED order - the replacement for `GET /staff/orders/{id}/label`.
+
+    THE SAME CONTRACT IT REPLACES, so closing that door is a redirect rather than a loss: refused
+    until the order has shipped or been delivered - a label is a claim that a parcel exists, so an
+    order that has not left is a 409 naming its status rather than a document someone could print and
+    stick on an empty box - and the same payload keys a print page already reads.
+
+    IT READS THE `shipments` ROW, NOT THE MIRROR. The door it replaces read `orders.carrier` and
+    `orders.tracking_number`, the denormalised copy, which is precisely the second answer this
+    consolidation exists to delete. `ship_order` writes both in one transaction so they agree today,
+    but a document that reads the copy is how they stop agreeing; the parcel is the source.
+    """
+    await _require_role(staff, ROLES_SHIP, ACTION_READ_LABEL, None)
+    r = (await db.execute(text("""
+        SELECT o.id, o.public_id::text AS public_id, o.status, o.currency, o.total_cents,
+               s.carrier, s.service, s.tracking_ref, s.dispatched_at,
+               o.ship_to_name, o.ship_line1, o.ship_line2, o.ship_city, o.ship_state,
+               o.ship_postcode, o.shipping_country
+        FROM orders o LEFT JOIN shipments s ON s.order_id = o.id
+        WHERE o.id = :i
+    """), {"i": order_id})).mappings().first()
+    if r is None:
+        raise HTTPException(status_code=404, detail="order not found")
+    if r["status"] not in ("shipped", "delivered"):
+        raise HTTPException(status_code=409,
+                            detail="an order must be shipped before its label can be printed"
+                                   f" (it is {r['status']})")
+    if r["carrier"] is None:
+        # Shipped with no parcel is refused by 0020's trigger, so this catches a row that predates it
+        # rather than a state the platform can currently reach.
+        raise HTTPException(status_code=409, detail="this order has no parcel recorded")
+    return {
+        "order_id": int(r["id"]), "order_public_id": r["public_id"], "status": r["status"],
+        "carrier": r["carrier"], "service": r["service"],
+        "tracking_number": r["tracking_ref"], "barcode": r["tracking_ref"],
+        "dispatched_at": _iso(r["dispatched_at"]),
+        "currency": r["currency"], "declared_value_cents": int(r["total_cents"]),
+        "ship_to": _recipient(r),
+    }

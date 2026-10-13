@@ -262,7 +262,7 @@ async def test_the_money_path_records_the_payment_paid_and_prints_the_label(clie
         assert (await _one("SELECT count(*) AS n FROM invoices WHERE order_id = :i", i=oid))["n"] == 1
 
         # 3. THE LABEL PRINTS - but only once the parcel exists.
-        r = await client.get(f"/staff/orders/{oid}/label", headers=h)
+        r = await client.get(f"/staff/logistics/orders/{oid}/label", headers=h)
         assert r.status_code == 409, "an unshipped order has no parcel to label: " + r.text
 
         r = await client.post(f"/staff/logistics/orders/{oid}/ship", headers=h,
@@ -270,7 +270,7 @@ async def test_the_money_path_records_the_payment_paid_and_prints_the_label(clie
                                     "promised_days": 2})
         assert r.status_code == 201, r.text
 
-        r = await client.get(f"/staff/orders/{oid}/label", headers=h)
+        r = await client.get(f"/staff/logistics/orders/{oid}/label", headers=h)
         assert r.status_code == 200, r.text
         label = r.json()
         assert label["carrier"] == "Sendle" and label["tracking_number"] == "SN-" + tag, label
@@ -295,18 +295,18 @@ async def test_only_a_fulfilment_role_prints_the_label(client):
         fixture = await _paid_order(client, h, tag)
         oid = fixture["order_id"]
 
-        assert (await client.get(f"/staff/orders/{oid}/label", headers=sales)).status_code == 403
+        assert (await client.get(f"/staff/logistics/orders/{oid}/label", headers=sales)).status_code == 403
         r = await client.post(f"/staff/logistics/orders/{oid}/ship", headers=wh,
                               json={"carrier": "Aramex", "tracking_ref": "AX-" + tag})
         assert r.status_code == 201, r.text
         shipment_id = r.json()["shipment_id"]
-        r = await client.get(f"/staff/orders/{oid}/label", headers=wh)
+        r = await client.get(f"/staff/logistics/orders/{oid}/label", headers=wh)
         assert r.status_code == 200 and r.json()["barcode"] == "AX-" + tag, r.text
 
         # A DELIVERED parcel's label still reprints - that is an ordinary thing to need.
         assert (await client.post(f"/staff/logistics/shipments/{shipment_id}/deliver",
                                   headers=wh)).status_code == 200
-        assert (await client.get(f"/staff/orders/{oid}/label", headers=wh)).status_code == 200
+        assert (await client.get(f"/staff/logistics/orders/{oid}/label", headers=wh)).status_code == 200
         # An order that does not exist is a 404, not a 409.
         assert (await client.get("/staff/orders/999999999/label", headers=wh)).status_code == 404
     finally:

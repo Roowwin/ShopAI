@@ -70,8 +70,8 @@ export default function PickAndPackPage() {
 
   const load = useCallback(async () => {
     const [q, c] = await Promise.all([
-      apiFetch("/staff/shipping/queue?limit=50"),
-      apiFetch("/staff/shipping/carriers"),
+      apiFetch("/staff/logistics/queue?limit=50"),
+      apiFetch("/staff/logistics/carriers"),
     ]);
     if (!q.ok) {
       setErr(q.status === 403 ? "warehouse, manager or admin role required" : `Could not read the queue (${q.status})`);
@@ -82,8 +82,12 @@ export default function PickAndPackPage() {
     setQueue(qj.orders ?? []);
     setTotal(qj.total ?? 0);
     if (c.ok) {
+      // `label_readiness`, not `carriers`: the rail's carrier endpoint answers two questions in one
+      // response - what each carrier has cost and how fast it has been (`carriers`, the performance
+      // stats this bench does not show) and whether a label can be booked right now. This reads the
+      // second; the first is the Logistics page's.
       const cj: any = await c.json().catch(() => ({}));
-      setCarriers(cj.carriers ?? []);
+      setCarriers(cj.label_readiness ?? []);
     }
     setLoaded(true);
   }, []);
@@ -110,7 +114,7 @@ export default function PickAndPackPage() {
     if (!selected || busy) return;
     setBusy("label"); setErr(""); setMsg("");
     try {
-      const r = await apiFetch(`/staff/shipping/orders/${selected.id}/label`, {
+      const r = await apiFetch(`/staff/logistics/orders/${selected.id}/label`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
