@@ -23,6 +23,7 @@ from sqlalchemy import text
 from app.api.v1 import store_catalog
 from app.bootstrap_staff import bootstrap
 from app.core.db import get_engine
+from app.services.margin import PUBLISHABLE_SQL
 
 KINGSTON = "kingston"
 SEAGATE = "seagate"
@@ -343,12 +344,19 @@ async def test_a_malformed_filter_is_refused(client):
 
 
 def test_the_unfiltered_query_is_the_one_this_endpoint_has_always_run():
-    """The additive promise, as a property of the statement rather than a promise in a comment."""
+    """The additive promise, as a property of the statement rather than a promise in a comment.
+
+    `%MARGIN%` is expanded here too, and that is correct rather than a leak: the margin guard is a
+    CONSTANT business rule (a loss-maker is not for sale), not a shopper filter, so it is present
+    whether or not the caller asked for anything - exactly like the `l.status = 'active'` beside it.
+    """
     sql = store_catalog._catalog_sql(None, None, None, None, None, "featured")
-    assert sql == store_catalog.CATALOG_SELECT.replace("%CAT%", "").replace("%UNIT%", "")
+    assert sql == (store_catalog.CATALOG_SELECT.replace("%CAT%", "").replace("%UNIT%", "")
+                   .replace("%MARGIN%", PUBLISHABLE_SQL))
     assert "%" not in sql, "a placeholder that did not expand would be a broken statement"
     for leak in ("a.grade", "a.sale_price_cents >", "a.sale_price_cents <", "b.slug =", "c.slug ="):
         assert leak not in sql, "an unset filter leaked into the statement: " + leak
+    assert PUBLISHABLE_SQL in sql, "the margin guard must ride on every catalog read"
 
     # Each filter adds its own clause, and only its own.
     assert "AND a.grade = :grade" in store_catalog._catalog_sql(None, None, "A", None, None, "featured")
@@ -512,12 +520,19 @@ async def test_a_selected_brand_does_not_take_the_other_brands_off_the_list(clie
 
 
 def test_the_unfiltered_facet_query_is_the_one_this_endpoint_has_always_run():
-    """The facet's additive promise, held the same way the list's is: as a property of the statement."""
+    """The facet's additive promise, held the same way the list's is: as a property of the statement.
+
+    The margin guard is expanded in unconditionally and is therefore NOT on the leak list below:
+    unlike `a.grade` or `b.slug =`, it does not vary with the request. It is asserted present
+    instead, because a facet that counted loss-making units would offer a brand whose grid is empty.
+    """
     sql = store_catalog._brand_facet_sql(None, None, None, None, None)
-    assert sql == store_catalog.CATALOG_BRANDS.replace("%CAT%", "").replace("%UNIT%", "")
+    assert sql == (store_catalog.CATALOG_BRANDS.replace("%CAT%", "").replace("%UNIT%", "")
+                   .replace("%MARGIN%", PUBLISHABLE_SQL))
     assert "%" not in sql, "a placeholder that did not expand would be a broken statement"
-    for leak in ("a.grade", "a.sale_price_cents", "search_vec", "c.name =", "b.slug ="):
+    for leak in ("a.grade", "search_vec", "c.name =", "b.slug ="):
         assert leak not in sql, "an unset filter leaked into the facet statement: " + leak
+    assert PUBLISHABLE_SQL in sql, "the facet must apply the same margin guard as the list"
 
     # Each filter adds its own clause, and only its own.
     assert "AND (c.name = :cat OR c.slug = :cat)" in store_catalog._brand_facet_sql("parts", None, None, None, None)

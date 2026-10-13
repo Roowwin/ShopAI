@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from app.api.v1 import (staff, staff_ops, store, store_catalog, store_ops, staff_ai, store_assistant,
                         staff_overview, staff_views, staff_imports)
-from app.api.v1 import staff_agents
+from app.api.v1 import staff_agents, staff_settings
 from app.core.config import get_settings
 from app.core.db import get_engine
 
@@ -49,6 +49,7 @@ app.include_router(staff_overview.router)
 app.include_router(staff_views.router)
 app.include_router(staff_agents.router)
 app.include_router(staff_imports.router)
+app.include_router(staff_settings.router)
 
 @app.get("/healthz")
 async def healthz() -> dict:
