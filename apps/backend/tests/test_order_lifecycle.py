@@ -2,9 +2,13 @@
 
 WHY THIS FILE EXISTS. `orders.status` carried six states from 0001 and only two were ever written -
 the payment webhook moved pending -> paid and pending -> cancelled and nothing else could move an
-order at all. These tests pin the states that had no door: an operator shipping and delivering, a
-cancellation that never shipped, a cancellation of one that did, and a refund (which changes both
-the order and the payment row).
+order at all. These tests pin the states that had no door: a cancellation that never shipped, a
+cancellation of one that did, and a refund (which changes both the order and the payment row).
+
+FULFILMENT IS THE LOGISTICS RAIL'S. Shipping and delivering belong to `/staff/logistics`, which
+records the parcel AND walks each sold unit to `shipped`; this door REFUSES them and names the rail
+that owns them. A second path here would stamp the order row and leave the units on `sold` - the
+order saying one thing and its stock another - so the refusal is the feature.
 
 THE STOCK HALF IS THE PART WORTH TESTING. The asset state machine
 (`rfo_assets_check_status`) admits `reserved -> listed` and `sold/shipped -> returned` and
@@ -176,36 +180,22 @@ async def _paid_order(client, h: dict, tag: str, **kw) -> dict:
 # ---------------------------------------------------------------------------
 # The happy path
 # ---------------------------------------------------------------------------
-async def test_pending_to_paid_to_shipped_to_delivered(client):
+async def test_a_paid_order_carries_its_lifecycle_timestamps(client):
+    """`paid` is written by the payment webhook, and the order records WHEN it happened.
+
+    `orders.updated_at` moves on any edit (the touch trigger), so it cannot answer "when was this
+    paid"; `paid_at` can, and it is what the finance views and the label door read.
+    """
     h, email = await _staff(client)
     tag = "missionLc" + uuid.uuid4().hex[:10]
     fixture = None
     try:
         fixture = await _paid_order(client, h, tag)
-        oid = fixture["order_id"]
-
-        row = await _one("SELECT status, paid_at FROM orders WHERE id = :i", i=oid)
+        row = await _one("SELECT status, paid_at FROM orders WHERE id = :i", i=fixture["order_id"])
         assert row["status"] == "paid" and row["paid_at"] is not None, dict(row)
-
-        r = await client.post(f"/staff/orders/{oid}/status", headers=h,
-                              json={"status": "shipped", "carrier": "AusPost",
-                                    "tracking_number": "AP-" + tag})
-        assert r.status_code == 200, r.text
-        assert r.json()["status"] == "shipped" and r.json()["tracking_number"] == "AP-" + tag
-
-        r = await client.post(f"/staff/orders/{oid}/status", headers=h, json={"status": "delivered"})
-        assert r.status_code == 200, r.text
-        assert r.json()["status"] == "delivered"
-
-        row = await _one("SELECT status, shipped_at, delivered_at, carrier FROM orders WHERE id = :i",
-                         i=oid)
-        assert row["status"] == "delivered" and row["shipped_at"] and row["delivered_at"], dict(row)
-        assert row["carrier"] == "AusPost"
-
-        # The lifecycle wrote an audit row per move, which is the only record of WHO shipped it.
         n = await _one("SELECT count(*) AS n FROM audit_log WHERE entity = 'order' AND entity_id = :i"
-                       " AND action IN ('order_shipped','order_delivered')", i=oid)
-        assert n["n"] == 2, dict(n)
+                       " AND action = 'payment_succeeded'", i=fixture["order_id"])
+        assert n["n"] == 1, dict(n)
     finally:
         if fixture:
             await _purge_order(fixture["order_public_id"])
@@ -213,15 +203,30 @@ async def test_pending_to_paid_to_shipped_to_delivered(client):
         await _drop_staff(email)
 
 
-async def test_shipping_requires_a_tracking_number(client):
+
+
+
+
+async def test_this_door_refuses_fulfilment_and_points_at_the_logistics_rail(client):
+    """Shipping and delivering belong to the logistics rail, NOT here. A second path would stamp the
+    order row and leave its units on `sold`, so the refusal NAMES the door that owns it rather than
+    leaving an operator to guess - and it writes nothing on the way out."""
     h, email = await _staff(client)
     tag = "missionLc" + uuid.uuid4().hex[:10]
     fixture = None
     try:
         fixture = await _paid_order(client, h, tag)
-        r = await client.post(f"/staff/orders/{fixture['order_id']}/status", headers=h,
-                              json={"status": "shipped"})
-        assert r.status_code == 422 and "tracking" in r.json()["detail"], r.text
+        oid = fixture["order_id"]
+        for target, pointer in (("shipped", "/staff/logistics/orders/"),
+                                ("delivered", "/staff/logistics/shipments/")):
+            r = await client.post(f"/staff/orders/{oid}/status", headers=h, json={"status": target})
+            assert r.status_code == 409, (target, r.status_code, r.text)
+            assert pointer in r.json()["detail"], r.text
+
+        # The refusal is inert: the order is still `paid` and no parcel was recorded.
+        assert (await _one("SELECT status FROM orders WHERE id = :i", i=oid))["status"] == "paid"
+        assert (await _one("SELECT count(*) AS n FROM shipments WHERE order_id = :i",
+                           i=oid))["n"] == 0
     finally:
         if fixture:
             await _purge_order(fixture["order_public_id"])
@@ -260,10 +265,10 @@ async def test_the_money_path_records_the_payment_paid_and_prints_the_label(clie
         r = await client.get(f"/staff/orders/{oid}/label", headers=h)
         assert r.status_code == 409, "an unshipped order has no parcel to label: " + r.text
 
-        r = await client.post(f"/staff/orders/{oid}/status", headers=h,
-                              json={"status": "shipped", "carrier": "Sendle",
-                                    "tracking_number": "SN-" + tag})
-        assert r.status_code == 200, r.text
+        r = await client.post(f"/staff/logistics/orders/{oid}/ship", headers=h,
+                              json={"carrier": "Sendle", "tracking_ref": "SN-" + tag,
+                                    "promised_days": 2})
+        assert r.status_code == 201, r.text
 
         r = await client.get(f"/staff/orders/{oid}/label", headers=h)
         assert r.status_code == 200, r.text
@@ -291,16 +296,16 @@ async def test_only_a_fulfilment_role_prints_the_label(client):
         oid = fixture["order_id"]
 
         assert (await client.get(f"/staff/orders/{oid}/label", headers=sales)).status_code == 403
-        r = await client.post(f"/staff/orders/{oid}/status", headers=wh,
-                              json={"status": "shipped", "carrier": "Aramex",
-                                    "tracking_number": "AX-" + tag})
-        assert r.status_code == 200, r.text
+        r = await client.post(f"/staff/logistics/orders/{oid}/ship", headers=wh,
+                              json={"carrier": "Aramex", "tracking_ref": "AX-" + tag})
+        assert r.status_code == 201, r.text
+        shipment_id = r.json()["shipment_id"]
         r = await client.get(f"/staff/orders/{oid}/label", headers=wh)
         assert r.status_code == 200 and r.json()["barcode"] == "AX-" + tag, r.text
 
         # A DELIVERED parcel's label still reprints - that is an ordinary thing to need.
-        assert (await client.post(f"/staff/orders/{oid}/status", headers=wh,
-                                  json={"status": "delivered"})).status_code == 200
+        assert (await client.post(f"/staff/logistics/shipments/{shipment_id}/deliver",
+                                  headers=wh)).status_code == 200
         assert (await client.get(f"/staff/orders/{oid}/label", headers=wh)).status_code == 200
         # An order that does not exist is a 404, not a 409.
         assert (await client.get("/staff/orders/999999999/label", headers=wh)).status_code == 404
@@ -320,11 +325,9 @@ async def test_the_transition_map_refuses_a_move_it_does_not_name(client):
     try:
         fixture = await _stage_pending(client, h, tag)          # still pending
         oid = fixture["order_id"]
-        # pending -> shipped is not a named edge, and neither is pending -> delivered
-        for target in ("shipped", "delivered"):
-            r = await client.post(f"/staff/orders/{oid}/status", headers=h, json={"status": target})
-            assert r.status_code == 409, (target, r.status_code, r.text)
-            assert "cannot go from pending" in r.json()["detail"], r.text
+        # pending -> refunded is not a named edge: there is nothing paid to give back.
+        r = await client.post(f"/staff/orders/{oid}/status", headers=h, json={"status": "refunded"})
+        assert r.status_code == 409 and "cannot go from pending" in r.json()["detail"], r.text
         r = await client.post(f"/staff/orders/{oid}/status", headers=h, json={"status": "teleported"})
         assert r.status_code == 422, r.text
     finally:
@@ -332,6 +335,10 @@ async def test_the_transition_map_refuses_a_move_it_does_not_name(client):
             await _purge_order(fixture["order_public_id"])
             await _archive(fixture["product_id"])
         await _drop_staff(email)
+
+
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -475,9 +482,14 @@ async def test_marking_a_pending_order_paid_settles_it_and_issues_the_invoice(cl
         await _drop_staff(email)
 
 
-async def test_fulfilment_roles_are_enforced_per_target(client):
-    """warehouse ships and delivers; it may not cancel or refund; a sales identity may do neither."""
+async def test_the_lifecycle_roles_are_enforced_per_target(client):
+    """Cancelling is admin/manager, refunding is admin alone, and neither is a fulfilment role's.
+
+    The route decorator admits the widest of the sets; the narrowing is per-target in the body, so
+    each of these is a different tuple rather than one blanket wall.
+    """
     h, email = await _staff(client)
+    mgr, mgr_email = await _staff(client, "manager")
     wh, wh_email = await _staff(client, "warehouse")
     sales, sales_email = await _staff(client, "sales")
     tag = "missionLc" + uuid.uuid4().hex[:10]
@@ -486,20 +498,26 @@ async def test_fulfilment_roles_are_enforced_per_target(client):
         fixture = await _paid_order(client, h, tag)
         oid = fixture["order_id"]
 
-        r = await client.post(f"/staff/orders/{oid}/status", headers=sales,
-                              json={"status": "shipped", "tracking_number": "X-1"})
-        assert r.status_code == 403, "sales must not fulfil: " + r.text
+        for tok, who in ((wh, "warehouse"), (sales, "sales")):
+            r = await client.post(f"/staff/orders/{oid}/status", headers=tok,
+                                  json={"status": "cancelled"})
+            assert r.status_code == 403, f"{who} must not cancel: " + r.text
+            r = await client.post(f"/staff/orders/{oid}/status", headers=tok,
+                                  json={"status": "refunded"})
+            assert r.status_code == 403, f"{who} must not refund: " + r.text
 
-        r = await client.post(f"/staff/orders/{oid}/status", headers=wh,
-                              json={"status": "shipped", "tracking_number": "X-1"})
-        assert r.status_code == 200, r.text
+        r = await client.post(f"/staff/orders/{oid}/status", headers=mgr, json={"status": "refunded"})
+        assert r.status_code == 403, "a manager must not move money: " + r.text
 
-        r = await client.post(f"/staff/orders/{oid}/status", headers=wh, json={"status": "cancelled"})
-        assert r.status_code == 403, "warehouse must not cancel: " + r.text
+        r = await client.post(f"/staff/orders/{oid}/status", headers=mgr, json={"status": "cancelled"})
+        assert r.status_code == 200, "a manager may cancel: " + r.text
     finally:
         if fixture:
             await _purge_order(fixture["order_public_id"])
             await _archive(fixture["product_id"])
         await _drop_staff(email)
+        await _drop_staff(mgr_email)
         await _drop_staff(wh_email)
         await _drop_staff(sales_email)
+
+

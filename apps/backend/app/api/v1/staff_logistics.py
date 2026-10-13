@@ -328,8 +328,14 @@ async def ship_order(order_id: int, body: ShipIn,
                "cost": body.cost_cents, "promised": promised_at, "notes": body.notes,
                "who": staff["id"]})).scalar_one()
 
+        # The order row keeps the lifecycle FACTS - when it left, with whom, under what reference -
+        # and not merely the status. That is what the label door reads to print a parcel and what
+        # `GET /staff/orders/{id}` reports, so leaving them null beside a `shipped` status would be
+        # the same two-accounts-of-one-fact problem this rail exists to avoid.
         await db.execute(text(
-            "UPDATE orders SET status = 'shipped' WHERE id = :i"), {"i": order_id})
+            "UPDATE orders SET status = 'shipped', shipped_at = now(),"
+            "       carrier = :c, tracking_number = :t WHERE id = :i"),
+            {"i": order_id, "c": body.carrier, "t": body.tracking_ref})
         # One rung, and only from `sold`: the WHERE clause is the transition table's own rule, so a
         # unit that has since been returned is skipped instead of tripping the BEFORE UPDATE trigger.
         moved = (await db.execute(text("""
@@ -375,7 +381,8 @@ async def deliver_shipment(shipment_id: int,
         await db.execute(text(
             "UPDATE shipments SET delivered_at = now() WHERE id = :i"), {"i": shipment_id})
         await db.execute(text(
-            "UPDATE orders SET status = 'delivered' WHERE id = :i AND status = 'shipped'"),
+            "UPDATE orders SET status = 'delivered', delivered_at = now()"
+            " WHERE id = :i AND status = 'shipped'"),
             {"i": row["order_id"]})
         await audit(db, "staff", entity="order", entity_id=int(row["order_id"]),
                     action="order_delivered", actor_id=staff["id"],

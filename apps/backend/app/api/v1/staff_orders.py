@@ -46,18 +46,24 @@ router = APIRouter(prefix="/staff/orders", tags=["staff-orders"])
 # target status -> the statuses it may be entered from
 _TRANSITIONS: dict[str, tuple[str, ...]] = {
     "paid": ("pending",),
-    "shipped": ("paid",),
-    "delivered": ("shipped",),
     "cancelled": ("pending", "paid"),
     "refunded": ("paid", "shipped", "delivered"),
 }
 # target status -> who may perform it
 _TARGET_ROLES: dict[str, tuple[str, ...]] = {
     "paid": ("admin",),
-    "shipped": ("admin", "manager", "warehouse"),
-    "delivered": ("admin", "manager", "warehouse"),
     "cancelled": ("admin", "manager"),
     "refunded": ("admin",),
+}
+# FULFILMENT IS NOT THIS DOOR. Shipping and delivering belong to the logistics rail
+# (`/staff/logistics/orders/{id}/ship`, `/staff/logistics/shipments/{id}/deliver`), which records the
+# parcel AND walks each sold unit to `shipped`. A second path here would stamp the order row and
+# leave the units behind, so the order would say shipped while its stock still said sold - two
+# accounts of one fact, which is the defect this codebase keeps warning about. The refusal NAMES the
+# door that does own it, so an operator is pointed somewhere rather than left guessing.
+FULFILMENT_ELSEWHERE: dict[str, str] = {
+    "shipped": "POST /staff/logistics/orders/{id}/ship",
+    "delivered": "POST /staff/logistics/shipments/{id}/deliver",
 }
 _STATUSES = tuple(_TRANSITIONS)
 READ_ROLES = ("admin", "manager")
@@ -74,9 +80,6 @@ class OrderStatusIn(BaseModel):
     status: str = Field(description="one of: " + ", ".join(_STATUSES))
     # Recorded when an operator books an offline payment by hand; ignored for the other targets.
     note: str | None = Field(default=None, max_length=400)
-    # Required for `shipped` - a dispatch with no tracking reference is not a dispatch.
-    carrier: str | None = Field(default=None, max_length=80)
-    tracking_number: str | None = Field(default=None, max_length=120)
 
 
 def _iso(value) -> str | None:
@@ -112,6 +115,10 @@ async def set_order_status(order_id: int, body: OrderStatusIn,
                            db=Depends(get_db)):
     """Move one order along its lifecycle. See the module docstring for the map and the roles."""
     target = body.status.strip().lower()
+    if target in FULFILMENT_ELSEWHERE:
+        raise HTTPException(status_code=409,
+                            detail=f"{target} is recorded by the logistics rail: "
+                                   + FULFILMENT_ELSEWHERE[target])
     if target not in _TRANSITIONS:
         raise HTTPException(status_code=422, detail="status must be one of: " + ", ".join(_STATUSES))
     # The ROLE check is per-target, so it cannot be expressed by the route decorator alone - the
@@ -126,8 +133,6 @@ async def set_order_status(order_id: int, body: OrderStatusIn,
     if target not in _TRANSITIONS or order.status not in _TRANSITIONS[target]:
         raise HTTPException(status_code=409,
                             detail=f"an order cannot go from {order.status} to {target}")
-    if target == "shipped" and not (body.tracking_number or "").strip():
-        raise HTTPException(status_code=422, detail="shipping an order requires a tracking number")
 
     before = {"status": order.status}
     lines = await _order_lines(db, order_id)
@@ -141,12 +146,6 @@ async def set_order_status(order_id: int, body: OrderStatusIn,
         await settle_lines(db, order_id, lines, actor_staff_id=staff["id"])
         order.paid_at = now
         invoice = await ledger.ensure_invoice(db, order_id)
-    elif target == "shipped":
-        order.shipped_at = now
-        order.carrier = (body.carrier or "").strip() or None
-        order.tracking_number = body.tracking_number.strip()
-    elif target == "delivered":
-        order.delivered_at = now
     elif target == "cancelled":
         await return_lines(db, order_id, lines, reason="order_cancelled",
                            actor_staff_id=staff["id"])
@@ -171,8 +170,7 @@ async def set_order_status(order_id: int, body: OrderStatusIn,
                            actor_staff_id=staff["id"])
 
     order.status = target
-    after = {"state": target, "note": body.note, "invoice": invoice["number"] if invoice else None,
-             "tracking_number": body.tracking_number, "carrier": body.carrier}
+    after = {"state": target, "note": body.note, "invoice": invoice["number"] if invoice else None}
     await _audit_execution(db, staff, None, entity="order", entity_id=order.id,
                            action="order_" + target, before=before, after=after)
     try:
