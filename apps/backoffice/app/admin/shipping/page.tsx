@@ -9,7 +9,7 @@
    navigating away from it. An operator packing ten orders does not want to lose their place ten
    times.
 
-   THE CARRIER IS ALLOWED TO BE UNCONFIGURED, AND THE SCREEN SAYS SO. `GET /staff/shipping/carriers`
+   THE CARRIER IS ALLOWED TO BE UNCONFIGURED, AND THE SCREEN SAYS SO. `GET /staff/logistics/carriers`
    reports which carriers can actually be used and what each one is missing; this page prints that
    list instead of offering a button that fails on press, and disables the label action with the
    reason as its tooltip. `services/carriers.py` will not invent a label or a tracking number, and
