@@ -6,6 +6,7 @@ import { Badge, Card, Heading, Stat, Table, TBody, TD, TH, THead, TR } from "@/a
 import { aud, when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
 import { gradeTone, statusTone } from "@/lib/ui";
+import FulfilmentCard from "./FulfilmentCard";
 
 /* One order in full: its lines, its payments and whose it is.
 
@@ -32,6 +33,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const { id } = use(params);
   const { me, checked } = useMe();
   const allowed = requireRole(me, ["admin", "manager"]);
+  // Shipping is warehouse work, so the fulfilment card admits a wider set than this page's reads.
+  const canFulfil = requireRole(me, ["admin", "manager", "warehouse"]);
   const [data, setData] = useState<Detail | null>(null);
   const [msg, setMsg] = useState("");
 
@@ -138,6 +141,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               there is no refund action in this app.
             </p>
           </Card>
+
+          {/* The one write on this page, and the only place an order can leave `paid`. Warehouse
+              ships, so the card takes a wider role than the read gate above it. */}
+          <FulfilmentCard orderId={Number(id)} orderStatus={o.status}
+                          canWrite={canFulfil} onChanged={load} />
         </>
       )}
     </main>
