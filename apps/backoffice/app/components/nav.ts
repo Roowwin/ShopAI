@@ -48,6 +48,10 @@ export const GROUPS: NavGroup[] = [
   ] },
   { id: "commerce", heading: "Commerce", icon: "receipt", items: [
     { href: "/admin/orders", label: "Orders" },
+    /* Logistics sits with Orders rather than under Inventory: it is about orders leaving the
+       building and the money that came in for them, which is the commerce desk's own question. The
+       heading is shared - the entries under it moved, the words did not. */
+    { href: "/admin/logistics", label: "Logistics" },
     { href: "/admin/customers", label: "Customers" },
     { href: "/admin/audit", label: "Audit" },
   ] },
