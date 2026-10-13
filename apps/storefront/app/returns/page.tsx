@@ -1,4 +1,5 @@
 import ContentPage, { Note, Section } from "../components/ContentPage";
+import RmaRequestForm from "../components/RmaRequestForm";
 import { linkClass } from "../components/ui";
 
 export const metadata = {
@@ -9,13 +10,13 @@ export const metadata = {
 const STEPS = [
   {
     n: "1",
-    title: "Email us first",
-    body: "Message support@rfostore.com.au with your order number and a sentence about what went wrong. Never send a device back without a return authorisation from us - parcels that arrive unannounced cannot be matched to an order.",
+    title: "Raise the return here",
+    body: "Use the form above with your order reference and the email you ordered with. Add a photo of the fault if you can - it usually means an answer the same day. Never send a device back without a return authorisation from us: parcels that arrive unannounced cannot be matched to an order.",
   },
   {
     n: "2",
     title: "Get your label",
-    body: "For faults and warranty claims we email a prepaid tracked label within one business day. For change-of-mind returns we send the return address and instructions, and return freight is yours to arrange.",
+    body: "Once we approve the return, a prepaid tracked label appears under Check a return above - print it and pop it on the box. For change-of-mind returns we send the return address and instructions instead, and return freight is yours to arrange.",
   },
   {
     n: "3",
@@ -35,6 +36,11 @@ export default function ReturnsPage() {
       title="Returns & warranty"
       intro="Buying refurbished should not mean reading the fine print with a magnifying glass, so here are the terms in plain language: 30 days to change your mind, 12 months of warranty cover, and prepaid freight on every fault claim."
     >
+      {/* THE DOOR, FIRST. The terms below explain the policy; the form is how a customer actually
+          acts on it, and burying it under four sections of prose is how a returns page becomes a
+          support email anyway. */}
+      <RmaRequestForm />
+
       <Section title="The two promises">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-control bg-surface-sunken ring-1 ring-line p-4">

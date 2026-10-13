@@ -78,7 +78,10 @@ export const GROUPS: NavGroup[] = [
   },
   {
     id: "post-purchase", heading: "Post-Purchase & Customer Service", icon: "receipt", items: [
-      { href: "/admin/returns", label: "Returns & RMA", soon: true },
+      /* LIVE: the RMA Manager - the queue of customer returns, the photographs they attached, and
+         the approve/deny decision that issues the return label. The customer's own side of it is the
+         form on the storefront's Returns page. */
+      { href: "/admin/returns", label: "Returns & RMA" },
       /* The closest built surface: the storefront's signups and the list the shop mails from. */
       { href: "/admin/newsletter", label: "Notifications" },
     ],

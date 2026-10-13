@@ -11,6 +11,7 @@ from app.api.v1 import (staff, staff_ops, store, store_catalog, store_ops, staff
                         staff_overview, staff_views, staff_imports)
 from app.api.v1 import (staff_agents, staff_finance, staff_logistics, staff_orders, staff_settings,
                         staff_team)
+from app.api.v1 import staff_returns, store_returns
 from app.core.config import get_settings
 from app.core.db import get_engine
 
@@ -55,6 +56,8 @@ app.include_router(staff_settings.router)
 app.include_router(staff_orders.router)
 app.include_router(staff_finance.router)
 app.include_router(staff_logistics.router)
+app.include_router(staff_returns.router)
+app.include_router(store_returns.router)
 
 @app.get("/healthz")
 async def healthz() -> dict:
