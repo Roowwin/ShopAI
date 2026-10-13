@@ -28,6 +28,19 @@
    same preview payload it was refused from, so the blocking rows are re-rendered in place rather
    than replaced by a generic failure the operator cannot act on.
 
+   PRICING IS SHOWN AND NEVER APPLIED. Every row arrives with a suggested price (from comparables,
+   the sheet's FMV, or settlement plus a markup, moved by the condition phrases in its description
+   columns) and a margin reading. Both are ADVISORY and are rendered in their own columns, ruled
+   off from the sheet's twenty-six, plus a panel that prints the basis split and the thresholds
+   behind them. Nothing here writes a price the sheet did not carry: the suggestion is recorded
+   against the unit for the workbench to show later, and the shop is still priced by `Resale` alone.
+
+   THE FLAGS REFUSE NOTHING. A thin margin is a commercial decision - a lot may be cleared at 8% on
+   purpose - so the guard's findings sit in their OWN section with a caution tone and their own
+   sentence saying they block nothing, deliberately unlike "Row problems", which is exactly what
+   stops an import. Drawing the two in one list would teach the operator to fear a choice they are
+   entitled to make.
+
    WHAT THIS PAGE CANNOT DO WITHOUT A SESSION: the file picker, the drag-and-drop-free input and
    the row rendering are only exercised by a browser. The build proves it compiles and the payload
    shapes match what the server sends; it does not prove the screen looks right. */
@@ -44,6 +57,33 @@ type Issue = { row: number; field: string; message: string };
 type Translation = { field: string; from: string; to: string; rows: number };
 type RowTranslation = { field: string; from: string; to: string };
 
+/* Smart pricing. `basis` is WHICH evidence produced the suggested price and `basis_label` spells it
+   out; `reasons` is the description trail. All of it comes from the server - the browser does no
+   arithmetic on these numbers, the same rule the counts above follow. */
+type PriceReason = { label: string; pct: number; phrase: string };
+type RowPricing = {
+  suggested_price_cents: number | null;
+  basis: string;
+  basis_label: string;
+  base_cents: number | null;
+  sample_size: number;
+  adjustment_pct: number;
+  reasons: PriceReason[];
+  dismissed: string[];
+  delta_vs_resale_cents?: number;
+};
+type RowMargin = {
+  cost_cents: number | null;
+  cost_source: string | null;
+  price_cents: number | null;
+  price_source: string | null;
+  margin_pct: number | null;
+  band: string;
+};
+/* A warning is NOT an issue: the server keeps them in separate lists and only `issues` can refuse
+   the file. The page must not blur them either - a thin margin is a decision, not a defect. */
+type Warning = { row: number; field: string; message: string };
+
 type PreviewRow = {
   row: number;
   serial_number: string;
@@ -57,7 +97,10 @@ type PreviewRow = {
   asset_tag: string;
   technical_notes: string;
   issues: Issue[];
+  warnings: Warning[];
   translations: RowTranslation[];
+  pricing: RowPricing;
+  margin: RowMargin;
   /* The rest of the supplier workbook. Every one is optional because the server sends whatever the
      sheet carried - a twelve-column sheet yields a row with these absent, and the preview must
      render that rather than claim the columns were empty. */
@@ -86,12 +129,32 @@ type Preview = {
   file: { name: string; sheet: string; rows: number };
   columns: { detected: ColumnHit[]; unmapped: string[]; missing: string[]; missing_labels: string[] };
   issues: Issue[];
+  warnings: Warning[];
   translations: Translation[];
   sample: PreviewRow[];
   sample_limit: number;
   truncated: boolean;
   detail?: string;
-  summary: { rows: number; ready: number; blocked: number; lots: number; would_list: number; issues: number; translated: number };
+  /* How the suggested prices were reached, printed in the payload that carries them: the thresholds
+     are the server's, and the page reads them rather than repeating them, so the screen cannot
+     quote a guard level the guard is not using. */
+  pricing: {
+    low_margin_pct: number;
+    target_markup_pct: number;
+    adjustment_floor_pct: number;
+    adjustment_ceiling_pct: number;
+    bases: string[];
+    note: string;
+    suggested: number;
+    low_margin: number;
+    cost_unknown: number;
+    by_basis: Record<string, number>;
+    comparable_pairs: number;
+  };
+  summary: {
+    rows: number; ready: number; blocked: number; lots: number; would_list: number;
+    issues: number; translated: number; suggested: number; low_margin: number; cost_unknown: number;
+  };
 };
 
 type Commit = {
@@ -108,13 +171,28 @@ type Commit = {
   lots_created: { lot_number: string; id: number }[];
   lots_reused: string[];
   products_created: { id: number; brand: string; category: string; model: string }[];
-  assets: { row: number; asset_id: number; serial_number: string; lot_number: string; status: string; grade: string | null; sale_price_cents: number | null }[];
+  assets: { row: number; asset_id: number; serial_number: string; lot_number: string; status: string; grade: string | null; sale_price_cents: number | null; suggested_price_cents?: number | null; suggested_price_basis?: string | null }[];
 };
 
 const ACCEPT = ".csv,.tsv,.xlsx,.xlsm";
 /* How many issue lines to render before collapsing the tail. The COUNT is never truncated - only
    the list - so a reader always knows how many there are. */
 const ISSUE_SHOWN = 12;
+/* The same rule for the low-margin list, which on a corporate lot can run to every row. */
+const WARNING_SHOWN = 12;
+
+/* The basis word -> the phrasing the row shows under the number. `market` is the strong one and the
+   others are honest about being weaker, so the label says WHY rather than only what. */
+const BASIS_SHORT: Record<string, string> = {
+  market: "market",
+  fmv: "sheet FMV",
+  cost: "cost + markup",
+  none: "no basis",
+};
+
+/* A low margin is a caution, not an error, so it takes the accent tone the backoffice already uses
+   for "look at this" (Sample data, role notices) rather than the danger tone that means refused. */
+const LOW_MARGIN_TONE = "bg-accent-100 text-accent-700";
 
 export default function ProductImportPanel() {
   const [file, setFile] = useState<File | null>(null);
@@ -238,6 +316,121 @@ function Cell({ v }: { v: string | null | undefined }) {
   return <>{v ? v : <span className="text-ink-500">-</span>}</>;
 }
 
+/* The suggestion's working, as one line of prose for the row's tooltip. Built from the payload, not
+   from the screen: every clause here is a field the server sent, so the tooltip cannot drift into
+   explaining a number the server did not produce. */
+function suggestedTitle(r: PreviewRow): string {
+  const p = r.pricing;
+  if (!p) return "No suggestion for this row.";
+  if (p.suggested_price_cents === null || p.suggested_price_cents === undefined) {
+    return `No suggestion: ${p.basis_label}.`;
+  }
+  const bits = [p.basis_label];
+  if (p.basis === "market" && p.sample_size > 0) {
+    bits.push(`${p.sample_size} comparable unit${p.sample_size === 1 ? "" : "s"}${p.base_cents !== null ? ` averaging ${aud(p.base_cents)}` : ""}`);
+  }
+  for (const reason of p.reasons) {
+    bits.push(`${reason.phrase}: ${reason.pct > 0 ? "+" : ""}${reason.pct}%`);
+  }
+  if (p.dismissed.length > 0) {
+    bits.push(`read as negated, so not scored: ${p.dismissed.join(", ")}`);
+  }
+  if (p.delta_vs_resale_cents !== undefined) {
+    const d = p.delta_vs_resale_cents / 100;
+    bits.push(`${d < 0 ? "" : "+"}$${d.toFixed(2)} against the sheet's Resale`);
+  }
+  return bits.join(". ") + ".";
+}
+
+
+/* Smart pricing, read back to the operator.
+
+   THREE THINGS, in the order they matter: what the numbers were based on, what the margin guard
+   found, and - only then - the rows themselves. The basis split is first because it qualifies
+   everything below it: a file priced entirely off `cost + markup` had no market behind it at all,
+   and that is a materially weaker suggestion than one drawn from units that actually sold, which
+   the operator can only tell if the split is on screen.
+
+   THE THRESHOLDS ARE THE SERVER'S. `low_margin_pct` and `target_markup_pct` are printed from the
+   payload rather than written into this file, because a screen that quotes a guard level the guard
+   is no longer using is worse than one that quotes none.
+
+   THE FLAGS ARE NOT PROBLEMS. They live in their own section with their own tone and their own
+   sentence saying so, deliberately apart from "Row problems": the server refuses a file on the
+   latter and never on the former, and a page that drew both in the same list would teach the
+   operator to fear a decision they are entitled to make. */
+function PricingSection({ report }: { report: Preview }) {
+  const { pricing, warnings } = report;
+  const shown = warnings.slice(0, WARNING_SHOWN);
+  const byBasis = pricing.by_basis ?? {};
+  const parts = [
+    byBasis.market ? `${byBasis.market} from units of the same model and grade that already sold` : "",
+    byBasis.fmv ? `${byBasis.fmv} from the sheet's own FMV` : "",
+    byBasis.cost ? `${byBasis.cost} from settlement plus a ${pricing.target_markup_pct}% markup` : "",
+    byBasis.none ? `${byBasis.none} with nothing to price from` : "",
+  ].filter(Boolean);
+
+  return (
+    <section className="border-t border-line pt-6">
+      <Heading level="h3" as="h2" className="!text-eyebrow uppercase text-ink-500">
+        Smart pricing
+      </Heading>
+      <p className="mt-2 text-xs text-ink-500">
+        A suggested price is computed for every row from the best evidence that row and the
+        catalogue can offer - in order: other units of the same model and grade that already carry
+        a price, then the sheet's own FMV, then settlement cost plus a {pricing.target_markup_pct}%
+        markup. The description columns then move it, between{" "}
+        {pricing.adjustment_floor_pct}% and +{pricing.adjustment_ceiling_pct}%, by the condition
+        phrases they contain. The suggestion is ADVISORY: it is recorded against each unit, and no
+        price the sheet did not carry is ever written.
+      </p>
+      <p className="mt-2 text-sm text-ink-600">
+        {parts.length > 0
+          ? <>Priced from: {parts.join("; ")}.</>
+          : <>No row had anything to price from.</>}
+        {pricing.comparable_pairs === 0 && (
+          <> No model in this sheet has priced comparables yet, so the market basis is not
+            available to any of it.</>
+        )}
+      </p>
+
+      <div className="mt-4">
+        <p className="text-sm font-semibold text-ink-700">
+          {warnings.length > 0
+            ? `${warnings.length} row${warnings.length === 1 ? "" : "s"} below the ${pricing.low_margin_pct}% margin guard.`
+            : `No row falls below the ${pricing.low_margin_pct}% margin guard.`}
+        </p>
+        <p className="mt-1 text-xs text-ink-500">
+          {warnings.length > 0
+            ? "These are warnings, not problems: they stop nothing. Every one of these rows still imports exactly as the sheet wrote it - a lot may be cleared thin on purpose."
+            : "The margin compares each row's price against its cost (the Settlement column, or the unit's own cost where it has one)."}
+          {report.summary.cost_unknown > 0 &&
+            ` ${report.summary.cost_unknown} row${report.summary.cost_unknown === 1 ? "" : "s"} carr${report.summary.cost_unknown === 1 ? "ies" : "y"} no cost at all, so ${report.summary.cost_unknown === 1 ? "it" : "they"} could not be checked.`}
+        </p>
+        {shown.length > 0 && (
+          <ul className="mt-3 space-y-1 text-sm">
+            {shown.map((w, idx) => (
+              <li key={`${w.row}-${idx}`} className="text-ink-600">
+                <span className="font-mono text-xs text-ink-500">row {w.row}</span>{" "}
+                <span className={cn("rounded-control px-1.5 py-0.5 text-xs font-semibold", LOW_MARGIN_TONE)}>
+                  low margin
+                </span>{" "}
+                {w.message}
+              </li>
+            ))}
+          </ul>
+        )}
+        {warnings.length > shown.length && (
+          <p className="mt-2 text-xs text-ink-500">
+            and {warnings.length - shown.length} more - every one of them is counted, this is only
+            the first {shown.length}.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 
 function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boolean; onCommit: () => void }) {
   const { summary, columns } = report;
@@ -255,11 +448,13 @@ function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boole
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Rows read" value={summary.rows} sub="data rows, header excluded" />
         <Stat label="Ready" value={summary.ready} sub="rows that would import" />
         <Stat label="Blocked" value={summary.blocked} sub={blocked ? "these stop the whole import" : "none - the file is clean"} />
         <Stat label="Translated" value={summary.translated} sub={summary.translated ? "rows rewritten - see below" : "no supplier wording needed translating"} />
+        <Stat label="Suggested" value={summary.suggested} sub={summary.suggested ? "rows with a price to consider" : "no row had anything to price from"} />
+        <Stat label="Low margin" value={summary.low_margin} sub={summary.low_margin ? "flagged below - none of them blocked" : "every priced row clears the guard"} />
       </div>
 
       {report.translations.length > 0 && (
@@ -375,6 +570,8 @@ function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boole
         </section>
       )}
 
+      <PricingSection report={report} />
+
       <section className="border-t border-line pt-6">
         <Heading level="h3" as="h2" className="!text-eyebrow uppercase text-ink-500">
           Rows
@@ -419,6 +616,12 @@ function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boole
               <TH>Warehouse</TH>
               <TH>SKU #</TH>
               <TH>Zone</TH>
+              {/* The app's own two columns, appended AFTER the sheet's twenty-six and ruled off from
+                  them. The grid above is the operator's workbook spelled back to them; these two are
+                  the app's reading of it, and keeping the divide visible is what stops a suggestion
+                  being mistaken for a column the supplier sent. */}
+              <TH className="border-l border-line">Suggested (app)</TH>
+              <TH>Margin (app)</TH>
             </TR>
           </THead>
           <TBody>
@@ -457,6 +660,33 @@ function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boole
                 <TD className="text-ink-600"><Cell v={r.lot_warehouse} /></TD>
                 <TD className="font-mono text-xs text-ink-600"><Cell v={r.sku} /></TD>
                 <TD className="text-ink-600"><Cell v={r.lot_zone} /></TD>
+                {/* The whole trail is on the tooltip: which evidence, from how many units, and every
+                    description phrase that moved the number, including the ones a negator turned off.
+                    The cell is too narrow for that and a number nobody can interrogate is not a
+                    suggestion - it is a number. */}
+                <TD className="border-l border-line align-top" title={suggestedTitle(r)}>
+                  {r.pricing?.suggested_price_cents === null || r.pricing?.suggested_price_cents === undefined ? (
+                    <span className="text-ink-500">-</span>
+                  ) : (
+                    <span className="whitespace-nowrap">
+                      {aud(r.pricing.suggested_price_cents)}
+                      <span className="block text-[10px] uppercase tracking-wide text-ink-500">
+                        {BASIS_SHORT[r.pricing.basis] ?? r.pricing.basis}
+                      </span>
+                    </span>
+                  )}
+                </TD>
+                <TD className="align-top">
+                  {r.margin?.band === "unknown" || r.margin?.margin_pct === null || r.margin?.margin_pct === undefined ? (
+                    <span className="text-ink-500" title="No cost on this row, so no margin can be measured">
+                      -
+                    </span>
+                  ) : r.margin.band === "low" ? (
+                    <Badge colorClass={LOW_MARGIN_TONE}>{r.margin.margin_pct}%</Badge>
+                  ) : (
+                    <span className="text-ink-600">{r.margin.margin_pct}%</span>
+                  )}
+                </TD>
               </TR>
             ))}
           </TBody>
@@ -561,6 +791,10 @@ function ResultPanel({ result }: { result: Commit }) {
                 <TH>Grade</TH>
                 <TH>Status</TH>
                 <TH>Resale</TH>
+                {/* What the import RECORDED beside each unit's price. It is on this screen because a
+                    suggestion the operator cannot see after the fact would be a number computed for
+                    nobody; the workbench reads the same column when the unit is actually priced. */}
+                <TH className="border-l border-line">Suggested</TH>
               </TR>
             </THead>
             <TBody>
@@ -571,6 +805,18 @@ function ResultPanel({ result }: { result: Commit }) {
                   <TD>{a.grade ? <Badge colorClass={gradeTone(a.grade)}>{a.grade}</Badge> : <span className="text-ink-500">-</span>}</TD>
                   <TD><Badge colorClass={statusTone(a.status)}>{a.status}</Badge></TD>
                   <TD>{a.sale_price_cents === null ? <span className="text-ink-500">-</span> : aud(a.sale_price_cents)}</TD>
+                  <TD className="border-l border-line">
+                    {a.suggested_price_cents === null || a.suggested_price_cents === undefined ? (
+                      <span className="text-ink-500">-</span>
+                    ) : (
+                      <span className="whitespace-nowrap">
+                        {aud(a.suggested_price_cents)}
+                        <span className="block text-[10px] uppercase tracking-wide text-ink-500">
+                          {BASIS_SHORT[a.suggested_price_basis ?? ""] ?? a.suggested_price_basis}
+                        </span>
+                      </span>
+                    )}
+                  </TD>
                 </TR>
               ))}
             </TBody>
