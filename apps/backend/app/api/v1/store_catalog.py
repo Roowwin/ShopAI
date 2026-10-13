@@ -23,6 +23,34 @@ router = APIRouter(prefix="/store", tags=["store-catalog"])
 # stay in the WHERE.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# THE MARGIN FLOOR - the shop must not offer a unit priced below what it cost.
+#
+# Selling under cost loses money on every order, and the loss is invisible on a product page that
+# shows only the price. So the predicate is part of "which units are the shopper's" and rides on the
+# ASSETS JOIN, exactly like the grade and price-band filters and for the reason stated above: the
+# joined set IS the sellable stock, so `units_available` and `price_from_cents` describe only that,
+# and HAVING count(a.id) > 0 then takes a product whose every listed unit is under water off the
+# catalogue entirely rather than showing it with a count of none.
+#
+# THE COST BASIS IS `COALESCE(cost_cents, settlement_cents)`. `cost_cents` is the schema's canonical
+# cost and the supplier workbook's Settlement is the same fact for stock that arrived on a sheet, so
+# the shop reads them as one number in the order the app already prefers - `services.pricing`'s
+# `margin_verdict` makes the identical choice, which is what keeps the guard that lets a unit be
+# LISTED and the guard that PUBLISHES it from ever disagreeing.
+#
+# NULL COST PUBLISHES. An absent cost is a fact about the workbook ("this sheet never carried one"),
+# not a claim that the unit is a loss-maker, so hiding it would empty the shop of everything the
+# supplier did not price. Only a KNOWN cost below the price is a refusal.
+#
+# Written once and spliced into each statement at import time rather than duplicated per query: the
+# six statements below have to agree on this rule, and a second copy of it is a second thing to keep
+# true. It is spliced into the CONSTANT (not a new placeholder) so the unfiltered statement remains
+# byte-for-byte what it always was, which is what the catalog query's own test asserts.
+# ---------------------------------------------------------------------------
+ON_SALE = ("AND (COALESCE(a.cost_cents, a.settlement_cents) IS NULL"
+           " OR a.sale_price_cents >= COALESCE(a.cost_cents, a.settlement_cents)) ")
+
 CATALOG_SELECT = """SELECT p.id, p.public_id::text AS public_id, p.slug, p.title, p.model,
        b.name AS brand, c.name AS category, p.specs, p.image_url, p.featured,
        count(a.id) AS units_available,
@@ -31,7 +59,8 @@ FROM products p
 JOIN brands b ON b.id = p.brand_id
 JOIN categories c ON c.id = p.category_id
 LEFT JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
-                  AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')%UNIT%
+                  AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')""" \
+    + ON_SALE + """%UNIT%
 WHERE p.status = 'active' %CAT%
 GROUP BY p.id, p.public_id, p.slug, p.title, p.model, b.name, c.name, p.specs, p.image_url, p.featured
 HAVING count(a.id) > 0
@@ -66,7 +95,8 @@ FROM brands b
 JOIN products p ON p.brand_id = b.id
 JOIN categories c ON c.id = p.category_id
 JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
-             AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')%UNIT%
+             AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')""" \
+    + ON_SALE + """%UNIT%
 WHERE p.status = 'active' %CAT%
 GROUP BY b.slug, b.name
 HAVING count(DISTINCT a.id) > 0
@@ -237,7 +267,7 @@ async def catalog_item(slug: str, db=Depends(get_db)):
                right(a.serial_number, 4) AS serial_tail
         FROM assets a JOIN lots l ON l.id = a.lot_id
         WHERE a.product_id = :p AND a.status = 'listed' AND l.status = 'active'
-        ORDER BY a.sale_price_cents
+        """ + ON_SALE + """ORDER BY a.sale_price_cents
     """), {"p": row["id"]})).mappings().all()
     return {"id": row["id"], "public_id": row["public_id"], "slug": row["slug"], "title": row["title"],
             "model": row["model"], "description": row["description"], "specs": row["specs"],
@@ -256,6 +286,7 @@ async def search(q: str = Query(min_length=2), limit: int = Query(24, le=100), o
         JOIN brands b ON b.id = p.brand_id
         LEFT JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
                           AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
+                          """ + ON_SALE + """
         WHERE p.status = 'active' AND p.search_vec @@ websearch_to_tsquery('english', :q)
         GROUP BY p.id, p.slug, p.title, p.model, b.name
         ORDER BY p.title LIMIT :lim OFFSET :off
@@ -303,11 +334,15 @@ async def home_content(db=Depends(get_db)):
                 # INNER JOIN on purpose: the deal card may only publish when the product has at
                 # least one listed asset in an active lot. A LEFT JOIN would still return the
                 # product row (null price) for a stockless product and publish an empty card.
+                # The margin floor rides in the same join, so a pinned product that has become a
+                # loss-maker takes its card off the home page in exactly the same way - the pin is
+                # a wish, and this join is what decides whether the shop can honour it.
                 prod = (await db.execute(text("""
                     SELECT p.title, p.image_url, min(a.sale_price_cents) AS price_from_cents
                     FROM products p
                     JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
                                  AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
+                                 """ + ON_SALE + """
                     WHERE p.slug = :s AND p.status = 'active'
                     GROUP BY p.title, p.image_url
                 """), {"s": slug})).mappings().first()
@@ -334,6 +369,7 @@ async def best_sellers(limit: int = Query(4, le=12), db=Depends(get_db)):
         JOIN brands b ON b.id = p.brand_id
         LEFT JOIN assets a ON a.product_id = p.id AND a.status = 'listed' AND
                EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
+               """ + ON_SALE + """
         WHERE ol.product_id IS NOT NULL
         GROUP BY p.id, p.slug, p.title, p.model, b.name
         ORDER BY sold DESC
