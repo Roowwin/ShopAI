@@ -48,9 +48,11 @@ export const GROUPS: NavGroup[] = [
   ] },
   { id: "commerce", heading: "Commerce", icon: "receipt", items: [
     { href: "/admin/orders", label: "Orders" },
-    /* Logistics sits with Orders rather than under Inventory: it is about orders leaving the
-       building and the money that came in for them, which is the commerce desk's own question. The
-       heading is shared - the entries under it moved, the words did not. */
+    /* The order's own second half, in the order an operator lives it: take the money, pack and send
+       it, then watch it and reconcile what it earned. Both entries sit under Commerce rather than
+       in the inventory category because the category holds what happens to STOCK, and these two are
+       what happens to an ORDER - the heading is shared, the entries under it are this list's. */
+    { href: "/admin/shipping", label: "Pick & Pack" },
     { href: "/admin/logistics", label: "Logistics" },
     { href: "/admin/customers", label: "Customers" },
     { href: "/admin/audit", label: "Audit" },

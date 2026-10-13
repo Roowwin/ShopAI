@@ -66,10 +66,16 @@ export default function OrdersPage() {
   const [offset, setOffset] = useState(0);
   const [data, setData] = useState<Page | null>(null);
   const [states, setStates] = useState<[string, number][]>([]);
+  const [awaiting, setAwaiting] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
 
   const load = useCallback(async () => {
     setMsg("");
+    // `limit=1` because only the total is wanted: the count comes from the fulfilment queue so this
+    // page and Pick & Pack cannot disagree about what "awaiting" means.
+    void apiFetch("/staff/shipping/queue?limit=1")
+      .then(async (r) => setAwaiting(r.ok ? ((await r.json()).total ?? 0) : null))
+      .catch(() => setAwaiting(null));
     const p = new URLSearchParams();
     if (status) p.set("status", status);
     if (q) p.set("q", q);
@@ -115,11 +121,29 @@ export default function OrdersPage() {
 
       {checked && allowed && (
         <>
-          <section className="grid gap-4 sm:grid-cols-3">
+          {/* Four tiles, not three: this page is where someone looks after money has come in, and
+              the question that follows immediately is "what still has to go out?". The count is the
+              fulfilment queue's own total rather than a second rule computed here - a page that
+              derived "needs shipping" from the state list would drift from the queue the moment the
+              queue changed its mind. */}
+          <section className="grid gap-4 sm:grid-cols-4">
             <Stat label="Orders (all states)" value={total} />
             <Stat label="On this page" value={rows.length} sub={`offset ${offset}`} />
             <Stat label="Value on this page" value={aud(onPage)} />
+            <Stat label="Awaiting fulfilment" value={awaiting ?? "-"}
+                  sub={awaiting === null ? "queue unreachable" : (awaiting ? "paid, no parcel yet" : "everything paid has a parcel")} />
           </section>
+
+          <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <p className="text-sm text-ink-600">
+              {awaiting === null
+                ? "The fulfilment queue could not be read, so the count above is unavailable."
+                : awaiting > 0
+                  ? `${awaiting} paid order${awaiting === 1 ? "" : "s"} have no parcel yet.`
+                  : "Every paid order has a parcel recorded."}
+            </p>
+            <Button variant="secondary" href="/admin/shipping">Open Pick &amp; Pack</Button>
+          </Card>
 
           <Breakdown counts={states} active={status}
                      onPick={(s) => { setStatus(s === status ? "" : s); setOffset(0); }} />
