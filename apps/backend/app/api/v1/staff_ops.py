@@ -418,7 +418,8 @@ async def list_lots(limit: int = Query(20, le=100), offset: int = 0,
     rows = (await db.execute(select(Lot).options(selectinload(Lot.assets))
                              .order_by(Lot.id.desc()).limit(limit).offset(offset))).scalars().all()
     return [{"id": l.id, "lot_number": l.lot_number, "status": l.status,
-             "warehouse": l.warehouse, "asset_count": len(l.assets)} for l in rows]
+             "warehouse": l.warehouse, "load_id": l.load_id, "account": l.account, "zone": l.zone,
+             "asset_count": len(l.assets)} for l in rows]
 
 
 @router.get("/assets")
@@ -434,7 +435,10 @@ async def list_assets(status: str | None = None, lot_number: str | None = None,
         q = q.where(Asset.product_id == product_id)
     rows = (await db.execute(q.order_by(Asset.id.desc()).limit(limit).offset(offset))).scalars().all()
     return [{"id": a.id, "public_id": str(a.public_id), "serial_number": a.serial_number,
-             "status": a.status, "grade": a.grade, "lot_number": a.lot.lot_number} for a in rows]
+             "status": a.status, "grade": a.grade, "lot_number": a.lot.lot_number,
+             "location": a.location, "pallet": a.pallet, "sku": a.sku, "asset": a.asset,
+             "channel": a.channel, "on_shelf": a.on_shelf,
+             "warehouse": a.lot.warehouse, "zone": a.lot.zone} for a in rows]
 
 
 # How many awaiting-grade units the workbench returns at once. A corporate lot runs to a few
@@ -551,10 +555,17 @@ async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_
     # One row over the cap, so "was it cut?" is answered by the data rather than by `len == cap`.
     rows = (await db.execute(text("""
         SELECT a.id, a.public_id::text AS public_id, a.serial_number::text AS serial_number,
-               a.status, a.grade, a.product_id, a.notes,
-               p.title AS product_title, p.model AS product_model, c.name AS category_name
+               a.status, a.grade, a.product_id, a.notes, a.location, a.pallet, a.sku, a.asset,
+               a.channel, a.on_shelf, a.model_number,
+               p.title AS product_title, p.model AS product_model, c.name AS category_name,
+               -- The batch columns ride on every row rather than only on the lot header: a grader
+               -- working down a list is asking "which warehouse is THIS unit in", and making them
+               -- scroll back to a header to find out is the visibility gap this closes.
+               l.warehouse AS lot_warehouse, l.zone AS lot_zone, l.load_id AS lot_load_id,
+               l.account AS lot_account
         FROM assets a LEFT JOIN products p ON p.id = a.product_id
                      LEFT JOIN categories c ON c.id = p.category_id
+                     LEFT JOIN lots l ON l.id = a.lot_id
         WHERE """ + where + """
         ORDER BY a.id LIMIT :lim
     """), params)).mappings().all()
@@ -565,7 +576,8 @@ async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_
         "match": match,
         "highlight_asset_id": highlight_asset_id,
         "lot": {"id": lot.id, "lot_number": lot.lot_number, "status": lot.status,
-                "warehouse": lot.warehouse, "received_at": lot.received_at.isoformat()},
+                "warehouse": lot.warehouse, "received_at": lot.received_at.isoformat(),
+                "load_id": lot.load_id, "account": lot.account, "zone": lot.zone},
         "progress": {"total_units": int(counts["total"]), "received_units": int(counts["received"]),
                      "graded_units": int(counts["graded"]),
                      "awaiting_grade_units": int(counts["awaiting"]),
@@ -575,6 +587,11 @@ async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_
                     "status": r["status"], "grade": r["grade"], "product_id": r["product_id"],
                     "product_title": r["product_title"], "product_model": r["product_model"],
                     "category": r["category_name"], "notes": r["notes"],
+                    "asset": r["asset"], "model_number": r["model_number"],
+                    "location": r["location"], "pallet": r["pallet"], "sku": r["sku"],
+                    "channel": r["channel"], "on_shelf": r["on_shelf"],
+                    "warehouse": r["lot_warehouse"], "zone": r["lot_zone"],
+                    "load_id": r["lot_load_id"], "account": r["lot_account"],
                     "gradable": r["status"] in _GRADABLE_STATUSES,
                     "ready_for_pricing": r["grade"] is not None and r["status"] == "graded"}
                    for r in rows],

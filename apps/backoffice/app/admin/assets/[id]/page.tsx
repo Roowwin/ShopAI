@@ -27,11 +27,23 @@ import ImageHub, { type HubImage } from "./ImageHub";
    The audit block reuses the dashboard's feed component: the asset payload carries the same
    entry keys it reads (when, actor, entity, action), so there is one renderer for audit rows
    rather than a second one grown here. */
+/* The workbook's own columns are optional on the type because they are NULL on every unit that
+   predates the supplier import - which is most of the catalogue. `on_shelf` is a three-state
+   boolean for the same reason: `null` is "this unit's sheet never said", and rendering it as
+   "not on shelf" would state a fact nobody entered. */
 type Asset = { id: number; public_id: string; product_id: number | null; serial_number: string | null;
                imei: string | null; status: string; grade: string | null; cost_cents: number | null;
                sale_price_cents: number | null; intake_at: string; location: string | null;
-               notes: string | null; lot_id: number; updated_at: string };
-type Lot = { id: number; lot_number: string; status: string; warehouse: string | null; received_at: string } | null;
+               notes: string | null; lot_id: number; updated_at: string;
+               asset?: string | null; class?: string | null; model_number?: string | null;
+               upgrade?: string | null; upgrade_desc?: string | null; audit_desc?: string | null;
+               cosmetics_desc?: string | null; functional_desc?: string | null;
+               fmv_cents?: number | null; settlement_cents?: number | null;
+               channel?: string | null; on_shelf?: boolean | null; pallet?: string | null;
+               sku?: string | null };
+type Lot = { id: number; lot_number: string; status: string; warehouse: string | null;
+             received_at: string; load_id?: string | null; account?: string | null;
+             zone?: string | null } | null;
 type Movement = { id: number; moved_at: string; qty: number; reason: string; actor_staff_id: number | null };
 type Reservation = { id: number; public_id: string; status: string; expires_at: string; created_at: string };
 type AuditEntry = { at: string; actor_type: string; actor_id: number | null; entity: string;
@@ -71,6 +83,22 @@ function centsGuard(v: string): boolean {
 const MOVEMENT_CAP = 50;
 const RESERVATION_CAP = 50;
 const AUDIT_CAP = 20;
+
+/* One term and its value. A blank renders as a dash rather than vanishing, so "this column is
+   empty on this unit" and "this page has no such column" stay distinguishable - which matters
+   most for exactly these fields, since the whole catalogue predates the workbook and most units
+   will be blank. */
+function Field({ label, value, mono, wide }: {
+  label: string; value: string | null | undefined; mono?: boolean; wide?: boolean;
+}) {
+  const shown = value === null || value === undefined || value === "" ? null : value;
+  return (
+    <div className={wide ? "sm:col-span-2" : undefined}>
+      <dt className="text-ink-500">{label}</dt>
+      <dd className={mono && shown ? "font-mono text-xs" : undefined}>{shown ?? "-"}</dd>
+    </div>
+  );
+}
 
 export default function AssetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -177,6 +205,48 @@ export default function AssetDetailPage({ params }: { params: Promise<{ id: stri
             ) : (
               <p className="text-sm text-ink-600">The lot this unit belongs to is missing.</p>
             )}
+          </Card>
+
+          {/* WHERE THIS UNIT PHYSICALLY IS. Warehouse, Zone and Load ID are facts about the BATCH
+              the unit arrived in, so they are read from the lot rather than the asset; Pallet and
+              Location are facts about the unit itself. Both are shown together because the question
+              ("where do I go to pick this up") does not care which table answered it. Account is
+              here for the same reason - whose stock this is, answered in the same breath. */}
+          <Card className="p-4">
+            <Heading level="h2" className="mb-2">Logistics</Heading>
+            <dl className="text-sm text-ink-600 grid gap-2 sm:grid-cols-2">
+              <Field label="Warehouse" value={data.lot?.warehouse} />
+              <Field label="Zone" value={data.lot?.zone} />
+              <Field label="Pallet" value={a.pallet} />
+              <Field label="Load ID" value={data.lot?.load_id} mono />
+              <Field label="Location" value={a.location} mono />
+              <Field label="Account" value={data.lot?.account} />
+              <Field label="On shelf" value={a.on_shelf === null || a.on_shelf === undefined
+                ? null : (a.on_shelf ? "On the shelf" : "Not on the shelf")} />
+              <Field label="Channel" value={a.channel} />
+              <Field label="SKU #" value={a.sku} mono />
+            </dl>
+          </Card>
+
+          {/* The rest of the supplier's columns. Its own heading rather than more rows in Logistics
+              because these are the workbook's assessment and valuation of the unit, not where it
+              is - and an operator looking for a pallet should not have to read past four
+              paragraphs of condition notes to find it. */}
+          <Card className="p-4">
+            <Heading level="h2" className="mb-2">From the supplier workbook</Heading>
+            <dl className="text-sm text-ink-600 grid gap-2 sm:grid-cols-2">
+              <Field label="Model #" value={a.model_number} mono />
+              <Field label="Class" value={a.class} />
+              <Field label="Upgrade" value={a.upgrade} />
+              <Field label="FMV" value={a.fmv_cents === null || a.fmv_cents === undefined
+                ? null : aud(a.fmv_cents, "AUD")} />
+              <Field label="Settlement" value={a.settlement_cents === null || a.settlement_cents === undefined
+                ? null : aud(a.settlement_cents, "AUD")} />
+              <Field label="Upgrade description" value={a.upgrade_desc} />
+              <Field label="Audit description" value={a.audit_desc} wide />
+              <Field label="Cosmetics description" value={a.cosmetics_desc} wide />
+              <Field label="Functional description" value={a.functional_desc} wide />
+            </dl>
           </Card>
 
           {/* The hub sits between the record and its history: what the unit IS, what it looks

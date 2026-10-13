@@ -297,6 +297,18 @@ async def test_views_asset_detail_agrees_with_the_database(client):
         assert len(j["audit"]) == min(int(await _one(
             "SELECT count(*) FROM audit_log WHERE entity = 'asset' AND entity_id = :i",
             {"i": a["id"]})), 20)
+
+        # The supplier workbook's columns must reach the page that shows a unit. Asserted as
+        # KEY PRESENCE against the database's own column list rather than as values: on a catalogue
+        # that predates the import every one of these is NULL, so a value assertion would prove
+        # nothing - and a key that silently stopped being returned is exactly the visibility gap
+        # this guards, which no status code can catch.
+        for key in ("asset", "class", "model_number", "upgrade", "upgrade_desc", "audit_desc",
+                    "cosmetics_desc", "functional_desc", "fmv_cents", "settlement_cents",
+                    "channel", "on_shelf", "pallet", "sku"):
+            assert key in j["asset"], f"asset detail dropped {key!r}"
+        for key in ("warehouse", "zone", "load_id", "account"):
+            assert key in j["lot"], f"asset detail's lot dropped {key!r}"
     finally:
         await _cleanup()
 

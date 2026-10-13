@@ -280,14 +280,19 @@ async def get_asset(asset_id: int, staff: dict = Depends(require_roles(*READ_ROL
     a = (await db.execute(text("""
         SELECT a.id, a.public_id::text AS public_id, a.product_id,
                a.serial_number::text AS serial_number, a.imei, a.status, a.grade, a.cost_cents,
-               a.sale_price_cents, a.intake_at, a.location, a.notes, a.lot_id, a.updated_at
+               a.sale_price_cents, a.intake_at, a.location, a.notes, a.lot_id, a.updated_at,
+               -- the supplier workbook's own columns, added by 0015_excel_foundation and filled by
+               -- the product importer: the unit's logistics and its four condition descriptions
+               a.asset, a."class", a.model_number, a.upgrade, a.upgrade_desc, a.audit_desc,
+               a.cosmetics_desc, a.functional_desc, a.fmv_cents, a.settlement_cents, a.channel,
+               a.on_shelf, a.pallet, a.sku
         FROM assets a WHERE a.id = :i
     """), {"i": asset_id})).mappings().first()
     if a is None:
         raise HTTPException(status_code=404, detail="asset not found")
 
     lot = (await db.execute(text("""
-        SELECT id, lot_number, status, warehouse, received_at
+        SELECT id, lot_number, status, warehouse, received_at, load_id, account, zone
         FROM lots WHERE id = :i
     """), {"i": a["lot_id"]})).mappings().first()
 
@@ -339,9 +344,24 @@ async def get_asset(asset_id: int, staff: dict = Depends(require_roles(*READ_ROL
                                  if a["sale_price_cents"] is not None else None),
             "intake_at": _iso(a["intake_at"]), "location": a["location"], "notes": a["notes"],
             "lot_id": a["lot_id"], "updated_at": _iso(a["updated_at"]),
+            # The workbook's per-unit columns. Returned under the sheet's own concepts - `class`
+            # keeps its name rather than becoming `category`, because it is the SUPPLIER's class
+            # text and not this app's category row (which is a property of the product).
+            "asset": a["asset"], "class": a["class"], "model_number": a["model_number"],
+            "upgrade": a["upgrade"], "upgrade_desc": a["upgrade_desc"],
+            "audit_desc": a["audit_desc"], "cosmetics_desc": a["cosmetics_desc"],
+            "functional_desc": a["functional_desc"],
+            "fmv_cents": (int(a["fmv_cents"]) if a["fmv_cents"] is not None else None),
+            "settlement_cents": (int(a["settlement_cents"])
+                                 if a["settlement_cents"] is not None else None),
+            "channel": a["channel"], "on_shelf": a["on_shelf"], "pallet": a["pallet"],
+            "sku": a["sku"],
         },
+        # The lot's own batch columns travel with the unit, because a person looking at one device
+        # wants to know which load and which account it came in on without a second request.
         "lot": ({"id": lot["id"], "lot_number": lot["lot_number"], "status": lot["status"],
-                 "warehouse": lot["warehouse"], "received_at": _iso(lot["received_at"])}
+                 "warehouse": lot["warehouse"], "received_at": _iso(lot["received_at"]),
+                 "load_id": lot["load_id"], "account": lot["account"], "zone": lot["zone"]}
                 if lot is not None else None),
         "movements": [{"id": r["id"], "moved_at": _iso(r["moved_at"]), "qty": r["qty"],
                        "reason": r["reason"], "actor_staff_id": r["actor_staff_id"]}

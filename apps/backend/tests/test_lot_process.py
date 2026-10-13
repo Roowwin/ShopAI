@@ -81,6 +81,16 @@ async def test_worklist_reports_progress_and_the_awaiting_queue(client):
     assert all(a["grade"] is None for a in body["assets"])
     assert body["truncated"] is False
 
+    # The grader's own view of where a unit is. Key presence, not values: this lot was created by
+    # the test through the ordinary door and carries no zone or pallet, so asserting values would
+    # assert the fixture. What matters is that the workbench is TOLD these fields exist - a row
+    # that stopped carrying them is a column that silently disappears from the table.
+    for key in ("warehouse", "zone", "pallet", "location", "load_id", "account", "sku",
+                "asset", "model_number", "channel", "on_shelf"):
+        assert key in body["assets"][0], f"worklist row dropped {key!r}"
+    for key in ("load_id", "account", "zone"):
+        assert key in body["lot"], f"worklist lot dropped {key!r}"
+
     # Grade one through the normal door and the counts move on both sides of the line.
     g = await client.post(f"/staff/assets/{ids[0]}/grade",
                           json={"grade": "B", "test_first": True}, headers=_h(tok))

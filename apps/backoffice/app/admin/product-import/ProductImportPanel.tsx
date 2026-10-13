@@ -58,6 +58,27 @@ type PreviewRow = {
   technical_notes: string;
   issues: Issue[];
   translations: RowTranslation[];
+  /* The rest of the supplier workbook. Every one is optional because the server sends whatever the
+     sheet carried - a twelve-column sheet yields a row with these absent, and the preview must
+     render that rather than claim the columns were empty. */
+  class?: string;
+  model_number?: string;
+  upgrade?: string;
+  upgrade_desc?: string;
+  audit_desc?: string;
+  cosmetics_desc?: string;
+  functional_desc?: string;
+  fmv_cents?: number | null;
+  settlement_cents?: number | null;
+  channel?: string;
+  on_shelf?: boolean | null;
+  pallet?: string;
+  location?: string;
+  sku?: string;
+  lot_load_id?: string;
+  lot_account?: string;
+  lot_zone?: string;
+  lot_warehouse?: string;
 };
 
 type Preview = {
@@ -210,6 +231,14 @@ export default function ProductImportPanel() {
 
 /* The mapping preview. Ordered so the operator's eye lands on a mapping mistake before the row
    data: columns first, then the counts, then the rows themselves. */
+/* One optional text cell in the sample grid. A blank prints as a dash so a column the sheet did
+   not carry is visibly empty rather than visually absent - with twenty-six columns on screen, a
+   missing cell and a missing column look identical otherwise. */
+function Cell({ v }: { v: string | null | undefined }) {
+  return <>{v ? v : <span className="text-ink-500">-</span>}</>;
+}
+
+
 function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boolean; onCommit: () => void }) {
   const { summary, columns } = report;
   const blocked = summary.blocked > 0;
@@ -356,30 +385,78 @@ function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boole
         </p>
         <Table label="Rows as they would be imported">
           <THead>
+            {/* The sheet's OWN header row, in its own order and spelling, with the parsed value
+                underneath each name. The table used to show the nine columns the importer of the
+                day understood, which meant an operator could not check the seventeen it did not -
+                and "did it read my Model # " is not a question a preview should answer by
+                omission. The wide columns truncate with the full text on hover, because twenty-six
+                columns of prose would otherwise push the numbers off the screen. */}
             <TR>
               <TH>Row</TH>
-              <TH>Serial</TH>
+              <TH>Asset</TH>
+              <TH>Status</TH>
               <TH>Lot</TH>
               <TH>Class</TH>
-              <TH>Brand</TH>
+              <TH>Account</TH>
+              <TH>Mfg</TH>
               <TH>Model</TH>
-              <TH>Grade</TH>
-              <TH>Status</TH>
+              <TH>Model #</TH>
+              <TH>Upgrade Description</TH>
+              <TH>Audit Description</TH>
+              <TH>Cosmetics Description</TH>
+              <TH>Functional Description</TH>
+              <TH>Upgrade</TH>
+              <TH>FMV</TH>
               <TH>Resale</TH>
+              <TH>Settlement</TH>
+              <TH>Grade</TH>
+              <TH>Channel</TH>
+              <TH>Serial#</TH>
+              <TH>Load ID</TH>
+              <TH>On Shelf</TH>
+              <TH>Pallet</TH>
+              <TH>Location</TH>
+              <TH>Warehouse</TH>
+              <TH>SKU #</TH>
+              <TH>Zone</TH>
             </TR>
           </THead>
           <TBody>
             {report.sample.map((r) => (
               <TR key={r.row} className={r.issues.length ? "bg-danger-50" : undefined}>
                 <TD className="font-mono text-xs text-ink-500">{r.row}</TD>
-                <TD className="font-mono text-xs">{r.serial_number || <span className="text-danger-600">blank</span>}</TD>
-                <TD className="font-mono text-xs text-ink-600">{r.lot_number || <span className="text-danger-600">blank</span>}</TD>
-                <TD className="text-ink-600">{r.category}</TD>
-                <TD className="text-ink-600">{r.brand}</TD>
-                <TD>{r.model}</TD>
-                <TD>{r.grade ? <Badge colorClass={gradeTone(r.grade)}>{r.grade}</Badge> : <span className="text-ink-500">-</span>}</TD>
+                <TD className="font-mono text-xs text-ink-600"><Cell v={r.asset_tag} /></TD>
                 <TD><Badge colorClass={statusTone(r.status)}>{r.status}</Badge></TD>
+                <TD className="font-mono text-xs text-ink-600">
+                  {r.lot_number || <span className="text-danger-600">blank</span>}
+                </TD>
+                <TD className="text-ink-600"><Cell v={r.class || r.category} /></TD>
+                <TD className="text-ink-600"><Cell v={r.lot_account} /></TD>
+                <TD className="text-ink-600"><Cell v={r.brand} /></TD>
+                <TD><Cell v={r.model} /></TD>
+                <TD className="font-mono text-xs text-ink-600"><Cell v={r.model_number} /></TD>
+                <TD className="max-w-[12rem] truncate text-ink-600" title={r.upgrade_desc}>{r.upgrade_desc || "-"}</TD>
+                <TD className="max-w-[12rem] truncate text-ink-600" title={r.audit_desc}>{r.audit_desc || "-"}</TD>
+                <TD className="max-w-[12rem] truncate text-ink-600" title={r.cosmetics_desc}>{r.cosmetics_desc || "-"}</TD>
+                <TD className="max-w-[12rem] truncate text-ink-600" title={r.functional_desc}>{r.functional_desc || "-"}</TD>
+                <TD className="text-ink-600"><Cell v={r.upgrade} /></TD>
+                <TD>{r.fmv_cents === null || r.fmv_cents === undefined ? <span className="text-ink-500">-</span> : aud(r.fmv_cents)}</TD>
                 <TD>{r.sale_price_cents === null ? <span className="text-ink-500">-</span> : aud(r.sale_price_cents)}</TD>
+                <TD>{r.settlement_cents === null || r.settlement_cents === undefined ? <span className="text-ink-500">-</span> : aud(r.settlement_cents)}</TD>
+                <TD>{r.grade ? <Badge colorClass={gradeTone(r.grade)}>{r.grade}</Badge> : <span className="text-ink-500">-</span>}</TD>
+                <TD className="text-ink-600"><Cell v={r.channel} /></TD>
+                <TD className="font-mono text-xs">{r.serial_number || <span className="text-danger-600">blank</span>}</TD>
+                <TD className="font-mono text-xs text-ink-600"><Cell v={r.lot_load_id} /></TD>
+                {/* Three states, not two: a blank cell is the sheet not tracking shelf state,
+                    which is not the same claim as "No" and must not render as one. */}
+                <TD className="text-ink-600">
+                  {r.on_shelf === null || r.on_shelf === undefined ? "-" : (r.on_shelf ? "Yes" : "No")}
+                </TD>
+                <TD className="font-mono text-xs text-ink-600"><Cell v={r.pallet} /></TD>
+                <TD className="font-mono text-xs text-ink-600"><Cell v={r.location} /></TD>
+                <TD className="text-ink-600"><Cell v={r.lot_warehouse} /></TD>
+                <TD className="font-mono text-xs text-ink-600"><Cell v={r.sku} /></TD>
+                <TD className="text-ink-600"><Cell v={r.lot_zone} /></TD>
               </TR>
             ))}
           </TBody>

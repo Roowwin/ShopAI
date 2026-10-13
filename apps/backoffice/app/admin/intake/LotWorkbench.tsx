@@ -75,12 +75,29 @@ type WorkUnit = {
   notes: string | null;
   gradable: boolean;
   ready_for_pricing: boolean;
+  /* Where the unit is. Warehouse and Zone come from the unit's LOT - every unit in one lot shares
+     them - while Pallet and Location are the unit's own. They arrive on the row rather than only on
+     the lot header because a grader working down the list is asking about THIS unit. All optional:
+     a lot created by an older flow has no zone, and most of the catalogue has no pallet. */
+  asset?: string | null;
+  model_number?: string | null;
+  location?: string | null;
+  pallet?: string | null;
+  sku?: string | null;
+  channel?: string | null;
+  on_shelf?: boolean | null;
+  warehouse?: string | null;
+  zone?: string | null;
+  load_id?: string | null;
+  account?: string | null;
 };
 
 type Worklist = {
   match: { kind: "lot" | "asset"; resolved_by: string; term: string | null };
   highlight_asset_id: number | null;
-  lot: { id: number; lot_number: string; status: string; warehouse: string | null; received_at: string };
+  lot: { id: number; lot_number: string; status: string; warehouse: string | null;
+         received_at: string; load_id?: string | null; account?: string | null;
+         zone?: string | null };
   progress: {
     total_units: number;
     received_units: number;
@@ -466,6 +483,13 @@ export default function LotWorkbench() {
                     <TH>Lot</TH>
                     <TH>Class</TH>
                     <TH>Model</TH>
+                    {/* Where the unit is, beside what it is: a grader filling in a description is
+                        also the person who has to put the unit back, and "which zone was this one
+                        in" is a question about the row in front of them. Warehouse and Zone are the
+                        LOT's; Pallet is the unit's own. */}
+                    <TH>Warehouse</TH>
+                    <TH>Zone</TH>
+                    <TH>Pallet</TH>
                     <TH>Upgrade Description</TH>
                     <TH>Grade</TH>
                   </THead>
@@ -491,6 +515,9 @@ export default function LotWorkbench() {
                           <TD className="font-mono text-xs text-ink-600">{list.lot.lot_number}</TD>
                           <TD className="text-ink-600">{u.category ?? "-"}</TD>
                           <TD className="text-ink-600">{u.product_model ?? u.product_title ?? "-"}</TD>
+                          <TD className="text-ink-600">{u.warehouse ?? list.lot.warehouse ?? "-"}</TD>
+                          <TD className="text-ink-600">{u.zone ?? "-"}</TD>
+                          <TD className="font-mono text-xs text-ink-600">{u.pallet ?? "-"}</TD>
                           <TD className="min-w-[16rem]">
                             {/* Always a field, never a read-mode text with an edit mode behind it:
                                 the brief asks for an editable description, and a control that has
