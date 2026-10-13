@@ -27,7 +27,7 @@ export default function TrackLookupPage() {
     <main className="max-w-md mx-auto px-4 pt-16 pb-20">
       <Heading level="h1">Track your parcel</Heading>
       <p className="text-sm text-ink-500 mt-2">
-        Enter the tracking number from your dispatch email. You do not need an account.
+        Enter the tracking number you were given. You do not need an account.
       </p>
 
       <Card className="p-5 md:p-6 mt-6">
@@ -39,7 +39,7 @@ export default function TrackLookupPage() {
             <Input id="ref" value={ref} required autoComplete="off"
               onChange={(e) => setRef(e.target.value)} />
             <p className="text-xs text-ink-400 mt-1">
-              Letters and numbers, as printed on your dispatch email or the carrier&apos;s label.
+              Letters and numbers, as printed on the carrier&apos;s label.
             </p>
           </div>
           <Button variant="primary" type="submit" className="w-full">Track parcel</Button>
@@ -47,7 +47,7 @@ export default function TrackLookupPage() {
       </Card>
 
       <p className="mt-6 text-xs text-ink-400">
-        Looking for the items and totals on an order? Use the link on your confirmation email, or
+        Looking for the items and totals on an order? Use that order&apos;s own confirmation link, or
         sign in and open it from your orders.
       </p>
     </main>
