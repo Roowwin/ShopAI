@@ -1,6 +1,6 @@
 import re
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -795,6 +795,22 @@ async def cms_edit_product(pid: int, body: dict, staff: dict = Depends(require_r
     if not upd:
         raise HTTPException(status_code=422, detail="nothing to update")
     await db.execute(text("UPDATE products SET " + ", ".join(upd) + ", updated_at = now() WHERE id = :i"), params)
+    # Keep the parent's photo SET and its legacy single URL one story. `image_url` is what the
+    # storefront renders today, and `product_media` is the set this job made live; if the CMS could
+    # write one without the other, a product's page and its media list would disagree about whether
+    # it has a photo. The row is url-backed (storage_key, no bytes) exactly like the 0014 backfill
+    # wrote, and the (product_id, storage_key) unique index makes a re-PATCH idempotent rather than
+    # a second row for the same address. A cleared url adds nothing and removes nothing: the CMS
+    # still points the catalog at null, and the set keeps whatever rows it has.
+    if "img" in params and params["img"] is not None and params["img"].strip():
+        await db.execute(text("""
+            INSERT INTO product_media (product_id, storage_key, kind, position, is_primary, alt_text)
+            SELECT :i, :img, 'image',
+                   COALESCE((SELECT max(position) + 1 FROM product_media WHERE product_id = :i), 0),
+                   NOT EXISTS (SELECT 1 FROM product_media WHERE product_id = :i AND is_primary),
+                   NULL
+            ON CONFLICT (product_id, storage_key) WHERE storage_key IS NOT NULL DO NOTHING
+        """), {"i": pid, "img": params["img"]})
     await db.commit()
     await audit(db, "staff", entity="cms", action="product_updated", entity_id=pid, actor_id=staff["id"], after={k: str(body[k])[:60] for k in body})
     await db.commit()
@@ -1120,3 +1136,141 @@ async def set_grade_template(lot_id: int, body: GradeTemplateIn,
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
     return {"lot_id": lot_id, "grade": grade, "media_id": found["media_id"]}
+
+
+# ---------------------------------------------------------------------------
+# The PARENT's own stock photos: a product's image set, not a unit's.
+#
+# `product_media` was created by 0001 and never used; 0014 makes it live, backfills the products
+# that already had one `image_url` as its primary row, and adds the two indexes these doors lean
+# on. The two kinds of row are described there - a url-backed one (storage_key, the address the
+# catalog already had) and a byte-backed one (media_id, reusing 0013's media_objects so there is
+# ONE byte store, not two).
+#
+# ROLE-ONLY, like the asset-media doors just above and for the same structural reason: neither
+# action name is in GUARDED_ACTIONS, so `_require_role`'s ADR-0008 grant branch refuses an agent
+# before it can look anything up, and `None` is passed for the session so the guard cannot reach a
+# grant row even by accident. Photographing the catalogue is a human act with no review step
+# behind it - the same reasoning the unit-photography doors carry.
+#
+# The tuple is deliberately the asset-media pair, not a new one: both doors are the same job on a
+# different record, and `staff_views.READ_ROLES` is the wall the page that shows them opens with.
+# ---------------------------------------------------------------------------
+ROLES_PRODUCT_MEDIA = ("admin", "manager")
+ACTION_UPLOAD_PRODUCT_MEDIA = "upload_product_media"
+ACTION_DELETE_PRODUCT_MEDIA = "delete_product_media"
+
+
+@router.post("/products/{product_id}/media", status_code=201)
+async def upload_product_media(product_id: int, file: UploadFile = File(...),
+                               alt_text: str | None = Form(default=None),
+                               staff: dict = Depends(require_roles(*ROLES_PRODUCT_MEDIA)),
+                               db=Depends(get_db)):
+    """Upload one stock photo onto one product - the parent, shared by every unit of it.
+
+    Same two rules as the unit-photography door (raster-only whitelist, 5 MB cap) because the same
+    door serves the bytes back to a browser, and the same two-row shape: the file is stored once in
+    `media_objects` and `product_media` says this product shows it. Nothing here is de-duplicated by
+    content - two shots of one model are two facts - but the (product_id, media_id) unique index
+    means re-attaching one file to one product is refused rather than duplicated.
+
+    `is_primary` is COMPUTED, never taken from the caller: the first photo a product gets is its
+    primary one, and later ones are not, because a card renders exactly one photo and a caller-
+    supplied flag could only make that depend on who uploaded last. `position` appends.
+    """
+    await _require_role(staff, ROLES_PRODUCT_MEDIA, ACTION_UPLOAD_PRODUCT_MEDIA, None)
+    known = (await db.execute(text("SELECT id FROM products WHERE id = :i"),
+                              {"i": product_id})).scalar_one_or_none()
+    if known is None:
+        raise HTTPException(status_code=404, detail="product not found")
+
+    # A multipart part may carry parameters ("image/jpeg; charset=..."); the type is the bare one.
+    ctype = (file.content_type or "").split(";")[0].strip().lower()
+    if ctype not in IMAGE_TYPES:
+        raise HTTPException(status_code=422,
+                            detail="only JPEG, PNG, WebP or GIF images can be attached")
+    blob = await file.read(IMAGE_MAX_BYTES + 1)
+    if not blob:
+        raise HTTPException(status_code=422, detail="that file is empty")
+    if len(blob) > IMAGE_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="images are capped at 5 MB")
+
+    clean_alt = (alt_text or "").strip()[:300] or None
+    try:
+        media = (await db.execute(text("""
+            INSERT INTO media_objects (filename, content_type, byte_size, bytes, uploaded_by)
+            VALUES (:f, :c, :n, :b, :u)
+            RETURNING id, public_id::text AS public_id
+        """), {"f": _safe_filename(file.filename), "c": ctype, "n": len(blob), "b": blob,
+               "u": staff["id"]})).mappings().one()
+        # One statement so the primary flag and the position are read from the same snapshot the
+        # insert sees; the partial unique index on (product_id) WHERE is_primary is the backstop if
+        # two uploads for one product ever race, and it answers 409 through the translator below.
+        row = (await db.execute(text("""
+            INSERT INTO product_media (product_id, media_id, kind, position, is_primary, alt_text)
+            SELECT :p, :m, 'image',
+                   COALESCE((SELECT max(position) + 1 FROM product_media WHERE product_id = :p), 0),
+                   NOT EXISTS (SELECT 1 FROM product_media WHERE product_id = :p AND is_primary),
+                   :a
+            RETURNING id, position, is_primary
+        """), {"p": product_id, "m": media["id"], "a": clean_alt})).mappings().one()
+        await _audit_execution(db, staff, None, entity="product", entity_id=product_id,
+                               action="product_media_upload",
+                               after={"media_row_id": row["id"], "media_id": media["id"],
+                                      "filename": _safe_filename(file.filename),
+                                      "byte_size": len(blob),
+                                      "is_primary": bool(row["is_primary"])})
+        await db.commit()
+    except HTTPException:
+        await db.rollback()
+        raise
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    return {"media_row_id": row["id"], "media_id": media["id"], "public_id": media["public_id"],
+            "product_id": product_id, "kind": "image", "position": row["position"],
+            "is_primary": bool(row["is_primary"]), "alt_text": clean_alt,
+            "filename": _safe_filename(file.filename), "content_type": ctype,
+            "byte_size": len(blob)}
+
+
+@router.delete("/products/{product_id}/media/{media_row_id}")
+async def delete_product_media(product_id: int, media_row_id: int,
+                               staff: dict = Depends(require_roles(*ROLES_PRODUCT_MEDIA)),
+                               db=Depends(get_db)):
+    """Take one photo off a product's set.
+
+    0013's rule for unit photographs is the rule here too: a mis-taken photo has to be removable,
+    and what survives the removal is the audit row, not the row's existence. The row id is scoped
+    by the product, so an id from another product's set is a 404 rather than a delete.
+
+    A BYTE-BACKED row's bytes are deleted with it, because 0013 made `media_objects` single-use:
+    both foreign keys that can point at one are checked first (a file shared with a unit's image is
+    left alone) and the bytes only go when nothing names them. A URL-BACKED row has no bytes of its
+    own - its `storage_key` is an address the catalog still holds - so this removes the row and
+    leaves `products.image_url` exactly as the CMS wrote it.
+    """
+    await _require_role(staff, ROLES_PRODUCT_MEDIA, ACTION_DELETE_PRODUCT_MEDIA, None)
+    row = (await db.execute(text("""
+        SELECT id, media_id, storage_key, is_primary FROM product_media
+        WHERE id = :r AND product_id = :p
+    """), {"r": media_row_id, "p": product_id})).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="media not found on that product")
+
+    try:
+        await db.execute(text("DELETE FROM product_media WHERE id = :r"), {"r": media_row_id})
+        if row["media_id"] is not None:
+            await db.execute(text("""
+                DELETE FROM media_objects WHERE id = :m
+                  AND NOT EXISTS (SELECT 1 FROM product_media pm WHERE pm.media_id = :m)
+                  AND NOT EXISTS (SELECT 1 FROM asset_images ai WHERE ai.media_id = :m)
+            """), {"m": row["media_id"]})
+        await _audit_execution(db, staff, None, entity="product", entity_id=product_id,
+                               action="product_media_delete",
+                               before={"media_row_id": row["id"], "media_id": row["media_id"],
+                                       "storage_key": row["storage_key"],
+                                       "is_primary": bool(row["is_primary"])})
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    return {"deleted": media_row_id, "product_id": product_id}
