@@ -69,9 +69,12 @@ export default function Header() {
      which is for a two-word kicker. That sentence is copy, not chrome: it is shrunk, never dropped. */
   return (
     <header className="sticky top-0 z-50">
-      <div className="bg-surface-page-alt text-ink-600 border-b border-line text-[11px] px-6 py-1 text-center tracking-wide">Renewed tech. Zero waste. - Certified refurbished, delivered AU &amp; NZ</div>
+      <div className="bg-surface-page-alt text-ink-600 border-b border-line text-eyebrow px-6 py-1 text-center">Renewed tech. Zero waste. - Certified refurbished, delivered AU &amp; NZ</div>
       <div className="bg-surface text-ink-900 px-4 md:px-6 py-2 flex items-center gap-2 md:gap-3 shadow-sm">
-        <a href="/" className="flex items-center gap-1.5 font-semibold tracking-wide shrink-0">
+        {/* The wordmark is a link home on every route, so it needs the same visible focus ring as
+            the rest of the chrome - it had none, which made it the one control in the header a
+            keyboard user could land on without seeing where they were. */}
+        <a href="/" className="flex items-center gap-1.5 font-semibold tracking-wide shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2">
           <span className="h-2.5 w-2.5 rounded-full bg-brand-600"></span>
           RFO<span className="text-brand-700">Store</span>
         </a>
@@ -94,12 +97,13 @@ export default function Header() {
         </div>
         <div className="relative flex-1 min-w-0 max-w-xl mx-auto">
           <Input tone="sunken"
+            aria-label="Search devices"
             placeholder="Search devices - e.g. galaxy s21"
             value={q} onChange={(e) => onChange(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && q.trim().length >= 2) { setOpen(false); router.push("/search?q=" + encodeURIComponent(q.trim())); } }}
             onBlur={() => setTimeout(() => setOpen(false), 150)} />
           {open && items.length > 0 && (
-            <div className="absolute left-0 right-0 mt-1 bg-white text-ink-900 rounded-control shadow-lg ring-1 ring-line overflow-hidden">
+            <div className="absolute left-0 right-0 mt-1 bg-surface text-ink-900 rounded-control shadow-lg ring-1 ring-line overflow-hidden">
               {items.slice(0, 5).map((s) => (
                 <button key={s.slug} className="w-full text-left px-4 py-2.5 text-sm transition-colors duration-fast ease-out hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 motion-reduce:transition-none"
                   onMouseDown={() => router.push("/products/" + s.slug)}>
@@ -113,6 +117,9 @@ export default function Header() {
           )}
         </div>
         <Button href="/cart" className="relative shrink-0">
+          {/* The count badge is the one place that keeps a raw 10px: it is a single digit centred in
+              a 20px circle, and the `eyebrow` step (11px + 0.1em tracking) crowds it and shifts the
+              digit off centre on one character. Deliberate, not a missed sweep. */}
           Cart{cartN > 0 && (<span className="absolute -top-2 -right-2 bg-ink-900 text-brand-300 text-[10px] font-bold rounded-full h-5 w-5 flex items-center justify-center">{cartN}</span>)}
         </Button>
         <button
@@ -130,7 +137,7 @@ export default function Header() {
       </div>
       {/* The category nav is hidden below md, and there was no way to reach it on a phone. */}
       {menu && (
-        <nav className="md:hidden bg-white ring-1 ring-line border-t border-line px-4 py-1 flex flex-col text-sm text-ink-600">
+        <nav className="md:hidden bg-surface ring-1 ring-line border-t border-line px-4 py-1 flex flex-col text-sm text-ink-600">
           <a href="/" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>Shop</a>
           {/* A category with sub-categories becomes an accordion here, because hover does not exist on
               a phone. The word still goes to the category - a shopper who wants all of Accessories has

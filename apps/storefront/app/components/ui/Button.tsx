@@ -51,9 +51,12 @@ type Props = {
   onClick?: () => void;
   /** A toggle button (a filter chip): announces its selected state. Omitted on plain buttons. */
   pressed?: boolean;
+  /** The control is mid-request. Sets `aria-busy` and nothing else - the caller still owns
+      `disabled`, because whether a second press is safe is the caller's decision, not ours. */
+  busy?: boolean;
 };
 
-export default function Button({ children, variant = "primary", size = "md", className, href, as, type = "button", disabled, onClick, pressed }: Props) {
+export default function Button({ children, variant = "primary", size = "md", className, href, as, type = "button", disabled, onClick, pressed, busy }: Props) {
   const cls = cn(BASE, VARIANTS[variant], SIZES[size], className);
   const Tag = (as ?? (href ? "a" : "button")) as "button" | "a" | "span";
   if (Tag === "a") {
@@ -62,5 +65,5 @@ export default function Button({ children, variant = "primary", size = "md", cla
   if (Tag === "span") {
     return <span className={cls}>{children}</span>;
   }
-  return <button type={type} className={cls} disabled={disabled} aria-pressed={pressed} onClick={onClick}>{children}</button>;
+  return <button type={type} className={cls} disabled={disabled} aria-pressed={pressed} aria-busy={busy} onClick={onClick}>{children}</button>;
 }

@@ -182,7 +182,7 @@ export default function FacetDropdown({ label, value, options, onSelect, open, o
           "transition-colors duration-fast ease-out motion-reduce:transition-none",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2",
           // A facet with nothing in force is a quiet secondary control; the one in force is the
-          // emerald-marked one, so a glance down the toolbar says what is actually filtering.
+          // brand-marked one, so a glance down the toolbar says what is actually filtering.
           value === null
             ? "bg-surface text-ink-700 ring-1 ring-line hover:bg-surface-sunken hover:ring-line-strong active:bg-surface-pressed"
             : "bg-brand-50 text-brand-800 ring-1 ring-brand-700 hover:bg-brand-100",
@@ -199,7 +199,7 @@ export default function FacetDropdown({ label, value, options, onSelect, open, o
         <div role="listbox" aria-labelledby={baseId + "-trigger"} tabIndex={-1} onKeyDown={onKey}
           style={{ position: "fixed", width: panel.w, left: panel.left, maxHeight: panel.maxH,
             ...(panel.flip ? { bottom: panel.bottom } : { top: panel.top }) }}
-          className="z-40 overflow-y-auto rounded-control bg-white text-ink-900 shadow-lg ring-1 ring-line py-1">
+          className="z-40 overflow-y-auto rounded-control bg-surface text-ink-900 shadow-lg ring-1 ring-line py-1">
           {options.map((o, i) => {
             const isSel = o.value === value;
             return (

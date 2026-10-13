@@ -4,6 +4,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import Header from "./components/Header";
 import FooterNewsletter from "./components/FooterNewsletter";
+import { footerLinkClass } from "./components/ui";
 import { apiInternal } from "@/lib/api";
 
 /* Both faces are self-hosted at build time by next/font/google (no runtime third-party request,
@@ -34,7 +35,9 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image" },
 };
 
-export const viewport: Viewport = { themeColor: "#059669" };
+/* The mobile browser chrome colour. A literal rather than a token because Next reads this at
+   build time, outside any stylesheet - it mirrors --brand-700 and moved with the palette. */
+export const viewport: Viewport = { themeColor: "#245B45" };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   let promo: string | null = null;
@@ -55,13 +58,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               <p className="text-xs text-ink-400 mt-1">Certified refurbished electronics. Every device renewed, graded and tracked - e-waste kept out of landfill.</p>
             </div>
             <div className="text-xs space-y-1">
-              <a href="/" className="block transition-colors duration-fast ease-out hover:text-brand-300 motion-reduce:transition-none">Shop</a>
-              <a href="/search" className="block transition-colors duration-fast ease-out hover:text-brand-300 motion-reduce:transition-none">Search</a>
-              <a href="/assistant" className="block transition-colors duration-fast ease-out hover:text-brand-300 motion-reduce:transition-none">Ask the AI</a>
-              <a href="/faq" className="block transition-colors duration-fast ease-out hover:text-brand-300 motion-reduce:transition-none">FAQ</a>
-              <a href="/contact" className="block transition-colors duration-fast ease-out hover:text-brand-300 motion-reduce:transition-none">Contact</a>
-              <a href="/grades" className="block transition-colors duration-fast ease-out hover:text-brand-300 motion-reduce:transition-none">Our grades A-D</a>
-              <a href="/returns" className="block transition-colors duration-fast ease-out hover:text-brand-300 motion-reduce:transition-none">Returns &amp; warranty</a>
+              <a href="/" className={"block " + footerLinkClass}>Shop</a>
+              <a href="/search" className={"block " + footerLinkClass}>Search</a>
+              <a href="/assistant" className={"block " + footerLinkClass}>Ask the AI</a>
+              <a href="/faq" className={"block " + footerLinkClass}>FAQ</a>
+              <a href="/contact" className={"block " + footerLinkClass}>Contact</a>
+              <a href="/grades" className={"block " + footerLinkClass}>Our grades A-D</a>
+              <a href="/returns" className={"block " + footerLinkClass}>Returns &amp; warranty</a>
             </div>
             <div className="text-xs text-ink-400">
               <p>Prices in AUD incl. applicable GST (AU 10% / NZ 15%).</p>

@@ -53,8 +53,17 @@ export const GROUPS: NavGroup[] = [
           { href: "/admin/customers", label: "Customers" },
         ],
       },
-      /* Fulfilment points at Pick & Pack, the screen an order is actually packed and dispatched on. */
-      { href: "/admin/shipping", label: "Fulfillment & Shipping" },
+      /* Fulfilment points at Pick & Pack, the screen an order is actually packed and dispatched on.
+         "Logistics" - the carrier alerts, the per-carrier performance table and the payout
+         reconciliation - hangs UNDER it: it is the other half of the same job. It was built,
+         gated and reachable by URL, but named by nothing in this tree, so the only way to it was
+         to already know its address. */
+      {
+        href: "/admin/shipping", label: "Fulfillment & Shipping",
+        children: [
+          { href: "/admin/logistics", label: "Logistics" },
+        ],
+      },
     ],
   },
   {
@@ -71,9 +80,17 @@ export const GROUPS: NavGroup[] = [
       },
       { href: "/admin/product-import", label: "Product Import" },
       /* The marketplace hubs. There are three of them (eBay, Amazon, Facebook) and the roadmap gives
-         the group one entry, so this is the hub for the marketplace the platform is actually wired
-         toward; the other two keep their routes and are reached from this one's own links. */
-      { href: "/admin/channels/ebay", label: "Omnichannel Listings" },
+         the group one entry, so the parent is the hub for the marketplace the platform is actually
+         wired toward. The other two are CHILDREN rather than - as this note used to claim -
+         "reached from this one's own links": the hub links to nothing but itself, so Amazon and
+         Facebook had live routes and no way to reach them from the chrome at all. */
+      {
+        href: "/admin/channels/ebay", label: "Omnichannel Listings",
+        children: [
+          { href: "/admin/channels/amazon", label: "Amazon" },
+          { href: "/admin/channels/facebook", label: "Facebook" },
+        ],
+      },
     ],
   },
   {
@@ -119,7 +136,16 @@ export const GROUPS: NavGroup[] = [
   },
   {
     id: "administration", heading: "Administration & Security", icon: "shield", items: [
-      { href: "/admin/team", label: "Team & Access Control" },
+      /* Agents hangs UNDER Team & Access Control: an agent is a non-human identity holding a set of
+         grants, which is the same subject as a person holding a role - and the same two ways to take
+         it away. Like Logistics it was built, gated and reachable by URL but named by nothing in this
+         tree. */
+      {
+        href: "/admin/team", label: "Team & Access Control",
+        children: [
+          { href: "/admin/agents", label: "Agents" },
+        ],
+      },
       { href: "/admin/audit", label: "Audit Logs" },
       /* "Settings & System" is a real Settings page now: the business's own legal identity - the
          name, ABN and address every tax invoice prints - plus the system configuration behind the

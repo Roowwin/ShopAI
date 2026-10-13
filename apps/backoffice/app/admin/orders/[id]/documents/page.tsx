@@ -112,7 +112,7 @@ export default function OrderDocumentsPage() {
       </div>
 
       {/* ---------------------------------------------------------------- packing slip */}
-      <section className="print-page rounded-card bg-white p-8 text-ink-900 ring-1 ring-line print:ring-0">
+      <section className="print-page print-doc rounded-card bg-white p-8 text-ink-900 ring-1 ring-line print:ring-0">
         <header className="flex items-baseline justify-between border-b border-ink-900 pb-2">
           <h2 className="text-xl font-semibold tracking-tight">Packing slip</h2>
           <span className="text-sm">Order #{order.id}</span>
@@ -173,7 +173,7 @@ export default function OrderDocumentsPage() {
       </section>
 
       {/* ---------------------------------------------------------------- dispatch label */}
-      <section className="print-page mt-8 rounded-card bg-white p-8 text-ink-900 ring-1 ring-line print:mt-0 print:ring-0">
+      <section className="print-page print-doc mt-8 rounded-card bg-white p-8 text-ink-900 ring-1 ring-line print:mt-0 print:ring-0">
         <header className="flex items-baseline justify-between border-b-2 border-ink-900 pb-2">
           <h2 className="text-xl font-semibold tracking-tight">Dispatch label</h2>
           <span className="text-sm">{shipment ? (shipment.carrier || "").toUpperCase() : "NOT DISPATCHED"}</span>

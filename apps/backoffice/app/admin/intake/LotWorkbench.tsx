@@ -135,10 +135,10 @@ const CELL_FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visibl
    colour per grade for a chip that NAMES a grade, and it paints all four of these the same, which
    is precisely the state this control could not show.
 
-   ACTIVE - the brand's saturated emerald, which is `emerald-500` by value, under the dark ink. White
-   on that step measures 2.5:1 and is not text; `ink-inverse` is the token this palette keeps for
-   exactly this pairing (Button's `accent` variant is the same shape in amber). `shadow-glow-sm` is
-   the config's emerald hairline plus bloom, the halo a dark ground needs - a grey shadow is invisible
+   ACTIVE - the brand's saturated green (`brand-500`), under the dark ink. White on that step measures
+   under 4.5:1 and is not text; `ink-inverse` is the token this palette keeps for exactly this pairing
+   (Button's `accent` variant is the same shape in amber). `shadow-glow-sm` is the config's brand
+   hairline plus bloom, the halo a dark ground needs - a grey shadow is invisible
    against slate, so the glow is drawn in light.
 
    IDLE - the page ground, muted ink, one hairline, and a lift to the primary button's emerald on

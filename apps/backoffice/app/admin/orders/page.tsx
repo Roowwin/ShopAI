@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Badge, Button, Card, Heading, Input, Select, Stat, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
+import { Badge, Button, Card, Heading, Input, PageHeader, Select, Stat, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
 import { aud, when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
 import { statusTone } from "@/lib/ui";
@@ -114,8 +114,10 @@ export default function OrdersPage() {
 
   return (
     <main className="max-w-6xl mx-auto p-4 space-y-4 min-h-screen">
-      <Heading level="h1">Orders</Heading>
-      <p className="text-sm text-ink-500">Read-only. Refund state is shown, never actioned - this API has no refund door.</p>
+      <PageHeader
+        title={<>Orders</>}
+        description={<>Read-only. Refund state is shown, never actioned - this API has no refund door.</>}
+      />
 
       {msg && <Card className="p-4"><p className="text-sm text-ink-600">{msg}</p></Card>}
 

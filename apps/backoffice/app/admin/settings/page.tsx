@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Button, Card, Heading, Input, cn } from "@/app/components/ui";
+import { Button, Card, Input, PageHeader, cn } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
 import { requireRole, useMe } from "@/lib/session";
 import { kickerClass } from "@/lib/ui";
@@ -100,10 +100,10 @@ export default function SettingsPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 pt-10 pb-24">
-      <Heading level="h1">Settings &amp; System</Heading>
-      <p className="mt-2 text-sm text-ink-600">
-        The business&apos;s own details, as they appear on the documents customers receive.
-      </p>
+      <PageHeader
+        title={<>Settings &amp; System</>}
+        description={<>The business&apos;s own details, as they appear on the documents customers receive.</>}
+      />
 
       <Card className="mt-6 p-6">
         <p className={cn(kickerClass, "block")}>Business legal identity</p>

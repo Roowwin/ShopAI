@@ -31,7 +31,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
-  Badge, Button, Card, Heading, Input, Select, Stat, Table, TBody, TD, TH, THead, TR, cn,
+  Badge, Button, Card, Heading, Input, PageHeader, Select, Stat, Table, TBody, TD, TH, THead, TR, cn,
 } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
 import { aud, when } from "@/lib/format";
@@ -189,13 +189,15 @@ export default function PickAndPackPage() {
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 px-4 pt-8 pb-16">
-      <div>
-        <Heading level="h1">Pick &amp; Pack</Heading>
-        <p className="mt-1 text-sm text-ink-500">
-          Paid orders with no parcel yet, oldest first. Pick the units, read the address, book a
-          label, then record the dispatch.
-        </p>
-      </div>
+      <PageHeader
+        title={<>Pick &amp; Pack</>}
+        description={
+          <>
+            Paid orders with no parcel yet, oldest first. Pick the units, read the address, book a
+            label, then record the dispatch.
+          </>
+        }
+      />
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Awaiting fulfilment" value={total}

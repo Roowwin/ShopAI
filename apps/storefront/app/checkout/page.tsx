@@ -198,7 +198,7 @@ export default function CheckoutPage() {
           </dl>
 
           <Button variant="primary" className="w-full mt-5" onClick={pay}
-            disabled={busy || !quote} pressed={busy}>
+            disabled={busy || !quote} busy={busy}>
             {busy ? "Taking payment..." : quote ? "Pay " + aud(quote.total_cents) : "Pricing your cart..."}
           </Button>
           <p className="mt-3 text-xs text-ink-400">

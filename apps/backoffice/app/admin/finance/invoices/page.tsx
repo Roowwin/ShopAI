@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Badge, Button, Card, Heading, Input, Select, Stat, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
+import { Badge, Button, Card, Heading, Input, PageHeader, Select, Stat, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
 import { aud, when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
@@ -126,13 +126,15 @@ export default function InvoicesPage() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-4 pt-8 pb-16">
-      <div>
-        <Heading level="h1">Manage invoices</Heading>
-        <p className="mt-1 text-sm text-ink-500">
-          Every document the business has issued, newest first. Invoices are issued by the payment
-          path when an order is paid - this screen reads them and moves their status.
-        </p>
-      </div>
+      <PageHeader
+        title={<>Manage invoices</>}
+        description={
+          <>
+            Every document the business has issued, newest first. Invoices are issued by the payment
+            path when an order is paid - this screen reads them and moves their status.
+          </>
+        }
+      />
 
       <section className="grid gap-4 sm:grid-cols-3">
         <Stat label="Invoices matching" value={total} sub="the current filters" />

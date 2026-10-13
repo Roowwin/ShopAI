@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Button, Card, Heading, Input } from "@/app/components/ui";
+import { Button, Card, Input, PageHeader } from "@/app/components/ui";
 
 export default function SecurityPage() {
   const [secret, setSecret] = useState("");
@@ -33,7 +33,7 @@ export default function SecurityPage() {
 
   return (
     <main className="max-w-2xl mx-auto pt-10 px-4">
-      <Heading level="h1" className="mb-4">Security / TOTP</Heading>
+      <PageHeader title={<>Security / TOTP</>} className="mb-4" />
       <Card className="p-6 space-y-4">
         {!enabled && !secret && (
           <Button onClick={setup} disabled={busy}>
@@ -46,7 +46,10 @@ export default function SecurityPage() {
             <code className="block bg-surface-sunken rounded-control p-3 break-all">{secret}</code>
             <p className="text-xs text-ink-500 break-all">{uri}</p>
             <div className="w-40">
-              <Input className="tracking-widest" placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} />
+              {/* Placeholder only, like the login screen's fields: a placeholder is not a label -
+                  it vanishes on first keystroke and a screen reader never had it. */}
+              <Input aria-label="Six digit code from your authenticator" autoComplete="one-time-code" inputMode="numeric"
+                className="tracking-widest" placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} />
             </div>
             <Button onClick={enable} disabled={busy}>
               Enable TOTP

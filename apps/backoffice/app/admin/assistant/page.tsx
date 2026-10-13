@@ -249,15 +249,15 @@ export default function AssistantPage() {
               ))}
               {busy && (
                 <div className="flex items-center gap-1.5 px-2">
-                  <span className="h-2 w-2 rounded-full bg-ink-400 animate-pulse"></span>
-                  <span className="h-2 w-2 rounded-full bg-ink-400 animate-pulse" style={{ animationDelay: "150ms" }}></span>
-                  <span className="h-2 w-2 rounded-full bg-ink-400 animate-pulse" style={{ animationDelay: "300ms" }}></span>
+                  <span className="h-2 w-2 rounded-full bg-ink-400 animate-pulse motion-reduce:animate-none"></span>
+                  <span className="h-2 w-2 rounded-full bg-ink-400 animate-pulse motion-reduce:animate-none" style={{ animationDelay: "150ms" }}></span>
+                  <span className="h-2 w-2 rounded-full bg-ink-400 animate-pulse motion-reduce:animate-none" style={{ animationDelay: "300ms" }}></span>
                 </div>
               )}
             </div>
             <div className="p-3 pt-2">
               <div className="flex gap-2 items-end bg-surface rounded-2xl ring-1 ring-line-strong focus-within:ring-brand-500 p-2">
-                <textarea className="flex-1 resize-none outline-none text-sm px-2 py-1.5 max-h-32" rows={1}
+                <textarea aria-label="Message the assistant" className="flex-1 resize-none outline-none text-sm px-2 py-1.5 max-h-32" rows={1}
                   placeholder="Ask... (Enter sends - Shift+Enter newline)"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -265,7 +265,7 @@ export default function AssistantPage() {
                 <button className="rounded-xl bg-status-reserved-solid text-ink-inverse px-4 py-2 text-sm font-medium hover:bg-status-reserved-solid disabled:opacity-50"
                   onClick={sendNow} disabled={busy || !input.trim()}>Send</button>
               </div>
-              <p className="text-[10px] text-ink-500 mt-1.5 px-2">Pending proposals: {pending} - nothing executes without your confirmation.</p>
+              <p className="text-xs text-ink-500 mt-1.5 px-2">Pending proposals: {pending} - nothing executes without your confirmation.</p>
             </div>
           </section>
 

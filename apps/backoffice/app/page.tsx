@@ -48,8 +48,12 @@ export default function LoginPage() {
         <p className="text-sm text-ink-500 mb-6">Staff sign-in</p>
         {!challenge ? (
           <div className="space-y-3">
-            <Input placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <Input type="password" placeholder="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            {/* Each field carried a placeholder and nothing else - no label, no aria-label - so a
+                screen reader announced three unlabelled "edit text" boxes and the only thing naming
+                them was grey text that disappears the moment you type. The autocomplete hints are
+                the other half: without them a password manager cannot tell the two apart either. */}
+            <Input aria-label="Email" autoComplete="username" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Input type="password" aria-label="Password" autoComplete="current-password" placeholder="password" value={password} onChange={(e) => setPassword(e.target.value)} />
             <Button className="w-full" onClick={submit} disabled={busy}>
               Sign in
             </Button>
@@ -57,13 +61,16 @@ export default function LoginPage() {
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-ink-600">Enter the 6-digit code from your authenticator:</p>
-            <Input className="tracking-widest" placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} />
+            <Input aria-label="Six digit verification code" autoComplete="one-time-code" inputMode="numeric"
+              className="tracking-widest" placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} />
             <Button className="w-full" onClick={submitMfa} disabled={busy}>
               Verify
             </Button>
           </div>
         )}
-        {err && <p className="text-danger-600 text-sm mt-3">{err}</p>}
+        {/* The failure is the one thing on this screen a user needs the moment it happens, so it is
+            announced rather than left to be noticed. */}
+        {err && <p role="alert" className="text-danger-600 text-sm mt-3">{err}</p>}
       </Card>
     </main>
   );

@@ -3,6 +3,8 @@
 @tailwind utilities;
 
 /* Design tokens - "Midnight Emerald".
+   (The theme name is the owner's and stands; the brand ladder's VALUES are now a deep forest
+   green, matching the storefront, so the two apps draw their one accent from one hue.)
 
    Channel triples (not hex) so Tailwind can apply opacity modifiers - see the `token()` helper in
    tailwind.config.ts. Named by ROLE, and this revision flips the VALUES while keeping every role
@@ -11,17 +13,17 @@
    the app; inverting it touches this file.
 
    Two things an inversion cannot do by itself, both handled at the call sites rather than here:
-   - brand-700 is BOTH the primary button fill (white on it measures 5.48:1, so it stays) and, on the
+   - brand-700 is BOTH the primary button fill (white on it measures 7.9:1, so it stays) and, on the
      old light ground, an ink for links and active states. On a slate-900 card that same value measures
-     2.6:1, so the ink sites point at brand-300 (11.7:1) instead. One token, two jobs, and only the
+     2.3:1, so the ink sites point at brand-300 (9.8:1) instead. One token, two jobs, and only the
      ground decides which value each job needs.
    - `bg-white` and friends are literals, not tokens; they are audited and fixed per site.
 
    Every value below was checked against WCAG before it was written: body text on `surface` clears
-   4.5:1 with room (ink-600 12.0:1, ink-500 7.0:1, ink-400 5.3:1), white on brand-700 stays 5.5:1, and
-   each status chip's ink clears 5:1 on its own deep fill. ink-300 is the deliberately dim step (3.8:1
-   on a card) for placeholders and disabled text - it was 1.6:1 on white, so this is an improvement
-   rather than a regression. */
+   4.5:1 with room (ink-600 12.0:1, ink-500 7.0:1, ink-400 5.3:1), white on brand-700 measures 7.9:1,
+   and each status chip's ink clears 5:1 on its own deep fill. ink-300 is the deliberately dim step
+   (3.8:1 on a card) for placeholders and disabled text - it was 1.6:1 on white, so this is an
+   improvement rather than a regression. */
 @layer base {
   /* The focus ring's offset band - declared on the SAME selector Tailwind's base uses, which is the
      whole point. Tailwind sets this property on `*, ::before, ::after`, i.e. on every element, so a
@@ -35,19 +37,21 @@
   }
 
   :root {
-    /* emerald. 500/600 are the saturated accents, 700/800/900 the button fills (unchanged - white on
-       700 is 5.48:1). 50/100/200 are the SOFT fills: on a light ground a pale wash, here a deep tint,
-       which is the same role at the other end of the ladder. 300 is the emerald INK on dark. */
-    --brand-50: 2 44 34;
-    --brand-100: 3 60 47;
-    --brand-200: 6 78 59;
-    --brand-300: 110 231 183;
-    --brand-500: 16 185 129;
-    --brand-600: 5 150 105;
-    --brand-700: 4 120 87;
-    --brand-800: 6 95 70;
-    --brand-900: 6 78 59;
-    --brand-950: 2 44 34;
+    /* forest green. Same role map as the storefront's ladder, values inverted for this ground:
+       700 is the primary fill (white on it measures 7.9:1 - it was 5.48:1 when this was emerald,
+       so the note in Button.tsx about "the darker step" now has room to spare rather than none),
+       800 the hover below it, and 50/100/200 are the SOFT fills, deep tints here. 300 is the INK
+       read on the dark ground and is the app's most-used brand step. */
+    --brand-50: 12 42 32;
+    --brand-100: 17 56 43;
+    --brand-200: 23 74 57;
+    --brand-300: 135 191 160;
+    --brand-500: 62 143 108;
+    --brand-600: 47 122 92;
+    --brand-700: 36 91 69;
+    --brand-800: 27 70 52;
+    --brand-900: 18 51 37;
+    --brand-950: 9 27 20;
 
     /* amber, the same shape: the 50/100 soft fills become deep, and 700 is ONLY ever an ink in this
        app (no bg-accent-700 exists), so it moves to a light amber rather than being split. */
@@ -108,10 +112,11 @@
     --danger-200: 153 27 27;
     --danger-600: 248 113 113;
 
-    /* the A-D scale: the soft fill deepens, the ink lightens, the solid stays the saturated dot. */
-    --grade-a-solid: 16 185 129;
-    --grade-a-soft: 2 44 34;
-    --grade-a-ink: 110 231 183;
+    /* the A-D scale: the soft fill deepens, the ink lightens, the solid stays the saturated dot.
+       Grade A is the brand hue by design (see tailwind.config.ts), so it follows the forest ladder. */
+    --grade-a-solid: 62 143 108;
+    --grade-a-soft: 12 42 32;
+    --grade-a-ink: 135 191 160;
     --grade-b-solid: 56 189 248;
     --grade-b-soft: 12 74 110;
     --grade-b-ink: 125 211 252;
@@ -137,9 +142,9 @@
     --status-graded-solid: 167 139 250;
     --status-graded-soft: 76 29 149;
     --status-graded-ink: 196 181 253;
-    --status-listed-solid: 16 185 129;
-    --status-listed-soft: 6 78 59;
-    --status-listed-ink: 110 231 183;
+    --status-listed-solid: 62 143 108;
+    --status-listed-soft: 17 56 43;
+    --status-listed-ink: 135 191 160;
     --status-reserved-solid: 129 140 248;
     --status-reserved-soft: 49 46 129;
     --status-reserved-ink: 165 180 252;
@@ -155,5 +160,76 @@
     --status-scrapped-solid: 248 113 113;
     --status-scrapped-soft: 127 29 29;
     --status-scrapped-ink: 252 165 165;
+
+    /* Motion. The same two durations and the same curve the storefront uses, so both apps move to
+       one rhythm - see the note in tailwind.config.ts. The config's `duration-fast` used to be a
+       literal 150ms with no custom-property behind it; it now reads this one. */
+    --motion-fast: 150ms;
+    --motion-base: 200ms;
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Reduced motion: the durations collapse to zero, so every token-driven transition in the app
+     becomes an instant state change without any component having to opt out. */
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --motion-fast: 0ms;
+      --motion-base: 0ms;
+    }
+  }
+
+  /* The light documents. Two screens in this app are white paper rather than dark glass: the
+     packing slip / dispatch label, and the invoice. Every ink token above is a LIGHT value because
+     the app's ground is dark, so on white paper `text-ink-900` painted near-white on white - 1.05:1,
+     invisible, on the one screen whose entire job is to be read off a printed sheet. The packing
+     slip was unreadable on screen too, because its own section carries `bg-white`.
+
+     Rebinding the tokens inside a `.print-doc` scope is the fix rather than per-site literals: the
+     markup keeps writing `text-ink-900` / `border-ink-900` and simply resolves them against a light
+     ladder here. The values are the storefront's own light ladder, which is already contrast-audited,
+     so a document and a shop page read the same. It is scoped, not global, so the dark pages around
+     it are untouched.
+
+     Two scopes, because the two documents differ in one way that matters:
+       .print-doc        the paper is white ON SCREEN TOO (the packing slip draws `bg-white`), so the
+                         rebind must apply always - the on-screen view was the broken one.
+       .print-doc-paper  the screen view is a dark card and only the PAPER is white. Browsers drop
+                         background colours when printing, so the ink had to flip at print time or
+                         not at all; scoping it to @media print leaves every on-screen pixel as it
+                         was. That is the invoice. */
+  .print-doc {
+    --ink-300: 203 213 225;
+    --ink-400: 148 163 184;
+    --ink-500: 92 107 128;
+    --ink-600: 71 85 105;
+    --ink-700: 51 65 85;
+    --ink-900: 37 43 40;
+    --line: 226 232 240;
+    --line-strong: 203 213 225;
+    --surface: 255 255 255;
+    --surface-muted: 248 250 252;
+    --surface-sunken: 241 245 249;
+    /* The user agent's own palette follows the paper, not the app: an unset color-scheme would
+       paint this document's scrollbars and any form control inside it dark, on white. */
+    color-scheme: light;
+  }
+
+  @media print {
+    .print-doc-paper {
+      --ink-300: 203 213 225;
+      --ink-400: 148 163 184;
+      --ink-500: 92 107 128;
+      --ink-600: 71 85 105;
+      --ink-700: 51 65 85;
+      --ink-900: 37 43 40;
+      --line: 226 232 240;
+      --line-strong: 203 213 225;
+      --surface: 255 255 255;
+      --surface-muted: 248 250 252;
+      --surface-sunken: 241 245 249;
+      /* Inside the media query along with the rest of it - on screen this card is still a dark one,
+         and switching its color-scheme early would change its scrollbars before it is ever printed. */
+      color-scheme: light;
+    }
   }
 }

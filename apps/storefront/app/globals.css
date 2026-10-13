@@ -3,23 +3,34 @@
 @tailwind utilities;
 
 /* Design tokens. Channel triples (not hex) so Tailwind can apply opacity modifiers -
-   see the `token()` helper in tailwind.config.ts. Values are the palette this app
-   already used, named by role: brand = emerald, accent = amber, ink = slate text,
-   grade.* = the A-D scale. */
+   see the `token()` helper in tailwind.config.ts. Named by role: brand = a deep
+   forest green, accent = amber, ink = neutral text, grade.* = the A-D scale.
+
+   The brand ladder moved from emerald to forest green (#245B45 at brand-700). The
+   roles did not move with it - brand-700 is still the primary button fill and the
+   link ink, brand-50 the soft wash - so only the values below changed. The new
+   primary is DARKER than the emerald it replaces (white on it measures 7.9:1, up
+   from 5.5:1), which is why the "do not lighten it" note in Button.tsx still holds
+   and now has more headroom rather than less. */
 @layer base {
   :root {
-    --brand-50: 236 253 245;
-    --brand-100: 209 250 229;
-    --brand-200: 167 243 208;
-    --brand-300: 110 231 183;
-    --brand-500: 16 185 129;
-    --brand-600: 5 150 105;
-    --brand-700: 4 120 87;
-    --brand-800: 6 95 70;
-    --brand-900: 6 78 59;
-    --brand-950: 2 44 34;
+    /* forest green. 700 is the primary fill and the link ink (7.9:1 on both white and
+       the page ground), 800/900 the hover and pressed steps below it. 50/100 are the
+       soft washes - --brand-100 is the brief's "soft sage" - and 300 is the one step
+       light enough to be read ON a dark fill, which is what the footer and the cart
+       badge use it for (6.6:1 on --ink-900). */
+    --brand-50: 243 247 244;
+    --brand-100: 231 239 232;
+    --brand-200: 200 219 207;
+    --brand-300: 143 184 162;
+    --brand-500: 53 119 90;
+    --brand-600: 42 106 82;
+    --brand-700: 36 91 69;
+    --brand-800: 27 70 52;
+    --brand-900: 18 51 37;
+    --brand-950: 9 27 20;
 
-    /* Amber. Kept in the palette but no longer used in the UI: round 2 demoted emerald to the
+    /* Amber. Kept in the palette but no longer used in the UI: round 2 demoted the brand hue to the
        single accent, so the two sale chips that used to be amber are now neutral dark and the
        colour carries no meaning anywhere. Retained deliberately for a future semantic use. */
     --accent-50: 255 251 235;
@@ -31,10 +42,18 @@
 
     --ink-300: 203 213 225;
     --ink-400: 148 163 184;
-    --ink-500: 100 116 139;
+    /* ink-500 carries the meta and secondary copy, so it is the one mid step that has to
+       clear 4.5:1 against the page ground - and warming that ground to #F7F7F2 (from
+       stone-50) dropped the old slate-500 to 4.43:1, under the bar. This is two steps
+       darker and measures 5.05:1 on the page, 5.43:1 on a card.
+       ink-400 is deliberately NOT raised with it: the same token is read ON the charcoal
+       footer (5.6:1 there), and darkening it enough for the light ground would sink it to
+       ~2.9:1 on the dark one. One token, two grounds, and the dark ground wins - the
+       light-ground kicker stays dim. */
+    --ink-500: 92 107 128;
     --ink-600: 71 85 105;
     --ink-700: 51 65 85;
-    --ink-900: 15 23 42;
+    --ink-900: 37 43 40;
 
     --surface: 255 255 255;
     --surface-muted: 248 250 252;
@@ -44,12 +63,13 @@
        them would mean a later tweak to a hairline silently restyled every input press. */
     --surface-pressed: 226 232 240;
 
-    /* The ground. Round 2 makes the page a WARM neutral (stone) so white cards read as
-       cards, and keeps the interactive fills above cool slate - warm ground, cool hairlines.
-       `page` is the document background, `page-alt` a slightly deeper band for the quiet
-       bars (the header tagline strip). Emerald is no longer any page's background. */
-    --surface-page: 250 250 249;      /* stone-50 */
-    --surface-page-alt: 245 245 244;  /* stone-100 */
+    /* The ground. The page is a WARM neutral so white cards read as cards, and the
+       interactive fills above stay cool - warm ground, cool hairlines.
+       `page` is the document background (the brief's warm off-white), `page-alt` a
+       slightly deeper band for the quiet bars (the header tagline strip). Forest green
+       is no longer any page's background. */
+    --surface-page: 247 247 242;      /* warm off-white */
+    --surface-page-alt: 240 240 234;  /* the deeper band */
 
     /* The hairline boundaries below sit deliberately under the 3:1 non-text bar against white
        (1.23:1 and 1.48:1). A recorded exception, not an oversight: raising them would put mid-grey
@@ -57,13 +77,24 @@
     --line: 226 232 240;
     --line-strong: 203 213 225;
 
+    /* The error ink, used ONLY as text - the four inline error messages and the danger Button's
+       label - so it can be darkened without touching a fill anywhere. It was 220 38 38, which
+       measured 4.49:1 on the page ground (under AA for the 14px it is set in) and 3.34:1 on the
+       danger Button's own `active:` fill. This is 174 27 27: 6.6:1 on the page, 7.1:1 on a card,
+       and 4.9:1 on the danger-200 active fill. The backoffice's equivalent was closed when that
+       app went dark; the storefront's was left open. */
     --danger-50: 254 242 242;
     --danger-200: 254 202 202;
-    --danger-600: 220 38 38;
+    --danger-600: 174 27 27;
 
-    --grade-a-solid: 5 150 105;
-    --grade-a-soft: 236 253 245;
-    --grade-a-ink: 4 120 87;
+    /* Grade A is the brand hue by design (see the note in tailwind.config.ts), so it moved
+       with the brand ladder. Leaving it on emerald would put two different greens on one
+       product card - the muted forest of the CTA next to the old bright emerald chip - which
+       is the same "two greens at a glance" problem that pushed grade B to sky in the first
+       place. B/C/D are untouched. */
+    --grade-a-solid: 42 106 82;
+    --grade-a-soft: 231 239 232;
+    --grade-a-ink: 27 70 52;
     --grade-b-solid: 2 132 199;
     --grade-b-soft: 240 249 255;
     --grade-b-ink: 3 105 161;

@@ -84,7 +84,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               <div className="text-center">
                 <p className="text-4xl font-bold text-ink-400">{(p.brand || "?").slice(0, 2).toUpperCase()}</p>
                 <p className="text-xs mt-2">Product photo coming soon</p>
-                <p className="text-[10px] text-ink-400 mt-0.5">{p.brand} {p.model}</p>
+                <p className="text-xs text-ink-400 mt-0.5">{p.brand} {p.model}</p>
               </div>
             </div>} />
 

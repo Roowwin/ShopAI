@@ -14,7 +14,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // primary action + links - the de-facto emerald, now a token
+        // primary action + links - the forest green ladder, now a token
         brand: {
           50: token("--brand-50"),
           100: token("--brand-100"),
@@ -91,12 +91,19 @@ const config: Config = {
         // Space Grotesk: headings and the display step only, never body copy.
         display: ["var(--font-display, system-ui)", "sans-serif"],
       },
-      /* The type scale. Each heading step carries its own weight, leading and tracking, so a
-         page writes `text-h2` and never hand-rolls `text-lg font-semibold`. Display is the one
-         deliberately large step (hero, product price) and gets the tightest tracking of the set;
-         tracking loosens as the size drops, which is what keeps a big line from looking airy and
-         a small one from looking cramped. `lead` is the reading size for page intros, `body` the
-         size inside cards and long copy. The hero steps 32px -> 44px (display -> display-lg).
+      /* The type scale - the SAME steps, in the same order, as the backoffice's, so the two
+         apps set type from one vocabulary. Each heading step carries its own weight, leading
+         and tracking, so a page writes `text-h2` and never hand-rolls `text-lg font-semibold`.
+         Display is the one deliberately large step (hero, product price) and gets the tightest
+         tracking of the set; tracking loosens as the size drops, which is what keeps a big line
+         from looking airy and a small one from looking cramped. `lead` is the reading size for
+         page intros, `body` the size inside cards and long copy. The hero steps 32px -> 44px
+         (display -> display-lg).
+
+         The three heading steps sit at the top of their role's range: page titles 28px, section
+         headings 20px, card and product titles 16px. They were 24/18/14 - one step below each
+         range - and were raised with the forest-green palette pass so the scale matches the
+         brief that produced it.
 
          Colour rhythm, applied by the primitives: headings inherit (so an h2 sitting on a card
          is ink-900 from the body), body copy is ink-600, meta is ink-500, the eyebrow kicker is
@@ -105,9 +112,9 @@ const config: Config = {
         eyebrow: ["0.6875rem", { lineHeight: "1rem", letterSpacing: "0.1em" }],
         display: ["2rem", { lineHeight: "1.08", letterSpacing: "-0.02em", fontWeight: "600" }],
         "display-lg": ["2.75rem", { lineHeight: "1.05", letterSpacing: "-0.02em", fontWeight: "600" }],
-        h1: ["1.5rem", { lineHeight: "1.25", letterSpacing: "-0.02em", fontWeight: "600" }],
-        h2: ["1.125rem", { lineHeight: "1.35", letterSpacing: "-0.012em", fontWeight: "600" }],
-        h3: ["0.875rem", { lineHeight: "1.4", letterSpacing: "-0.006em", fontWeight: "600" }],
+        h1: ["1.75rem", { lineHeight: "1.2", letterSpacing: "-0.02em", fontWeight: "600" }],
+        h2: ["1.25rem", { lineHeight: "1.35", letterSpacing: "-0.012em", fontWeight: "600" }],
+        h3: ["1rem", { lineHeight: "1.4", letterSpacing: "-0.006em", fontWeight: "600" }],
         lead: ["1.0625rem", { lineHeight: "1.7" }],
         body: ["0.875rem", { lineHeight: "1.65" }],
       },

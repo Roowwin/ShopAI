@@ -65,7 +65,7 @@ export default function AssistantPage() {
         ))}
       </Card>
       <div className="flex gap-2 mt-4">
-        <Input className="flex-1" placeholder="what are you looking for?" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); send(); } }} value={input} onChange={(e) => setInput(e.target.value)} />
+        <Input className="flex-1" aria-label="Ask the assistant a question" placeholder="what are you looking for?" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); send(); } }} value={input} onChange={(e) => setInput(e.target.value)} />
         <Button onClick={send} disabled={busy}>Send</Button>
       </div>
     </main>

@@ -103,7 +103,7 @@ export default function SignInPage() {
               <p className="text-xs text-ink-400 mt-1">At least 10 characters, including a number.</p>
             )}
           </div>
-          <Button variant="primary" type="submit" className="w-full" disabled={busy} pressed={busy}>
+          <Button variant="primary" type="submit" className="w-full" disabled={busy} busy={busy}>
             {busy ? "One moment..." : mode === "signin" ? "Sign in" : "Create account"}
           </Button>
         </form>

@@ -168,6 +168,12 @@ export default function UnitPicker({ units, title }: { units: Unit[]; title: str
                 "w-full min-h-[44px] px-3 py-2.5 flex items-center gap-3 text-left",
                 "border-b border-line last:border-0",
                 "transition-colors duration-fast ease-out motion-reduce:transition-none",
+                /* The keyboard focus ring, which these rows did not have at all: they carry
+                   role="radio" and a roving tabIndex, so they are reachable from the keyboard, and
+                   a user who tabbed here saw nothing move. The ring is INSET because the rows sit
+                   inside the `overflow-y-auto` group above - an ancestor that scrolls clips a
+                   descendant's outward ring, and an outset one would simply never be painted. */
+                "focus-visible:outline-none focus-visible:bg-surface-sunken focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-700",
                 isSel ? "bg-brand-50" : "bg-surface hover:bg-surface-sunken active:bg-surface-pressed",
               )}>
               <Badge colorClass={g?.pill ?? "bg-surface-sunken text-ink-500"}>Grade {u.grade}</Badge>

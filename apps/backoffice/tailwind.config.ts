@@ -16,7 +16,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // primary action + links - the de-facto emerald, now a token
+        // primary action + links - the forest green ladder, now a token
         brand: {
           50: token("--brand-50"),
           100: token("--brand-100"),
@@ -105,19 +105,22 @@ const config: Config = {
         card: "1rem", // content panels
         control: "0.75rem", // tiles, buttons, inputs
       },
-      /* Motion. The storefront maps two durations and its own easing curve to CSS custom properties
-         in globals.css; this app has neither those properties nor the keys that would read them -
-         and yet its own chrome already writes `duration-fast ease-out` in four places. An undefined
-         class is not an error in Tailwind, it simply emits nothing, so those sites have been
-         animating on the duration the transition utilities set for themselves while the source
-         named a token that did not exist.
+      /* Motion. The two durations and the easing curve are the storefront's own tokens, mapped to
+         the same CSS custom properties in globals.css, so both apps move to one rhythm.
 
-         `fast` is therefore defined at that same figure: the class becomes real, and every site
-         that already wrote it behaves exactly as it did. The easing key is deliberately NOT added -
-         Tailwind's own `ease-out` already emits, and re-pointing it at the storefront's curve would
-         change the motion of four existing surfaces under cover of a new page. */
+         This app used to define `fast` alone, at a literal 150ms, because its chrome already wrote
+         `duration-fast ease-out` in four places and `fast` was otherwise undefined - an undefined
+         class is not an error in Tailwind, it simply emits nothing. `base` is new and had no
+         existing users. The easing key is now added and `ease-out` re-pointed at the design
+         system's curve: the sites that wrote it were silently animating on Tailwind's stock
+         ease-out, and the whole point of naming a token is that the system owns the curve. Those
+         sites are confined to the chrome (SidebarNav, Switch, ActionTiles). */
       transitionDuration: {
-        fast: "150ms",
+        fast: "var(--motion-fast)",
+        base: "var(--motion-base)",
+      },
+      transitionTimingFunction: {
+        out: "var(--ease-out)",
       },
       /* The glow: an emerald hairline with a soft bloom behind it, which is what replaces the
          light-mode `shadow-sm` on a dark ground - a grey shadow is invisible against slate, so the
@@ -125,10 +128,10 @@ const config: Config = {
          1px ring is the border the brief asks for, the blur is the "glowing" part.
 
          `glow-danger` / `glow-warning` are the same two layers in the attention feed's own
-         colours. They are a separate pair rather than a parameter because the two glows above are
-         emerald by value: the feed's critical node wearing `shadow-glow-sm` would draw an emerald
-         halo around a red dot, and a hue that contradicts its own state is worse than no halo.
-         Neither is offset - they are a tight bloom on a 10px timeline node, restrained on
+         colours. They are a separate pair rather than a parameter because the two glows above draw
+         their colour from brand by VALUE: the feed's critical node wearing `shadow-glow-sm` would
+         draw a green halo around a red dot, and a hue that contradicts its own state is worse than
+         no halo. Neither is offset - they are a tight bloom on a 10px timeline node, restrained on
          purpose. */
       boxShadow: {
         glow: "0 0 0 1px rgb(var(--brand-700) / 0.45), 0 8px 32px -12px rgb(var(--brand-500) / 0.35)",
@@ -137,15 +140,36 @@ const config: Config = {
         "glow-warning": "0 0 0 1px rgb(var(--accent-400) / 0.40), 0 0 12px -2px rgb(var(--accent-400) / 0.55)",
       },
       fontFamily: {
-        // Shape-identical to the storefront's stack. The backoffice loads no webfont, so
-        // --font-sans is simply absent and the inner fallback wins; a future font load then
-        // needs no config change. The inner fallback keeps the declaration valid either way.
+        // Shape-identical to the storefront's stack, and now fed by the same two faces: the root
+        // layout loads Inter and Space Grotesk through next/font/google and sets --font-sans /
+        // --font-display on <html>. Previously this app loaded no webfont at all, so --font-sans
+        // was simply absent and every screen fell back to the OS UI font - the largest single
+        // typographic difference between the two apps. The inner fallbacks keep both declarations
+        // valid if a variable is ever absent.
         sans: ["var(--font-sans, system-ui)", "sans-serif"],
+        // Space Grotesk: headings and the display step only, never body copy or table data.
+        display: ["var(--font-display, system-ui)", "sans-serif"],
       },
+      /* The type scale - the SAME steps, in the same order, as the storefront's. This app used to
+         carry only `eyebrow`, which is why its pages hand-rolled text-2xl / text-lg / text-sm for
+         headings and every page header drifted a little. Each heading step now carries its own
+         weight, leading and tracking, so a page writes `text-h2` and no page picks a size itself.
+         The three heading steps sit at the top of their role's range: page titles 28px, section
+         headings 20px, card titles 16px.
+
+         `display` and `display-lg` are the storefront's hero steps, kept here so the two scales
+         stay key-identical; nothing in this app should use them - an admin page has no hero. */
       fontSize: {
         // the uppercase kicker: table headers, stat labels. Replaces the text-[10px]/text-[11px]
         // + four different tracking-* values that had drifted across the pages.
         eyebrow: ["0.6875rem", { lineHeight: "1rem", letterSpacing: "0.1em" }],
+        display: ["2rem", { lineHeight: "1.08", letterSpacing: "-0.02em", fontWeight: "600" }],
+        "display-lg": ["2.75rem", { lineHeight: "1.05", letterSpacing: "-0.02em", fontWeight: "600" }],
+        h1: ["1.75rem", { lineHeight: "1.2", letterSpacing: "-0.02em", fontWeight: "600" }],
+        h2: ["1.25rem", { lineHeight: "1.35", letterSpacing: "-0.012em", fontWeight: "600" }],
+        h3: ["1rem", { lineHeight: "1.4", letterSpacing: "-0.006em", fontWeight: "600" }],
+        lead: ["1.0625rem", { lineHeight: "1.7" }],
+        body: ["0.875rem", { lineHeight: "1.65" }],
       },
     },
   },

@@ -164,7 +164,7 @@ export default function OrderPage() {
         {STEPS.map((s, i) => (
           <li key={s.key} className="flex-1">
             <div className={"h-1.5 rounded-full " + (i <= at ? "bg-brand-700" : "bg-surface-sunken")} />
-            <p className={"mt-1.5 text-[11px] " + (i === at ? "font-semibold text-ink-900" : "text-ink-500")}>
+            <p className={"mt-1.5 text-eyebrow " + (i === at ? "font-semibold text-ink-900" : "text-ink-500")}>
               {s.label}
             </p>
           </li>
@@ -249,7 +249,7 @@ export default function OrderPage() {
         )}
 
         {!order.paid && order.status === "pending" && (
-          <Button variant="primary" className="w-full mt-5" onClick={finishPayment} disabled={busy} pressed={busy}>
+          <Button variant="primary" className="w-full mt-5" onClick={finishPayment} disabled={busy} busy={busy}>
             {busy ? "Taking payment..." : "Finish payment - " + aud(order.total_cents)}
           </Button>
         )}

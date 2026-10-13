@@ -21,7 +21,15 @@ import Photo from "./Photo";
    THE TEXT IS NORMALISED BEFORE IT IS DRAWN. The server replaces a blank field with the shipped
    default and truncates to its own limits, so those are what the shop would actually show; drawing
    the raw field instead would let an operator believe they had cleared the headline when the
-   default is what went live. */
+   default is what went live.
+
+   THE BRAND IS A HEX, AND IT HAS TO BE KEPT IN STEP BY HAND. The shop's primary is the storefront's
+   --brand-700. The admin's own --brand-700 carries the same value today, which makes `bg-brand-700`
+   tempting here - but the two ladders are separate files that have been re-inverted independently
+   before, and a preview whose job is to show the SHOP must draw the shop's colour even on the day
+   the admin's differs. So it is written as the literal the storefront's own opengraph-image uses,
+   and a palette change to the storefront means changing these three sites too. (They were emerald
+   until the forest-green pass; the panel was left showing the old brand.) */
 export type Deal = { title: string; product_slug: string; badge: string };
 export type Hero = { hero_title: string; hero_sub: string; cta_label: string; deal_of_month?: Deal | null };
 
@@ -79,10 +87,10 @@ export default function HeroPreview({ hero, deal, promoActive }: Props) {
       </div>
 
       <div className="px-5 py-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-emerald-700">RFO Store</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#245B45]">RFO Store</p>
         <p className="mt-2 text-xl font-semibold tracking-tight text-slate-900">{h.hero_title}</p>
         <p className="mt-2 text-xs leading-relaxed text-slate-600">{h.hero_sub}</p>
-        <span className="mt-4 inline-flex min-h-[32px] items-center rounded-full bg-emerald-700 px-4 text-xs font-semibold text-white">
+        <span className="mt-4 inline-flex min-h-[32px] items-center rounded-full bg-[#245B45] px-4 text-xs font-semibold text-white">
           {h.cta_label}
         </span>
       </div>
@@ -123,7 +131,7 @@ export default function HeroPreview({ hero, deal, promoActive }: Props) {
                 <p className="mt-1 text-sm font-semibold text-slate-900">
                   {deal?.price !== null && deal?.price !== undefined ? aud(deal.price) : "-"}
                 </p>
-                <span className="mt-3 inline-flex self-start rounded-full bg-emerald-700 px-3 py-1 text-[11px] font-semibold text-white">
+                <span className="mt-3 inline-flex self-start rounded-full bg-[#245B45] px-3 py-1 text-[11px] font-semibold text-white">
                   View deal
                 </span>
               </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Button, Card, Heading, Stat, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
+import { Badge, Button, Card, Heading, PageHeader, Stat, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
 import { aud } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
@@ -110,11 +110,15 @@ export default function LogisticsPage() {
 
   return (
     <main className="max-w-6xl mx-auto p-4 space-y-4 min-h-screen">
-      <Heading level="h1">Logistics</Heading>
-      <p className="text-sm text-ink-500">
-        What needs a human today, and what each carrier actually costs and takes. Alerts are worked
-        out fresh on every read - fix the order and the alert goes; there is nothing to dismiss.
-      </p>
+      <PageHeader
+        title={<>Logistics</>}
+        description={
+          <>
+            What needs a human today, and what each carrier actually costs and takes. Alerts are worked
+            out fresh on every read - fix the order and the alert goes; there is nothing to dismiss.
+          </>
+        }
+      />
 
       {msg && <Card className="p-4"><p className="text-sm text-ink-600">{msg}</p></Card>}
 

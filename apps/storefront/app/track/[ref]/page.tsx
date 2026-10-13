@@ -84,7 +84,7 @@ export default async function TrackResultPage({ params }: { params: Promise<{ re
         {steps.map((s) => (
           <li key={s.label} className="flex-1">
             <div className={"h-1.5 rounded-full " + (s.done ? "bg-brand-700" : "bg-surface-sunken")} />
-            <p className={"mt-1.5 text-[11px] " + (s.done ? "font-semibold text-ink-900" : "text-ink-500")}>
+            <p className={"mt-1.5 text-eyebrow " + (s.done ? "font-semibold text-ink-900" : "text-ink-500")}>
               {s.label}
             </p>
           </li>

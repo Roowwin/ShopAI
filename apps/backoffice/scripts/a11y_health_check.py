@@ -33,10 +33,18 @@ HONEST LIMITS
     translucency makes the result backdrop-dependent as a WARN with both readings shown. Treat a
     FAIL as a real defect and a WARN as something to look at.
 
-    Two deliberate exceptions recorded in `app/globals.css` are honoured rather than re-litigated:
-    `--line` / `--line-strong` sit below the 3:1 non-text bar on purpose (they are hairlines, and
-    the comment there says not to "fix" them). They are never text, so they do not enter the
-    fill+ink sweep; their use is counted and reported as an accepted exception.
+    Three deliberate exceptions recorded in `app/globals.css` are honoured rather than
+    re-litigated:
+      - `--line` / `--line-strong` sit below the 3:1 non-text bar on purpose (they are hairlines,
+        and the comment there says not to "fix" them). They are never text, so they do not enter
+        the fill+ink sweep; their use is counted and reported as an accepted exception.
+      - the LIGHT DOCUMENTS. The packing slip, the dispatch label and the invoice are white paper
+        inside this dark app, and they rebind the ink tokens to a light ladder through the scoped
+        `.print-doc` class. Such a scope is not the app's palette, so `load_palette` reads only
+        `:root`; and a source file that names the scope resolves against the paper ladder, because
+        `bg-white + text-ink-900` is 1.05:1 on the app's ground and 14.4:1 inside the scope. Before
+        this, that block silently REPLACED the app's own values and every
+        `bg-surface + text-brand-300` was reported as 2.1:1.
 
 USAGE
     python apps/backoffice/scripts/a11y_health_check.py            # human report
@@ -122,12 +130,59 @@ def strip_comments(text: str) -> str:
     return LINE_COMMENT_RE.sub(blank, COMMENT_RE.sub(blank, text))
 
 
+def block_bodies(text: str, opener: str) -> str:
+    """The concatenated bodies of every `<opener> { ... }` block, brace-matched.
+
+    `opener` is a literal selector prefix: `:root` for the palette, `.print-doc` for the light
+    document scope below.
+    """
+    out = []
+    for m in re.finditer(re.escape(opener) + r"[^{}]*\{", text):
+        depth, i = 1, m.end()
+        while i < len(text) and depth:
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+            i += 1
+        out.append(text[m.end():i - 1])
+    return "\n".join(out)
+
+
+def root_blocks(text: str) -> str:
+    """The concatenated bodies of every `:root { ... }` block.
+
+    The palette is what `:root` declares. A SCOPED rebind is by definition not the app's palette:
+    the print documents carry `.print-doc { --ink-900: ...; --surface: ...; }` so that white paper
+    inside this dark app resolves the ink tokens against a light ladder. Reading the whole file
+    last-wins let that block REPLACE the app's own values, and the sweep then reported a page of
+    phantom failures - every `bg-surface + text-brand-300` as 2.1:1, because `surface` had become
+    white. Only `:root` is the palette; a class-scoped block is a local override.
+    """
+    return block_bodies(text, ":root")
+
+
 def load_palette(globals_css: Path) -> dict[str, tuple[int, int, int]]:
-    """Every `--token: R G B;` triple in the stylesheet, keyed by the utility suffix."""
+    """Every `--token: R G B;` triple `:root` declares, keyed by the utility suffix."""
     palette = {}
-    for name, r, g, b in VAR_RE.findall(globals_css.read_text(encoding="utf-8")):
+    for name, r, g, b in VAR_RE.findall(root_blocks(globals_css.read_text(encoding="utf-8"))):
         palette[name] = (int(r), int(g), int(b))
     return palette
+
+
+def load_document_palette(globals_css: Path) -> dict[str, tuple[int, int, int]]:
+    """The `.print-doc` / `.print-doc-paper` ladder - the light paper the two printable screens are.
+
+    Those screens are white documents inside a dark app, and they rebind the ink tokens to a light
+    ladder so a printed packing slip is not near-white on white. The sweep reads classes per line
+    and cannot see which element it is inside, so without this a fixed document would keep failing
+    the check it was fixed for: `bg-white + text-ink-900` reads 1.05:1 against the app palette and
+    14.4:1 inside the scope. Resolving a file that names the scope class against this ladder is the
+    same recorded-exception move as the hairlines below - the failure is real on one ground and not
+    on the other, and only the element says which.
+    """
+    body = block_bodies(globals_css.read_text(encoding="utf-8"), ".print-doc")
+    return {name: (int(r), int(g), int(b)) for name, r, g, b in VAR_RE.findall(body)}
 
 
 def resolve(token: str, palette: dict[str, tuple[int, int, int]]):
@@ -208,7 +263,8 @@ def required_ratio(line: str) -> tuple[float, str]:
     return 4.5, f"body text ({px}px{', bold' if bold else ''})"
 
 
-def audit_contrast(files: list[Path], palette: dict[str, tuple[int, int, int]]):
+def audit_contrast(files: list[Path], palette: dict[str, tuple[int, int, int]],
+                   doc_palette: dict[str, tuple[int, int, int]] | None = None):
     """Walk every source line, compute its fill+ink pairs, and sort the results."""
     failures, warnings, unresolved = [], [], {}
     ground = palette.get("surface-sunken", (2, 6, 23))
@@ -217,11 +273,17 @@ def audit_contrast(files: list[Path], palette: dict[str, tuple[int, int, int]]):
 
     for path in files:
         text = strip_comments(path.read_text(encoding="utf-8"))
+        # A file that draws one of the printable documents resolves its inks against the paper
+        # ladder instead of the app's - see load_document_palette. Per file, not global: the scope
+        # class is only on those screens.
+        active = {**palette, **doc_palette} if (doc_palette and "print-doc" in text) else palette
+        file_ground = active.get("surface-sunken", ground)
+        file_panel = active.get("surface", panel)
         for number, line in enumerate(text.splitlines(), 1):
             if "bg-" not in line and "from-" not in line and "to-" not in line:
                 continue
             for variant, fill_token, alpha, ink_token in pairs_in_line(line):
-                fill, ink = resolve(fill_token, palette), resolve(ink_token, palette)
+                fill, ink = resolve(fill_token, active), resolve(ink_token, active)
                 if fill is NON_COLOUR_UTIL or ink is NON_COLOUR_UTIL:
                     continue  # `text-xs`, `bg-transparent`: not a colour at all
                 if fill is None or ink is None:
@@ -244,8 +306,8 @@ def audit_contrast(files: list[Path], palette: dict[str, tuple[int, int, int]]):
                 else:
                     # Translucent fill: the result depends on what is behind it, so read it
                     # against both candidate grounds and only call it a failure if neither works.
-                    on_panel = contrast(over(fill, alpha, panel), ink)
-                    on_ground = contrast(over(fill, alpha, ground), ink)
+                    on_panel = contrast(over(fill, alpha, file_panel), ink)
+                    on_ground = contrast(over(fill, alpha, file_ground), ink)
                     best = max(on_panel, on_ground)
                     entry = {"where": where, "pair": f"{filled}/{alpha} + {inked}",
                              "need": need, "line": line.strip()[:200]}
@@ -338,8 +400,9 @@ def main() -> int:
         return 2
 
     palette = load_palette(globals_css)
+    doc_palette = load_document_palette(globals_css)
     files = source_files(app / "app")
-    checked, failures, warnings, unresolved = audit_contrast(files, palette)
+    checked, failures, warnings, unresolved = audit_contrast(files, palette, doc_palette)
     a11y_failures, a11y_warnings = audit_a11y(files)
     failures += a11y_failures
     warnings += a11y_warnings
@@ -353,7 +416,11 @@ def main() -> int:
         "failures": failures,
         "warnings": warnings,
         "unresolved_tokens": unresolved,
-        "accepted_exceptions": {"hairlines": sorted(ACCEPTED_EXCEPTIONS), "uses": line_uses},
+        "accepted_exceptions": {
+            "hairlines": sorted(ACCEPTED_EXCEPTIONS), "uses": line_uses,
+            "light_documents": sorted(doc_palette), "files": sum(
+                1 for p in files if "print-doc" in p.read_text(encoding="utf-8")),
+        },
     }
 
     if args.json:
@@ -382,6 +449,9 @@ def main() -> int:
                 print(f"  {token}  x{count}")
         print(f"\nAccepted exceptions: hairlines {', '.join(sorted(ACCEPTED_EXCEPTIONS))} "
               f"used {line_uses}x (recorded in globals.css; below the 3:1 non-text bar on purpose)")
+        print(f"                      the light documents (packing slip / dispatch label / invoice) "
+              f"resolve against the .print-doc ladder in {report['accepted_exceptions']['files']} file(s), "
+              f"not the app palette")
         verdict = "FAIL" if failures or (args.strict and warnings) else "PASS"
         print(f"\n{verdict}: {len(failures)} failure(s), {len(warnings)} warning(s)"
               + ("" if not unresolved else f", {len(unresolved)} unresolved token(s)"))

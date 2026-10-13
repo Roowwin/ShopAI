@@ -24,7 +24,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Badge, Button, Card, Heading, Input, Select, Stat, cn } from "@/app/components/ui";
+import { Badge, Button, Card, Heading, Input, PageHeader, Select, Stat, cn } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
 import { aud } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
@@ -132,42 +132,44 @@ export default function ProfitAndLossPage() {
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 pt-8 pb-16">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <Heading level="h1">Profit &amp; loss</Heading>
-          <p className="mt-1 text-sm text-ink-500">
+      <PageHeader
+        title={<>Profit &amp; loss</>}
+        description={
+          <>
             {pnl ? `${pnl.from} to ${pnl.to}` : `${from} to ${to}`} - a statement of what the
             business earned and spent. GST collected is shown beside revenue, never inside it.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <div>
-            <label htmlFor="period" className={cn(kickerClass, "block pb-1")}>Period</label>
-            <Select id="period" value={period} onChange={(e) => setPeriod(e.target.value as Period)}>
-              <option value="this_month">This month</option>
-              <option value="last_month">Last month</option>
-              <option value="this_quarter">This quarter</option>
-              <option value="last_quarter">Last quarter</option>
-              <option value="custom">Custom range</option>
-            </Select>
-          </div>
-          {period === "custom" && (
-            <>
-              <div>
-                <label htmlFor="from" className={cn(kickerClass, "block pb-1")}>From</label>
-                <Input id="from" type="date" value={custom.from}
-                       onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} />
-              </div>
-              <div>
-                <label htmlFor="to" className={cn(kickerClass, "block pb-1")}>To</label>
-                <Input id="to" type="date" value={custom.to}
-                       onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} />
-              </div>
-            </>
-          )}
-          <Button variant="secondary" onClick={() => { void load(); }}>Refresh</Button>
-        </div>
-      </div>
+          </>
+        }
+        actions={
+          <>
+            <div>
+              <label htmlFor="period" className={cn(kickerClass, "block pb-1")}>Period</label>
+              <Select id="period" value={period} onChange={(e) => setPeriod(e.target.value as Period)}>
+                <option value="this_month">This month</option>
+                <option value="last_month">Last month</option>
+                <option value="this_quarter">This quarter</option>
+                <option value="last_quarter">Last quarter</option>
+                <option value="custom">Custom range</option>
+              </Select>
+            </div>
+            {period === "custom" && (
+              <>
+                <div>
+                  <label htmlFor="from" className={cn(kickerClass, "block pb-1")}>From</label>
+                  <Input id="from" type="date" value={custom.from}
+                         onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} />
+                </div>
+                <div>
+                  <label htmlFor="to" className={cn(kickerClass, "block pb-1")}>To</label>
+                  <Input id="to" type="date" value={custom.to}
+                         onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} />
+                </div>
+              </>
+            )}
+            <Button variant="secondary" onClick={() => { void load(); }}>Refresh</Button>
+          </>
+        }
+      />
 
       {err && <p className="text-sm text-danger-600">{err}</p>}
 

@@ -115,7 +115,7 @@ export default function InvoiceDocumentPage() {
         </div>
       </div>
 
-      <Card className="p-8 print:ring-0">
+      <Card className="print-doc-paper p-8 print:ring-0">
         <header className="flex flex-wrap items-start justify-between gap-4 border-b border-ink-900 pb-4">
           <div>
             {/* THE SELLER BLOCK, in the order a tax invoice needs it: legal name, ABN, registered

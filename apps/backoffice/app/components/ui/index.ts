@@ -1,7 +1,7 @@
 /* UI primitives. `className` is for layout only - see cn.ts.
 
-   HAND-MIRRORED from the storefront's apps/storefront/app/components/ui (branch
-   `storefront-design-system`). There is no shared package, so the two copies must be kept in
+   HAND-MIRRORED from the storefront's apps/storefront/app/components/ui. There is no shared
+   package - the two apps are separate Docker build contexts - so the two copies must be kept in
    sync by hand: any change here needs the same change there, and vice versa. The backoffice
    additions are deliberate and documented at their definitions: Button carries two extra
    variants (`onDark`, `muted`) and one extra size (`inline`), and Input's padding is `py-2`
@@ -9,7 +9,9 @@
    Everything else is API-identical to the storefront.
 
    Table, Stat, Select and Switch are admin-only primitives the storefront has no call for. (Switch
-   is a form control the storefront's own pages never needed - see its own note.)
+   is a form control the storefront's own pages never needed - see its own note.) PageHeader is
+   admin-only too, but for the opposite reason: the storefront's pages are content, and each one
+   lays its own hero out; this app's pages are screens, and they should all open the same way.
 
    NOT copied from the storefront: Eyebrow, EmptyState, ProductCard. The backoffice needs the
    kicker as a CLASS rather than a component - a Table header row is a `<tr>` and cannot contain
@@ -20,6 +22,7 @@ export { default as Button } from "./Button";
 export { default as Card } from "./Card";
 export { default as Badge } from "./Badge";
 export { default as Heading } from "./Heading";
+export { default as PageHeader } from "./PageHeader";
 export { default as Input } from "./Input";
 export { default as Select } from "./Select";
 export { default as Table, THead, TBody, TR, TH, TD } from "./Table";

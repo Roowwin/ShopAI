@@ -35,7 +35,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  Badge, Button, Card, Heading, Select, Stat, Table, TBody, TD, TH, THead, TR, cn,
+  Badge, Button, Card, Heading, PageHeader, Select, Stat, Table, TBody, TD, TH, THead, TR, cn,
 } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
 import { when } from "@/lib/format";
@@ -188,13 +188,15 @@ export default function TeamPage() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-4 pt-8 pb-16">
-      <div>
-        <Heading level="h1">Team</Heading>
-        <p className="mt-1 text-sm text-ink-500">
-          Everyone who can sign in to this backoffice, what each of them may reach, and the two ways
-          to take that away. A role change takes effect on the member's next request.
-        </p>
-      </div>
+      <PageHeader
+        title={<>Team</>}
+        description={
+          <>
+            Everyone who can sign in to this backoffice, what each of them may reach, and the two ways
+            to take that away. A role change takes effect on the member's next request.
+          </>
+        }
+      />
 
       {handover && (
         <div role="status" className="rounded-card bg-accent-100 p-4 ring-1 ring-accent-400">

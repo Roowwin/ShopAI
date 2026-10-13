@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Badge, Button, Card, Heading, Input, Stat, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
+import { Badge, Button, Card, Heading, Input, PageHeader, Stat, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
 import { aud } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
@@ -185,13 +185,15 @@ export default function ExpensesPage() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-4 pt-8 pb-16">
-      <div>
-        <Heading level="h1">Expenses</Heading>
-        <p className="mt-1 text-sm text-ink-500">
-          What the business spent, by when it was incurred. These are the operating expenses the
-          profit and loss statement nets against gross profit.
-        </p>
-      </div>
+      <PageHeader
+        title={<>Expenses</>}
+        description={
+          <>
+            What the business spent, by when it was incurred. These are the operating expenses the
+            profit and loss statement nets against gross profit.
+          </>
+        }
+      />
 
       <section className="grid gap-4 sm:grid-cols-3">
         <Stat label="Expenses matching" value={total} sub="the current filters" />

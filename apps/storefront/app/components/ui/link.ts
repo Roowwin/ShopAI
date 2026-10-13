@@ -23,3 +23,19 @@ export const navLinkClass =
   "transition-colors duration-fast ease-out hover:text-brand-700 " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2 " +
   "motion-reduce:transition-none";
+
+/* The dark footer menu, which sits on ink-900.
+
+   The accent and the focus ring are both brand-300 here rather than brand-700: on the charcoal
+   footer brand-700 measures 2.3:1, so it is neither readable as an ink nor visible as a ring,
+   while brand-300 is the one brand step light enough for both (6.6:1). That is the same reason
+   the storefront's dark surfaces already hover to brand-300.
+
+   The seven footer links had no focus treatment at all before this - they carried
+   `transition-colors` and nothing else, so a keyboard user crossing the footer saw no indicator
+   at all. The ring's offset band is the footer's own ground, so the ring reads as a gap around
+   the word rather than a white box on a dark page. */
+export const footerLinkClass =
+  "transition-colors duration-fast ease-out hover:text-brand-300 " +
+  "rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 " +
+  "focus-visible:ring-offset-2 focus-visible:ring-offset-ink-900 motion-reduce:transition-none";

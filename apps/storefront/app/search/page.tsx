@@ -13,7 +13,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     <main className="max-w-6xl mx-auto px-4 pt-8 pb-10">
       <Heading level="h1">Search</Heading>
       <form className="mt-4" action="/search" method="get">
-        <Input name="q" defaultValue={q ?? ""} className="md:w-96" placeholder="e.g. galaxy s21" />
+        <Input name="q" defaultValue={q ?? ""} aria-label="Search the catalogue" className="md:w-96" placeholder="e.g. galaxy s21" />
         <Button type="submit" className="ml-2">Search</Button>
       </form>
       {q && <p className="text-xs text-ink-400 mt-3">Results for "{q}" - {items.length} found (source: live catalog, today)</p>}

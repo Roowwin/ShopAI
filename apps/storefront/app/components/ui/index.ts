@@ -11,4 +11,4 @@ export { cn } from "./cn";
 /* Shared class constants: the control shell (for a bare <select> that cannot be an <Input>) and
    the inline text link. */
 export { fieldClass } from "./Input";
-export { linkClass, navLinkClass } from "./link";
+export { linkClass, navLinkClass, footerLinkClass } from "./link";

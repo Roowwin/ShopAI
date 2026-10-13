@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Badge, Card, Heading, Input, Select, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
+import { Badge, Card, Input, PageHeader, Select, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
 import { gradeTone, statusTone } from "@/lib/ui";
 import AssetPanel from "./AssetPanel";
 import BulkBar from "./BulkBar";
@@ -83,10 +83,14 @@ export default function AssetsPage() {
 
   return (
     <main className="max-w-4xl mx-auto pt-8 px-4 space-y-6 pb-32">
-      <Heading level="h1">Assets workbench</Heading>
-      <p className="text-sm text-ink-500">
-        Open a unit to read its record and write to it, or tick several and act on them together.
-      </p>
+      <PageHeader
+        title={<>Assets workbench</>}
+        description={
+          <>
+            Open a unit to read its record and write to it, or tick several and act on them together.
+          </>
+        }
+      />
 
       <div className="flex gap-3">
         <Select

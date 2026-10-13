@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Badge, Button, Card, Heading, Select, Stat, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
+import { Badge, Button, Card, Heading, PageHeader, Select, Stat, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
 import { when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
 import { MUTED_TONE } from "@/app/components/dashboard/tokens";
@@ -93,10 +93,10 @@ export default function AuditPage() {
 
   return (
     <main className="max-w-6xl mx-auto p-4 space-y-4 min-h-screen">
-      <Heading level="h1">Audit</Heading>
-      <p className="text-sm text-ink-500">
-        Append-only history. Read-only here - nothing on this page writes.
-      </p>
+      <PageHeader
+        title={<>Audit</>}
+        description={<>Append-only history. Read-only here - nothing on this page writes.</>}
+      />
 
       {msg && <Card className="p-4"><p className="text-sm text-ink-600">{msg}</p></Card>}
 
