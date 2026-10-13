@@ -46,9 +46,12 @@ router = APIRouter(prefix="/store", tags=["store-catalog"])
 # Written once and spliced into each statement at import time rather than duplicated per query: the
 # six statements below have to agree on this rule, and a second copy of it is a second thing to keep
 # true. It is spliced into the CONSTANT (not a new placeholder) so the unfiltered statement remains
-# byte-for-byte what it always was, which is what the catalog query's own test asserts.
+# byte-for-byte what it always was, which is what the catalog query's own test asserts. The leading
+# and trailing spaces are part of the literal, not sloppiness: it lands mid-statement in half the
+# call sites and after a newline in the others, and one of the two separators is always the right
+# one - without them a splice produces `'active')AND (`, which parses but reads as a defect.
 # ---------------------------------------------------------------------------
-ON_SALE = ("AND (COALESCE(a.cost_cents, a.settlement_cents) IS NULL"
+ON_SALE = (" AND (COALESCE(a.cost_cents, a.settlement_cents) IS NULL"
            " OR a.sale_price_cents >= COALESCE(a.cost_cents, a.settlement_cents)) ")
 
 CATALOG_SELECT = """SELECT p.id, p.public_id::text AS public_id, p.slug, p.title, p.model,
