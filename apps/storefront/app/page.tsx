@@ -10,11 +10,12 @@ export const revalidate = 30;
 
 /* Where the hero's three cards sit: a fanned cluster, each with its own tilt and its own drift
    delay. Written as whole class strings rather than composed from fragments, because Tailwind
-   scans source TEXT - a class assembled at runtime would never be emitted into the stylesheet. */
+   scans source TEXT - a class assembled at runtime would never be emitted into the stylesheet.
+   The offsets are sized to the fan box (h-52 with w-32/w-36 cards), not to the old 320px one. */
 const HERO_SLOTS = [
-  "left-0 top-10 -rotate-6",
+  "left-0 top-5 -rotate-6",
   "left-1/2 -translate-x-1/2 top-0 z-10 rotate-2",
-  "right-0 top-14 rotate-6",
+  "right-0 top-7 rotate-6",
 ];
 
 /* The catalog's filters live in the query string, and this page is where that string is read: the
@@ -61,37 +62,38 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   } catch { void 0; }
   return (
     <main>
-      {/* THE HERO. Minimal text, a lot of air, and the device cards floating off the centre line.
-          The headline is the only near-white thing at display size and the CTA is the only solid
-          brand fill on the page - everything else is glass and hairlines, which is what makes one
-          button read as THE action.
+      {/* THE HERO, COMPACT. It was a full-height banner - 112px of padding above, a 44px headline
+          and a 320px fan - which pushed the first shelf of actual products below the fold on a
+          laptop. Nothing was removed: the same words, the same CTA, the same three cards, at about
+          half the height. The headline steps down from the display size to the page-title size, the
+          copy from `lead` to `body`, and the fan is smaller and sits higher.
 
-          The three cards are real product art - the newest arrivals the shop can draw, falling
+          The device cards are real product art - the newest arrivals the shop can draw, falling
           through to the best sellers when the newest have no photo and no shipped glyph - fanned and
           offset so they read as floating rather than as a row. They are decorative (`alt=""`,
           aria-hidden): the headline beside them is the content, and three unlabelled tiles would
           only be noise to a screen reader. With nothing drawable the column collapses and the text
           takes the full width - text-only, never a broken grid. */}
-      <section className="px-4 md:px-8 pt-20 pb-16 md:pt-28 md:pb-24">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-14 md:gap-20">
+      <section className="px-4 md:px-8 pt-10 pb-10 md:pt-14 md:pb-12">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-8 md:gap-12">
           <div className="flex-1 text-center md:text-left">
             <Eyebrow tone="brand">RFO Store</Eyebrow>
-            <Heading level="display" className="mt-5">{promo ?? hero.hero_title}</Heading>
-            <p className="text-lead text-ink-500 mt-5 max-w-xl mx-auto md:mx-0">{promo ? "Sale prices below - " + hero.hero_sub : hero.hero_sub}</p>
-            <div className="relative mt-10 inline-flex items-center">
+            <Heading level="h1" className="mt-3">{promo ?? hero.hero_title}</Heading>
+            <p className="text-body text-ink-500 mt-3 max-w-lg mx-auto md:mx-0">{promo ? "Sale prices below - " + hero.hero_sub : hero.hero_sub}</p>
+            <div className="relative mt-6 inline-flex items-center">
               {/* Two layers of bloom behind the button, both `pointer-events-none` so they cannot
                   steal the click: a wide soft wash and the button's own tight glow ring. */}
-              <span aria-hidden="true" className="pointer-events-none absolute -inset-x-16 -inset-y-10 rounded-full bg-brand-500/25 blur-3xl" />
-              <Button variant="primary" href="#shop" className="relative shadow-glow px-8 text-sm">{hero.cta_label}</Button>
+              <span aria-hidden="true" className="pointer-events-none absolute -inset-x-12 -inset-y-8 rounded-full bg-brand-500/25 blur-3xl" />
+              <Button variant="primary" href="#shop" className="relative shadow-glow">{hero.cta_label}</Button>
             </div>
           </div>
           {heroPicks.length > 0 && (
-            <div className="hidden md:block flex-1 relative h-80" aria-hidden="true">
+            <div className="hidden md:block flex-1 relative h-52" aria-hidden="true">
               {heroPicks.map((p, i) => (
                 /* The rotation lives on the wrapper and the drift on the image, because both want
                    the `transform` property and an animation would otherwise overwrite the tilt.
                    Keyed by slug: `heroPicks` is a subset of a de-duplicated catalogue list. */
-                <div key={p.slug} className={cn("absolute w-44 lg:w-52", HERO_SLOTS[i] ?? HERO_SLOTS[0])}>
+                <div key={p.slug} className={cn("absolute w-32 lg:w-36", HERO_SLOTS[i] ?? HERO_SLOTS[0])}>
                   <ProductArt slug={p.slug} imageUrl={p.image_url} alt=""
                     style={{ animationDelay: (i * 900) + "ms" }}
                     className="hero-float w-full aspect-[4/3] object-cover rounded-card bg-surface-glass/5 ring-1 ring-brand-500/20 shadow-glow-sm"
