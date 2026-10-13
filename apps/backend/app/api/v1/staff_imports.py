@@ -111,11 +111,51 @@ _ALIASES: dict[str, tuple[str, ...]] = {
     "serial": ("serial", "serialnumber", "serialno", "sn", "imei", "imeinumber"),
     "price": ("resale", "resaleprice", "resalevalue", "price", "saleprice", "listingprice"),
     "audit": ("audit", "auditnotes", "auditdescription", "auditdesc", "auditreport"),
-    "cosmetic": ("cosmetic", "cosmeticnotes", "cosmeticdescription", "cosmeticdesc", "cosmetics"),
+    # The plural spellings are the WORKBOOK's ("Cosmetics Description"), the singular ones are the
+    # older sheets'. Normalising drops the difference in punctuation but not in letters, so
+    # "cosmeticsdescription" and "cosmeticdescription" are two different cores and both have to be
+    # listed - which is exactly how a column goes silently unmapped.
+    "cosmetic": ("cosmetic", "cosmeticnotes", "cosmeticdescription", "cosmeticdesc", "cosmetics",
+                 "cosmeticsdescription", "cosmeticsdesc", "cosmeticsnotes"),
     "functional": ("functional", "functionalnotes", "functionaldescription", "functionaldesc",
                    "functionality"),
     "notes": ("notes", "note", "comments", "comment", "remarks", "remark"),
+    # ---- the rest of the supplier workbook (0015_excel_foundation gave each of these a column) ----
+    # Added AFTER the original thirteen on purpose: a norm is matched against the candidates in
+    # this dict's order, so every header the old contract already claimed is claimed by the same
+    # field it always was, and this is purely additive to sheets that were importing yesterday.
+    "model_number": ("modelnumber", "modelno", "mpn", "manufacturerpartnumber", "partnumber",
+                     "partno"),
+    "location": ("location", "loc", "storagelocation", "binlocation"),
+    "warehouse": ("warehouse", "wh", "warehousename", "depot", "facility"),
+    "account": ("account", "accountname", "accountnumber", "client", "clientname", "owner"),
+    "upgrade": ("upgrade", "upgradecode", "upgradetype"),
+    "upgrade_desc": ("upgradedescription", "upgradedesc", "upgradenotes"),
+    "fmv": ("fmv", "fairmarketvalue", "fmvvalue", "marketvalue"),
+    "settlement": ("settlement", "settlementamount", "settlementvalue", "settlementprice"),
+    "channel": ("channel", "saleschannel", "marketplace", "listingchannel"),
+    "load_id": ("loadid", "load", "loadno", "loadnumber", "shipmentid", "shipment"),
+    "on_shelf": ("onshelf", "shelf", "displayed", "onshelfstatus"),
+    "pallet": ("pallet", "palletid", "palletno", "palletnumber"),
+    "sku": ("sku", "skunumber", "itemcode", "productcode", "stockkeepingunit"),
+    "zone": ("zone", "zoneid", "zonename", "warehousezone"),
 }
+
+# THE HASH HEADERS. "Model #", "SKU #" and "Serial#" all normalise to the SAME core as their base
+# column ("model", "sku", "serial") because _norm_header drops punctuation - so a sheet carrying
+# both "Model" and "Model #" would map the first to `model` and leave the second either unmapped or
+# silently colliding with it. That is not a mapping preference, it is a lost column: the operator
+# would see "Model #" listed under unmapped and never learn why.
+#
+# The supplier's own convention is the way out - the columns that carry a CODE are the ones marked
+# with a hash. A header whose cleaned text ends in "#" is therefore read as the code variant of its
+# base name, and only then does the ordinary alias scan get a turn. A sheet with one "Serial#" is
+# unaffected: it lands on `serial`, exactly as it does today.
+_HASH_FIELDS: dict[str, str] = {"model": "model_number", "sku": "sku", "serial": "serial"}
+
+# A cell whose header ends in '#' and whose base is not a known code column is still not an error:
+# it falls through to the alias scan, which is what keeps a supplier sheet that writes "Lot #" (a
+# real spelling of `lot`) working.
 
 # Human labels for the report - the operator reads these, so they say what the value is FOR.
 FIELD_LABELS = {
@@ -123,6 +163,12 @@ FIELD_LABELS = {
     "brand": "Brand", "model": "Product name", "grade": "Grade", "serial": "Serial number",
     "price": "Resale price", "audit": "Audit description", "cosmetic": "Cosmetic description",
     "functional": "Functional description", "notes": "Notes",
+    # The workbook's remaining columns, labelled the way the sheet spells them so a preview reads
+    # back to the operator in their own words rather than the column names of a database.
+    "model_number": "Model #", "location": "Location", "warehouse": "Warehouse",
+    "account": "Account", "upgrade": "Upgrade", "upgrade_desc": "Upgrade description",
+    "fmv": "FMV", "settlement": "Settlement", "channel": "Channel", "load_id": "Load ID",
+    "on_shelf": "On Shelf", "pallet": "Pallet", "sku": "SKU #", "zone": "Zone",
 }
 # Serial and lot are the two the DB cannot be told to invent: lot_id is NOT NULL, and a serial is
 # what the whole unit ledger is keyed on. Everything else has a defensible default.
@@ -246,27 +292,64 @@ def _parse_status(raw: str) -> tuple[str | None, str | None, Translation | None]
     return None, f"status {raw!r} is not one of: " + ", ".join(_STATUS_VALUES), None
 
 
-def _parse_price(raw: str) -> tuple[int | None, str | None]:
+def _parse_price(raw: str, label: str = "resale price") -> tuple[int | None, str | None]:
     """A money cell -> integer cents, or an issue.
 
     Currency symbols, thousands separators and a trailing currency code are stripped; what is left
     must be a number. Anything else is refused rather than coerced, because a silently mis-read
     price is the one import error that reaches a customer.
+
+    `label` is the one thing three money columns argue about. FMV and Settlement are the same parse
+    and the same rules as Resale - one implementation, three call sites - but a message that says
+    "resale price" about the FMV column sends the operator to the wrong cell in a 26-column sheet,
+    which is how a correct refusal gets read as a wrong one.
     """
     s = _clean(raw)
     if not s:
         return None, None
     cleaned = re.sub(r"[^0-9.\-]", "", s)
     if cleaned in ("", "-", ".", "-.", "--"):
-        return None, f"resale price {raw!r} is not a number"
+        return None, f"{label} {raw!r} is not a number"
     try:
         amount = Decimal(cleaned)
     except InvalidOperation:
-        return None, f"resale price {raw!r} is not a number"
+        return None, f"{label} {raw!r} is not a number"
     if amount < 0:
-        return None, f"resale price {raw!r} is negative"
+        return None, f"{label} {raw!r} is negative"
     cents = int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
     return cents, None
+
+
+# The words a supplier sheet uses for the On Shelf column. Kept beside _parse_status's own two
+# tables rather than invented per call site, and reported through the same translation mechanism,
+# so a rewritten "Y" reads back to the operator as "Y -> on shelf" instead of vanishing.
+_TRUE_WORDS = ("y", "yes", "true", "t", "1", "on", "onshelf", "displayed", "active", "instock")
+_FALSE_WORDS = ("n", "no", "false", "f", "0", "off", "notonshelf", "unshelved", "outofstock")
+_ON_SHELF_BY_NORM = {**{w: True for w in _TRUE_WORDS}, **{w: False for w in _FALSE_WORDS}}
+
+
+def _parse_truth(raw: str) -> tuple[bool | None, str | None, Translation | None]:
+    """A yes/no cell -> (bool or None, issue or None, translation or None).
+
+    Blank is an ABSENCE, not a false: a sheet that never filled the column is not the same claim as
+    a sheet that said "No", and storing False for the first would put a wrong fact on every row of
+    a workbook that simply does not track shelf state. The column is nullable for exactly this.
+
+    "Y"/"N" and "0"/"1" are translated rather than refused - they are the same answer spelled the
+    supplier's way - and the rewrite is reported per row like every other translation here.
+    """
+    s = _clean(raw)
+    if not s:
+        return None, None, None
+    norm = _norm_header(s)
+    value = _ON_SHELF_BY_NORM.get(norm)
+    if value is None:
+        return None, f"{raw!r} is not a yes or no", None
+    # The report prints the operator's own spelling beside the meaning, so "Y" reads back as
+    # "Y -> yes" rather than disappearing because it happened to be understood.
+    word = "yes" if value else "no"
+    translated = None if norm == word else ("on_shelf", s, word)
+    return value, None, translated
 
 
 def _merge_technical_notes(values: dict[str, str]) -> str:
@@ -380,7 +463,13 @@ def map_columns(header: list[str]) -> dict:
     for idx, head in enumerate(header):
         norm = _norm_header(head)
         field = None
-        if norm:
+        # A header marked with the supplier's hash is read as the CODE column first - see the note
+        # on _HASH_FIELDS for why the normalised core alone cannot tell "Model" from "Model #".
+        if norm and _clean(head).rstrip().endswith("#"):
+            coded = _HASH_FIELDS.get(norm)
+            if coded is not None and coded not in mapping:
+                field = coded
+        if field is None and norm:
             for candidate, aliases in _ALIASES.items():
                 if norm in aliases and candidate not in mapping:
                     field = candidate
@@ -468,6 +557,18 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
         price, price_err = _parse_price(_cell(row, idx.get("price")))
         if price_err:
             flag("price", price_err)
+        # The workbook's other two money columns. Same parser, same refusal rules, different labels.
+        fmv, fmv_err = _parse_price(_cell(row, idx.get("fmv")), "FMV")
+        if fmv_err:
+            flag("fmv", fmv_err)
+        settlement, settlement_err = _parse_price(_cell(row, idx.get("settlement")), "Settlement")
+        if settlement_err:
+            flag("settlement", settlement_err)
+        on_shelf, shelf_err, shelf_note = _parse_truth(_cell(row, idx.get("on_shelf")))
+        if shelf_err:
+            flag("on_shelf", shelf_err)
+        if shelf_note:
+            row_translations.append(shelf_note)
 
         if status == "listed" and price is None and not price_err:
             flag("price", "status is listed but there is no resale price - the shop cannot list a unit with no price")
@@ -497,6 +598,24 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
             "model": model, "asset_tag": _cell(row, idx.get("asset")),
             "technical_notes": technical_notes, "technical_parts": parts, "issues": row_issues,
             "translations": [{"field": f, "from": s, "to": t} for f, s, t in row_translations],
+            # ---- the columns 0015_excel_foundation added, in two groups ----
+            # Unit facts, written on the asset row.
+            # The sheet has ONE "Class" column and it does two jobs: it picks the product's category
+            # (the original contract, which creates a categories row) and it is the asset's own
+            # class text (the column 0015 added). One cell, one read, two destinations.
+            "class": _cell(row, idx.get("category")),
+            "model_number": _cell(row, idx.get("model_number")),
+            "upgrade": _cell(row, idx.get("upgrade")), "upgrade_desc": _cell(row, idx.get("upgrade_desc")),
+            "audit_desc": _cell(row, idx.get("audit")), "cosmetics_desc": _cell(row, idx.get("cosmetic")),
+            "functional_desc": _cell(row, idx.get("functional")),
+            "fmv_cents": fmv, "settlement_cents": settlement, "on_shelf": on_shelf,
+            "channel": _cell(row, idx.get("channel")), "sku": _cell(row, idx.get("sku")),
+            "location": _cell(row, idx.get("location")), "pallet": _cell(row, idx.get("pallet")),
+            # Batch facts. They ride on the row but belong to the LOT, so they are namespaced here
+            # and lifted onto the lot record in _run_import - see the note there about the first row
+            # winning.
+            "lot_load_id": _cell(row, idx.get("load_id")), "lot_account": _cell(row, idx.get("account")),
+            "lot_zone": _cell(row, idx.get("zone")), "lot_warehouse": _cell(row, idx.get("warehouse")),
         })
         if row_issues:
             issues.extend(row_issues)
@@ -616,11 +735,25 @@ async def _run_import(db, staff: dict, parsed: list[dict], filename: str) -> dic
             lot_ids[number] = existing.id
             lots_reused.append(number)
             continue
-        lot = Lot(lot_number=number, status="intake", notes="product import")
+        # Load ID, Account, Zone and Warehouse are facts about the BATCH, but a workbook repeats
+        # them on every row of it. The first row that states one wins, and the rest are ignored
+        # rather than compared: two rows of one lot disagreeing about their account is a supplier
+        # sheet telling two stories, and silently keeping the last one would be worse than keeping
+        # the first - the report names the lot either way.
+        batch = next((r for r in parsed if r["lot_number"] == number and
+                      any(r.get(k) for k in ("lot_load_id", "lot_account", "lot_zone", "lot_warehouse"))),
+                     None)
+        lot = Lot(lot_number=number, status="intake", notes="product import",
+                  load_id=(batch or {}).get("lot_load_id") or None,
+                  account=(batch or {}).get("lot_account") or None,
+                  zone=(batch or {}).get("lot_zone") or None,
+                  warehouse=(batch or {}).get("lot_warehouse") or None)
         db.add(lot)
         await db.flush()
         lot_ids[number] = lot.id
-        lots_created.append({"lot_number": number, "id": lot.id})
+        lots_created.append({"lot_number": number, "id": lot.id,
+                             "load_id": lot.load_id, "account": lot.account,
+                             "zone": lot.zone, "warehouse": lot.warehouse})
 
     products_created: list[dict] = []
     product_ids: dict[tuple[str, str, str], int | None] = {}
@@ -649,6 +782,25 @@ async def _run_import(db, staff: dict, parsed: list[dict], filename: str) -> dic
             notes=record["technical_notes"] or None,
             condition_report=_condition_report(record),
             lot_id=lot_ids[record["lot_number"]],
+            # The workbook's own columns, stored as the sheet wrote them. The four description
+            # columns are ALSO folded into `notes`/`condition_report` above - that merge is the
+            # app's derived reading of them, and these keep the sheet's own spelling of each, so a
+            # later export returns what the supplier sent rather than this app's summary of it.
+            asset=record["asset_tag"] or None,
+            asset_class=record["class"] or None,
+            model_number=record["model_number"] or None,
+            upgrade=record["upgrade"] or None,
+            upgrade_desc=record["upgrade_desc"] or None,
+            audit_desc=record["audit_desc"] or None,
+            cosmetics_desc=record["cosmetics_desc"] or None,
+            functional_desc=record["functional_desc"] or None,
+            fmv_cents=record["fmv_cents"],
+            settlement_cents=record["settlement_cents"],
+            on_shelf=record["on_shelf"],
+            channel=record["channel"] or None,
+            sku=record["sku"] or None,
+            location=record["location"] or None,
+            pallet=record["pallet"] or None,
         )
         db.add(asset)
         assets.append((asset, record))
@@ -667,9 +819,21 @@ async def _run_import(db, staff: dict, parsed: list[dict], filename: str) -> dic
                 meta={"source": "product_import", "products_created": len(products_created)})
     return {"lots_created": lots_created, "lots_reused": lots_reused,
             "products_created": products_created,
+            # The commit response carries the workbook's own columns back, not just the three the
+            # original door echoed. An importer that reports only what it always reported cannot be
+            # checked against the sheet it just consumed, and "did my Model # land" is the first
+            # question anyone asks of a twenty-six-column import.
             "assets": [{"row": r["row"], "asset_id": a.id, "serial_number": a.serial_number,
                         "lot_number": r["lot_number"], "status": a.status, "grade": a.grade,
-                        "sale_price_cents": a.sale_price_cents} for a, r in assets]}
+                        "sale_price_cents": a.sale_price_cents,
+                        "asset": a.asset, "class": a.asset_class, "model_number": a.model_number,
+                        "upgrade": a.upgrade, "upgrade_desc": a.upgrade_desc,
+                        "fmv_cents": a.fmv_cents, "settlement_cents": a.settlement_cents,
+                        "channel": a.channel, "on_shelf": a.on_shelf, "pallet": a.pallet,
+                        "sku": a.sku, "location": a.location,
+                        "load_id": r.get("lot_load_id") or None, "account": r.get("lot_account") or None,
+                        "zone": r.get("lot_zone") or None, "warehouse": r.get("lot_warehouse") or None}
+                       for a, r in assets]}
 
 
 def _condition_report(record: dict) -> dict | None:

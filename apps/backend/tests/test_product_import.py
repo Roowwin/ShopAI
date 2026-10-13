@@ -175,6 +175,95 @@ async def test_preview_maps_columns_and_merges_technical_notes(client):
         await _purge(tag)
 
 
+# The owner's workbook: all twenty-six columns, in the sheet's own order and spelling. This is the
+# contract 0015_excel_foundation and the widened importer exist to serve, so the header is written
+# out in full rather than abbreviated - a column missing from this list is a column the test would
+# not notice going unmapped.
+EXCEL_HEADER = [
+    "Asset", "Status", "Lot", "Class", "Account", "Mfg", "Model", "Model #",
+    "Upgrade Description", "Audit Description", "Cosmetics Description",
+    "Functional Description", "Upgrade", "FMV", "Resale", "Settlement", "Grade", "Channel",
+    "Serial#", "Load ID", "On Shelf", "Pallet", "Location", "Warehouse", "SKU #", "Zone",
+]
+
+
+def _excel_row(tag: str, serial: str) -> list:
+    """One row of the workbook, in EXCEL_HEADER's order."""
+    return [
+        "TAG-" + serial, "Active", tag + "-XLOT-1", "Phones", "ACME Account", tag, "Model One",
+        "M1-128-AU", "Battery replaced", "No faults", "Light scuffs", "All ports pass", "BAT",
+        "450.00", "279.00", "300.00", "B", "eBay", serial, "LOAD-7", "Y", "PAL-3",
+        "WH-A-01-12", "Sydney DC", "SKU-" + serial, "Z2",
+    ]
+
+
+async def test_the_full_twenty_six_column_workbook_lands_every_column(client):
+    """Every header in the owner's sheet maps, translates, and reaches the database.
+
+    Three things this is here to catch, none of which a twelve-column sheet can: a header that
+    normalises to the same core as another and silently loses its column ("Model" vs "Model #"), a
+    supplier spelling the old contract never listed ("Cosmetics" against `cosmetic`), and a new
+    value that needs translating rather than refusing ("Active", "Y").
+    """
+    tag = _tag()
+    serial = tag + "-X1"
+    try:
+        tok = await _staff(client, "admin")
+        data = _csv([_excel_row(tag, serial)], header=EXCEL_HEADER)
+
+        r = await _post(client, tok, data)
+        assert r.status_code == 200, r.text
+        body = r.json()
+
+        # 1. twenty-six headers, twenty-six mappings, nothing dropped in silence.
+        assert body["columns"]["unmapped"] == [], body["columns"]["unmapped"]
+        assert body["columns"]["missing"] == [], body["columns"]["missing"]
+        assert len(body["columns"]["detected"]) == 26, body["columns"]["detected"]
+        by_header = {c["header"]: c["field"] for c in body["columns"]["detected"]}
+        assert by_header["Model #"] == "model_number", by_header
+        assert by_header["Model"] == "model", by_header
+        assert by_header["SKU #"] == "sku", by_header
+        assert by_header["Serial#"] == "serial", by_header
+        assert by_header["Cosmetics Description"] == "cosmetic", by_header
+
+        # 2. the translation layer still rewrites the supplier's words, and reports each one.
+        first = body["sample"][0]
+        assert first["status"] == "received" and first["on_shelf"] is True
+        made = {(t["field"], t["from"], t["to"]) for t in first["translations"]}
+        assert ("status", "Active", "received") in made, made
+        assert ("on_shelf", "Y", "yes") in made, made
+
+        # 3. money is cents, like every other amount in this schema.
+        assert first["fmv_cents"] == 45000
+        assert first["settlement_cents"] == 30000
+        assert first["sale_price_cents"] == 27900
+        assert first["model_number"] == "M1-128-AU"
+
+        # 4. commit, then read the unit back through the mirror the sheet came from.
+        c = await _post(client, tok, data, phase="commit")
+        assert c.status_code == 200, c.text
+        got = c.json()["assets"][0]
+        assert got["class"] == "Phones" and got["channel"] == "eBay" and got["sku"] == "SKU-" + serial
+        assert got["on_shelf"] is True and got["pallet"] == "PAL-3" and got["location"] == "WH-A-01-12"
+        assert got["load_id"] == "LOAD-7" and got["account"] == "ACME Account" and got["zone"] == "Z2"
+
+        eng = get_engine()
+        async with eng.connect() as conn:
+            row = (await conn.execute(text(
+                'SELECT "Model #", "Upgrade Description", "FMV", "Settlement", "On Shelf",'
+                ' "Account", "Load ID", "SKU #", "Zone", "Warehouse"'
+                ' FROM excel_assets WHERE "Serial#" = :s'), {"s": serial})).mappings().first()
+        assert row is not None, "the mirror must show the unit that was just imported"
+        assert row["Model #"] == "M1-128-AU"
+        assert row["Upgrade Description"] == "Battery replaced"
+        assert row["FMV"] == 45000 and row["Settlement"] == 30000
+        assert row["On Shelf"] is True and row["Warehouse"] == "Sydney DC"
+        assert row["Account"] == "ACME Account" and row["Load ID"] == "LOAD-7"
+        assert row["SKU #"] == "SKU-" + serial and row["Zone"] == "Z2"
+    finally:
+        await _purge(tag)
+
+
 async def test_preview_accepts_alternative_header_spellings(client):
     """'Manufacturer', 'Serial No' and 'Resale Price' are the same columns as Mfg/Serial#/Resale."""
     tag = _tag()

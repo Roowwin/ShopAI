@@ -51,10 +51,20 @@ async def _staff(client, role: str = "admin") -> str:
 
 
 async def _one(sql: str, params: dict | None = None):
-    """Run one scalar SELECT on the app DB - the other side of every cross-check here."""
+    """Run one scalar SELECT on the app DB - the other side of every cross-check here.
+
+    `first()`, NOT `scalar_one()`, and the difference is the whole of a bug this used to have. Every
+    caller here guards its result with `if x is not None:` and means "the row, or nothing" - but
+    `scalar_one()` is a different contract: it RAISES NoResultFound on an empty result. The
+    aggregate callers never noticed, because `SELECT min(id) FROM orders` returns one row of NULL on
+    an empty table, so None came back and the guard worked. The one non-aggregate caller -
+    `... FROM orders ORDER BY public_id LIMIT 1` - returned zero rows, so against a database with no
+    orders it raised instead of skipping, and the test failed with `NoResultFound` where its
+    siblings all skip cleanly. Same intent, one primitive that actually expresses it.
+    """
     eng = get_engine()
     async with eng.connect() as c:
-        return (await c.execute(text(sql), params or {})).scalar_one()
+        return (await c.execute(text(sql), params or {})).scalars().first()
 
 
 async def _row(sql: str, params: dict | None = None):

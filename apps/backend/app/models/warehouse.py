@@ -2,7 +2,7 @@ import uuid
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, func, text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,6 +18,11 @@ class Lot(Base):
     status: Mapped[str] = mapped_column(String)
     warehouse: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The supplier workbook's batch columns (0015_excel_foundation). They sit on the lot because
+    # every unit in one lot shares them, even though the sheet repeats them on every row.
+    load_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    account: Mapped[str | None] = mapped_column(Text, nullable=True)
+    zone: Mapped[str | None] = mapped_column(Text, nullable=True)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -44,6 +49,26 @@ class Asset(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     lot_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("lots.id"), nullable=False)
+
+    # The supplier workbook's per-unit columns (0015_excel_foundation). Every one is nullable: they
+    # are absent from the catalogue's existing rows and from nine columns of a partly-filled sheet,
+    # and NULL is the honest reading of "this workbook does not track it" - distinctly not a False
+    # on `on_shelf`, which would be a claim the sheet never made.
+    asset: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # `class` is a reserved word in Python, so the attribute carries the column's name explicitly.
+    asset_class: Mapped[str | None] = mapped_column("class", Text, nullable=True)
+    model_number: Mapped[str | None] = mapped_column(Text, nullable=True)
+    upgrade: Mapped[str | None] = mapped_column(Text, nullable=True)
+    upgrade_desc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    audit_desc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cosmetics_desc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    functional_desc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fmv_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    settlement_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    channel: Mapped[str | None] = mapped_column(Text, nullable=True)
+    on_shelf: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    pallet: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sku: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     lot: Mapped["Lot"] = relationship(back_populates="assets")
 
