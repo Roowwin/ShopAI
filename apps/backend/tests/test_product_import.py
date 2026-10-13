@@ -188,11 +188,18 @@ EXCEL_HEADER = [
 
 
 def _excel_row(tag: str, serial: str) -> list:
-    """One row of the workbook, in EXCEL_HEADER's order."""
+    """One row of the workbook, in EXCEL_HEADER's order.
+
+    Settlement is DELIBERATELY below Resale (249.00 against 279.00). Settlement is the margin guard's
+    cost basis for stock that arrived on a supplier sheet (services/margin), so a workbook row whose
+    Settlement sat above its Resale would now be a loss-maker the importer refuses outright - which is
+    correct behavior, but it is not what THIS test is about. The values here are chosen to be
+    sellable so the test can go on proving that all twenty-six columns land.
+    """
     return [
         "TAG-" + serial, "Active", tag + "-XLOT-1", "Phones", "ACME Account", tag, "Model One",
         "M1-128-AU", "Battery replaced", "No faults", "Light scuffs", "All ports pass", "BAT",
-        "450.00", "279.00", "300.00", "B", "eBay", serial, "LOAD-7", "Y", "PAL-3",
+        "450.00", "279.00", "249.00", "B", "eBay", serial, "LOAD-7", "Y", "PAL-3",
         "WH-A-01-12", "Sydney DC", "SKU-" + serial, "Z2",
     ]
 
@@ -235,7 +242,7 @@ async def test_the_full_twenty_six_column_workbook_lands_every_column(client):
 
         # 3. money is cents, like every other amount in this schema.
         assert first["fmv_cents"] == 45000
-        assert first["settlement_cents"] == 30000
+        assert first["settlement_cents"] == 24900
         assert first["sale_price_cents"] == 27900
         assert first["model_number"] == "M1-128-AU"
 
@@ -256,7 +263,7 @@ async def test_the_full_twenty_six_column_workbook_lands_every_column(client):
         assert row is not None, "the mirror must show the unit that was just imported"
         assert row["Model #"] == "M1-128-AU"
         assert row["Upgrade Description"] == "Battery replaced"
-        assert row["FMV"] == 45000 and row["Settlement"] == 30000
+        assert row["FMV"] == 45000 and row["Settlement"] == 24900
         assert row["On Shelf"] is True and row["Warehouse"] == "Sydney DC"
         assert row["Account"] == "ACME Account" and row["Load ID"] == "LOAD-7"
         assert row["SKU #"] == "SKU-" + serial and row["Zone"] == "Z2"

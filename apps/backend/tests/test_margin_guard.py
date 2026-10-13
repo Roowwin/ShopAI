@@ -43,6 +43,11 @@ async def _ensure_brand_category() -> None:
 
 
 async def _staff(client, role: str = "admin") -> tuple[dict, str]:
+    # DELIBERATELY NOT the repo's usual "pytest-" prefix. Several suites - and the factory gate -
+    # tear down with `DELETE FROM staff_users WHERE email LIKE 'pytest-%'`, so on a shared dev
+    # database two runs in flight at once delete each other's identities mid-test and every door
+    # then answers 401 "account unavailable". Naming these identities outside that pattern is what
+    # makes this file's result a statement about the code rather than about who else was running.
     email = "mission-" + uuid.uuid4().hex + "@test.rfo"
     _, pw = await bootstrap(email, role)
     r = await client.post("/staff/auth/login", json={"email": email, "password": pw})
@@ -348,5 +353,24 @@ async def test_the_importer_writes_the_cost_onto_the_unit(client):
             stored = (await c.execute(text("SELECT cost_cents FROM assets WHERE id = :i"),
                                       {"i": asset["asset_id"]})).scalar_one()
         assert stored == 20000, stored
+    finally:
+        await _drop_staff(email)
+
+
+async def test_the_importer_blocks_on_the_settlement_basis_too(client):
+    """The workbook has no Cost column; a supplier sheet puts the cost in Settlement.
+
+    This is the importer reading the SAME cost basis the storefront floor does
+    (`COALESCE(cost_cents, settlement_cents)`), so a row refused here is exactly the row the shop
+    would refuse to publish - not a second, differently-derived judgement.
+    """
+    h, email = await _staff(client)
+    stamp = uuid.uuid4().hex[:8]
+    try:
+        rows = [["Serial#", "Lot", "Resale", "Settlement"],
+                [f"mission-margin-s-{stamp}", f"MISSION-MGS-{stamp}", "279", "300"]]
+        rep = (await _import(client, h, rows, commit=False)).json()
+        assert rep["summary"]["blocked"] == 1, rep["summary"]
+        assert any("below cost" in i["message"] for i in rep["issues"]), rep["issues"]
     finally:
         await _drop_staff(email)

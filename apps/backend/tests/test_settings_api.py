@@ -37,6 +37,9 @@ async def _ensure_brand_category() -> None:
 
 
 async def _staff(client, role: str = "admin") -> tuple[dict, str]:
+    # DELIBERATELY NOT the repo's usual "pytest-" prefix - see the note in test_margin_guard. A
+    # concurrent run's `DELETE ... WHERE email LIKE 'pytest-%'` teardown would otherwise delete this
+    # test's identity mid-flight and turn a real assertion into a 401.
     email = "mission-" + uuid.uuid4().hex + "@test.rfo"
     _, pw = await bootstrap(email, role)
     r = await client.post("/staff/auth/login", json={"email": email, "password": pw})

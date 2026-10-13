@@ -1,6 +1,6 @@
 """The margin floor on the storefront: a unit priced below what it cost never reaches the shop.
 
-WHY THIS FILE EXISTS. The floor is one predicate (`store_catalog.ON_SALE`) that five statements
+WHY THIS FILE EXISTS. The floor is one predicate (`services.margin.ON_SALE`) that five statements
 share, and a predicate can be present in a statement while still being applied to the wrong set of
 rows. These tests are the behavioural half: they put real stock on a real shelf, price it under what
 it cost, and assert the shop stops showing it.
@@ -132,6 +132,17 @@ async def _set_price(client, tok, aid: int, cents: int) -> None:
     assert r.status_code == 200, r.text
 
 
+async def _set_price_direct(aid: int, cents: int) -> None:
+    """Price a unit below its cost the way such a row actually gets there: straight to the table.
+
+    The staff price door now REFUSES a below-cost price (services/margin layer 2), so a fixture that
+    needs a loss-maker on the shelf cannot build one through it. Writing the row directly is not a
+    workaround - it is the exact shape of a below-cost unit that predates the guard, which is the row
+    the storefront floor exists to catch. The door's own refusal is proven in test_margin_guard.
+    """
+    await _sql("UPDATE assets SET sale_price_cents = :c WHERE id = :i", c=cents, i=aid)
+
+
 async def _shelf_units(client, slug: str) -> list[int]:
     """The buy box's own list: the children the product page offers, priced."""
     r = await client.get(f"/store/catalog/{slug}")
@@ -177,7 +188,9 @@ async def test_a_unit_priced_below_its_cost_leaves_the_shop(client):
         assert await _listed(client, tag) is True
 
         # The price drops under the cost. Same row, same status, same lot - only the margin moved.
-        await _set_price(client, tok, aid, 15000)
+        # Written directly: the staff price door refuses a below-cost price outright, so this is the
+        # state a pre-guard or imported row is in, and the floor must still catch it.
+        await _set_price_direct(aid, 15000)
         assert await _shelf_units(client, slug) == [], \
             "a unit priced below its cost must not be in the buy box"
         assert await _listed(client, tag) is False, \
@@ -190,7 +203,7 @@ async def test_a_unit_priced_below_its_cost_leaves_the_shop(client):
 
         # Left hidden on purpose - see the module docstring: this asset cannot be deleted, so it is
         # left in the one state the rule guarantees a shopper will never be offered.
-        await _set_price(client, tok, aid, 15000)
+        await _set_price_direct(aid, 15000)
     finally:
         await _purge(tag)
 
