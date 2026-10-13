@@ -41,6 +41,16 @@ class Order(Base):
     placed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # The lifecycle's own timestamps (0019_commerce_finance). `updated_at` is moved by the touch
+    # trigger on ANY edit and so cannot answer "when did this ship"; these can. Everything that
+    # writes them goes through the order doors, which is why they are plain columns and not a
+    # trigger of their own.
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    shipped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    carrier: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tracking_number: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class OrderLine(Base):
@@ -77,3 +87,9 @@ class Payment(Base):
     amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(String, default="initiated")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # The refund side of a payment (0019_commerce_finance). `refunded_cents` is what makes a partial
+    # refund representable at all, and it is constrained to 0..amount_cents in the database.
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    method: Mapped[str | None] = mapped_column(Text, nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    refunded_cents: Mapped[int] = mapped_column(BigInteger, default=0)

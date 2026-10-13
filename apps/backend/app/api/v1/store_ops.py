@@ -1,5 +1,3 @@
-import hashlib
-import hmac
 import re
 import uuid as uuidlib
 from datetime import datetime, timedelta, timezone
@@ -12,13 +10,16 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core import security
 from app.core.config import get_settings
 from app.core.db import get_db
-from app.models import Asset, Lot, StockMovement
+from app.models import Asset, Lot
 from app.models.catalog import Product
 from app.models.identity import User
 from app.models.orders import Order, OrderLine, OrderTaxLine, Payment, Reservation
+from app.services import ledger
+from app.services import payments as payments_svc
 from app.services import system_settings as ss
 from app.services.audit import audit
 from app.services.margin import is_loss_maker
+from app.services.orders import return_lines, settle_lines
 
 router = APIRouter(prefix="/store", tags=["store-ops"])
 
@@ -180,97 +181,151 @@ async def checkout(body: CheckoutIn, customer: dict | None = Depends(_opt_custom
             "tax_cents": tax, "total_cents": sub + tax, "status": order.status}
 
 
+async def _order_lines(db, order_id: int) -> list:
+    return (await db.execute(select(OrderLine).where(OrderLine.order_id == order_id))).scalars().all()
+
+
 @router.post("/orders/{public_id}/pay")
 async def pay(public_id: str, db=Depends(get_db)):
-    o = (await db.execute(text("SELECT id, status, total_cents FROM orders WHERE public_id = :p"),
-                          {"p": public_id})).mappings().first()
+    """Ask the configured provider for something to send the shopper to.
+
+    The provider is chosen by `PAYMENT_PROVIDER`; its credential comes from the Settings API key
+    store. The `stub` provider needs no credential and keeps its old behaviour exactly - the
+    reference it returns is what the test webhook signs against. A real provider with no key stored
+    is a 503, not a pretend charge: `create_checkout` is the only network path in the payment code
+    and it must be visibly absent rather than silently failing.
+    """
+    o = (await db.execute(
+        text("SELECT id, public_id::text AS public_id, status, total_cents, currency"
+             " FROM orders WHERE public_id = :p"), {"p": public_id})).mappings().first()
     if o is None:
         raise HTTPException(status_code=404, detail="order not found")
     if o["status"] != "pending":
         raise HTTPException(status_code=409, detail=f"order status {o['status']}")
     s = get_settings()
-    ref = "stub-" + uuidlib.uuid4().hex
-    pay = Payment(order_id=o["id"], provider=s.PAYMENT_PROVIDER, provider_ref=ref,
-                  idempotency_key=uuidlib.uuid4().hex + "-" + str(o["id"]),
-                  amount_cents=o["total_cents"], status="initiated")
-    db.add(pay)
+    provider = s.PAYMENT_PROVIDER
+    if provider not in payments_svc.PROVIDERS:
+        raise HTTPException(status_code=503, detail=f"payment provider {provider!r} is not supported")
+    return_url = s.cors_origins[0] if s.cors_origins else "https://shop.rfo.localhost"
+    try:
+        session = await payments_svc.create_checkout(provider=provider, order=dict(o),
+                                                     secret=await payments_svc.api_key(db, provider),
+                                                     return_url=return_url)
+    except LookupError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    ref = session["provider_ref"]
+    payment = Payment(order_id=o["id"], provider=provider, provider_ref=ref,
+                      idempotency_key=uuidlib.uuid4().hex + "-" + str(o["id"]),
+                      amount_cents=o["total_cents"], status="initiated")
+    db.add(payment)
     await audit(db, "system", entity="payment", action="initiated",
-                entity_id=o["id"], after={"ref": ref})
+                entity_id=o["id"], after={"ref": ref, "provider": provider})
     try:
         await db.commit()
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
-    return {"payment_ref": ref, "provider": s.PAYMENT_PROVIDER,
-            "webhook_url": f"/store/webhooks/payments/{s.PAYMENT_PROVIDER}"}
-
-
-class WebhookIn(BaseModel):
-    ref: str
-    event: str = Field(pattern="^payment\\.(succeeded|failed)$")
+    return {"payment_ref": ref, "provider": provider, "redirect_url": session.get("redirect_url"),
+            "webhook_url": f"/store/webhooks/payments/{provider}"}
 
 
 @router.post("/webhooks/payments/{provider}")
-async def payment_webhook(provider: str, body: WebhookIn, request: Request, db=Depends(get_db)):
+async def payment_webhook(provider: str, request: Request, db=Depends(get_db)):
+    """A provider event. Signature first, then the event log, then the lifecycle.
+
+    The order of those three matters and is the design. VERIFY against the provider secret; RECORD
+    the event under `UNIQUE (provider, event_id)` and stop if it is a redelivery, so a duplicated
+    delivery cannot reach the lifecycle twice; only then move the order. The old handler inferred
+    "already handled" from the payment row status, which cannot tell a repeated `succeeded` apart
+    from a `succeeded` followed by a `refunded`.
+    """
     s = get_settings()
-    if s.PAYMENT_WEBHOOK_SECRET:
-        raw = (await request.body()).decode()
-        sig = request.headers.get("x-stub-signature", "")
-        expect = hmac.new(s.PAYMENT_WEBHOOK_SECRET.encode(), raw.encode(), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(sig, expect):
-            raise HTTPException(status_code=401, detail="bad webhook signature")
-    p = (await db.execute(text("SELECT id, status, order_id FROM payments WHERE provider_ref = :r AND provider = :pv"),
-                          {"r": body.ref, "pv": provider})).mappings().first()
+    if provider not in payments_svc.PROVIDERS:
+        raise HTTPException(status_code=404, detail="unknown payment provider")
+    raw = await request.body()
+    try:
+        payments_svc.verify(provider, raw, request.headers,
+                            await payments_svc.signing_secret(db, provider, s.PAYMENT_WEBHOOK_SECRET))
+        event = payments_svc.parse(provider, raw)
+    except payments_svc.WebhookRejected as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+    p = (await db.execute(
+        text("SELECT id, status, order_id, amount_cents, refunded_cents FROM payments"
+             " WHERE provider_ref = :r AND provider = :pv"),
+        {"r": event["provider_ref"], "pv": provider})).mappings().first()
     if p is None:
         raise HTTPException(status_code=404, detail="payment not found")
-    pay = await db.get(Payment, p["id"])
-    order = await db.get(Order, p["order_id"])
-    lines = (await db.execute(select(OrderLine).where(OrderLine.order_id == p["order_id"]))).scalars().all()
+    order_id = p["order_id"]
+    if not await payments_svc.record_event(db, provider=provider, event=event,
+                                           payment_id=p["id"], order_id=order_id):
+        return {"status": "already processed"}      # a redelivery of an event already handled
 
-    if body.event == "payment.succeeded":
-        if pay.status == "succeeded":
-            return {"status": "already processed"}     # idempotent replay: no double side effects
-        pay.status = "succeeded"
+    order = await db.get(Order, order_id)
+    payment = await db.get(Payment, p["id"])
+    lines = await _order_lines(db, order_id)
+    now = datetime.now(timezone.utc)
+
+    if event["type"] == payments_svc.EV_SUCCEEDED:
+        if payment.status == "succeeded":
+            await db.commit()                       # keep the event row; change nothing else
+            return {"status": "already processed"}
+        payment.status = "succeeded"
         order.status = "paid"
-        for l in lines:
-            if l.asset_id is None:
-                continue
-            a = await db.get(Asset, l.asset_id)
-            if a is not None and a.status == "reserved":
-                a.status = "sold"
-            db.add(StockMovement(asset_id=l.asset_id, qty=-1, reason="sale"))
-            await db.execute(text("UPDATE reservations SET status='converted' WHERE asset_id = :i AND status='active'"),
-                             {"i": l.asset_id})
+        order.paid_at = now
+        await settle_lines(db, order_id, lines)
+        # The invoice is issued in the SAME transaction as the sale it documents.
+        await ledger.ensure_invoice(db, order_id)
         await audit(db, "system", entity="order", entity_id=order.id, action="payment_succeeded")
-        try:
-            await db.commit()
-        except SQLAlchemyError as e:
-            await db.rollback(); _409(e)
-        return {"status": "processed", "order": order.status}
 
-    if pay.status in ("succeeded", "failed"):
-        return {"status": "already processed"}
-    pay.status = "failed"
-    order.status = "cancelled"
-    for l in lines:
-        if l.asset_id is None:
-            continue
-        a = await db.get(Asset, l.asset_id)
-        if a is not None and a.status == "reserved":
-            a.status = "listed"        # back to storefront
-        await db.execute(text("UPDATE reservations SET status='released' WHERE asset_id = :i AND status='active'"),
-                         {"i": l.asset_id})
-    await audit(db, "system", entity="order", entity_id=order.id, action="payment_failed")
+    elif event["type"] == payments_svc.EV_FAILED:
+        if payment.status in ("succeeded", "failed", "refunded"):
+            await db.commit()
+            return {"status": "already processed"}
+        payment.status = "failed"
+        reason = str((event["payload"] or {}).get("failure_reason") or "").strip()
+        payment.failure_reason = reason[:400] or None
+        order.status = "cancelled"
+        order.cancelled_at = now
+        await return_lines(db, order_id, lines, reason="order_cancelled")
+        await audit(db, "system", entity="order", entity_id=order.id, action="payment_failed")
+
+    elif event["type"] == payments_svc.EV_REFUNDED:
+        outstanding = int(p["amount_cents"]) - int(p["refunded_cents"])
+        if outstanding <= 0:
+            await db.commit()
+            return {"status": "already processed"}
+        # The provider figure when it sent one, else the whole outstanding balance - and never more
+        # than the payment holds, which `payments_refunded_check` backstops.
+        amount = event.get("amount_cents")
+        payment.refunded_cents = int(p["refunded_cents"]) + (int(amount) if amount else outstanding)
+        if payment.refunded_cents >= int(p["amount_cents"]):
+            payment.refunded_cents = int(p["amount_cents"])
+            payment.status = "refunded"
+        order.status = "refunded"
+        await return_lines(db, order_id, lines, reason="order_refunded")
+        await audit(db, "system", entity="order", entity_id=order.id, action="payment_refunded",
+                    after={"refunded_cents": payment.refunded_cents})
+
+    else:
+        # A recorded-but-inert event: a provider type this app does not act on. It stays in the log
+        # so "we saw it and it meant nothing to us" is answerable later.
+        await audit(db, "system", entity="payment", entity_id=p["id"], action="payment_event_ignored",
+                    after={"type": (event["payload"] or {}).get("type") or provider})
+
     try:
         await db.commit()
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
     return {"status": "processed", "order": order.status}
+
+
 @router.post("/orders/{public_id}/simulate-payment")
 async def simulate_payment(public_id: str, db=Depends(get_db)):
     # DEV ONLY: pretends the provider fired the webhook. Returns 404 in production env.
     if get_settings().is_prod:
         raise HTTPException(status_code=404, detail="not found")
-    o = (await db.execute(text("SELECT id, status FROM orders WHERE public_id = :p"), {"p": public_id})).mappings().first()
+    o = (await db.execute(text("SELECT id, status FROM orders WHERE public_id = :p"),
+                          {"p": public_id})).mappings().first()
     if o is None:
         raise HTTPException(status_code=404, detail="order not found")
     if o["status"] != "pending":
@@ -279,20 +334,16 @@ async def simulate_payment(public_id: str, db=Depends(get_db)):
                           {"i": o["id"]})).mappings().first()
     if p is None:
         raise HTTPException(status_code=409, detail="no payment initiated")
-    pay = await db.get(Payment, p["id"])
+    payment = await db.get(Payment, p["id"])
     order = await db.get(Order, o["id"])
-    pay.status = "succeeded"
+    payment.status = "succeeded"
     order.status = "paid"
-    lines = (await db.execute(select(OrderLine).where(OrderLine.order_id == o["id"]))).scalars().all()
-    for l in lines:
-        if l.asset_id is None:
-            continue
-        a = await db.get(Asset, l.asset_id)
-        if a is not None and a.status == "reserved":
-            a.status = "sold"
-        db.add(StockMovement(asset_id=l.asset_id, qty=-1, reason="sale"))
-        await db.execute(text("UPDATE reservations SET status='converted' WHERE asset_id = :i AND status='active'"), {"i": l.asset_id})
-    await audit(db, "system", entity="order", entity_id=o["id"], action="payment_succeeded", meta={"simulated": True})
+    order.paid_at = datetime.now(timezone.utc)
+    # The same two calls the webhook makes, so the dev shortcut and the real path cannot diverge.
+    await settle_lines(db, o["id"], await _order_lines(db, o["id"]))
+    await ledger.ensure_invoice(db, o["id"])
+    await audit(db, "system", entity="order", entity_id=o["id"], action="payment_succeeded",
+                meta={"simulated": True})
     try:
         await db.commit()
     except SQLAlchemyError as e:
