@@ -3,12 +3,15 @@
 Two doors carry the platform's authority rather than its stock, and both are admin/manager
 surfaces today:
 
-  * SETTINGS is the platform's own configuration - the `site_settings` row the storefront's hero
-    reads, the promotions table the shop's badges come from, the model-entry writes the CMS page
-    makes, and the one `/staff/admin/*` scaffold door. Writing any of it changes what every
-    shopper sees.
-  * PAYMENT is the money surface - the order and customer views that carry totals, payment
-    provider references and customer PII.
+  * SETTINGS is the platform's own configuration. Two halves of it: the storefront-side knobs the
+    CMS writes - the `site_settings` hero row, the promotions table the shop's badges come from,
+    the model-entry edits, and the `/staff/admin/*` scaffold - and the literal `/staff/settings`
+    API that a sibling job landed while this file was being written: the live tax rates the
+    checkout prices from, the system config document, and third-party API keys stored whole and
+    returned masked. Writing any of it changes what every shopper is charged or what the shop
+    shows.
+  * PAYMENT is the money surface: the order and customer views that carry totals, payment provider
+    references and customer PII, and the payouts ledger that reconciles bank credits against them.
 
 This file is the net under the claim that a plain staff identity cannot reach either. The claim
 is only worth as much as its weakest door, so this is a SWEEP with a live leg per door rather than
@@ -24,16 +27,22 @@ without sharing their authority, and the mission's "a Staff user" is precisely o
 Two properties make the sweep safe to run against the live dev database:
 
   * The WRITE probes cannot write even if the wall they are testing is missing. Each carries a
-    body its own validation refuses - an empty id list, an unknown promotion kind - so a door with
-    no guard answers 422 having written nothing. That also sharpens the assertion: 403 is the
-    guard running first, 422 is the guard not running at all, and the two are distinguishable.
-  * The one write that would land unconditionally is the settings PUT, so it is probed with the
-    value the door already holds: a leaked write is a no-op by construction, and there is nothing
-    to restore. Reading that snapshot is the only setup this file needs.
+    body its own validation refuses - an empty id list, an unknown promotion kind, an empty
+    tax-rate document, a non-object config patch, an API key with no secret - so a door with no
+    guard answers 422 having written nothing. That also sharpens the assertion: 403 is the guard
+    running first, 422 is the guard not running at all, and the two are distinguishable. The one
+    write that would land unconditionally is the CMS settings PUT, so it is probed with the value
+    the door already holds: a leaked write is a no-op by construction, and there is nothing to
+    restore. Reading that snapshot is the only setup this file needs.
+  * Every read probe is data-free: the ids it names are past every row and the two paged list
+    doors are asked past their last page, so a wall that failed reports itself without exposing a
+    real order, customer or credential.
 
-Everything else is read-only and data-free: the probes name ids past every row and offsets past
-every page, so a wall that failed reports itself without exposing a real order, customer or
-setting. The only rows created are this file's own identities, removed in a finally.
+Out of scope, because another suite owns it: `/staff/team` (role, status and password writes) is
+swept by `test_team_admin`, and `/staff/logistics`' shipping doors by their own tests. This file
+keeps to the two surfaces the mission names.
+
+The only rows created are this file's own identities, removed in a finally.
 """
 
 import uuid
@@ -54,6 +63,7 @@ STAFF_ROLES = ("sales", "warehouse", "technician")
 # promotion kind by its own vocabulary. The settings PUT's body is filled in at run time with the
 # value the row already holds.
 SETTINGS = (
+    # -- the storefront's configuration: the CMS writes in staff_ops --
     ("GET", "/staff/cms/home", None),
     ("PUT", "/staff/cms/home", "SNAPSHOT"),
     ("GET", "/staff/cms/promotions", None),
@@ -63,6 +73,20 @@ SETTINGS = (
     # Admin-only, stricter than the CMS pair beside it: the scaffold that proves the role gate
     # exists at all. A manager is refused here too, which is why only the admin leg is live.
     ("GET", "/staff/admin/ping", None),
+    # -- the platform's configuration: the literal Settings API in staff_settings. Reads take
+    #    admin or manager; every WRITE takes admin alone, because a tax rate is money and an API key
+    #    is a credential. A manager is refused the writes as well, which is the one place in this
+    #    file where that is true - and why the live leg stays on an admin. Nothing here is asserted
+    #    about a manager: this sweep's question is what a PLAIN staff role gets, and
+    #    test_settings_api owns the manager-vs-admin split.
+    ("GET", "/staff/settings", None),
+    ("GET", "/staff/settings/tax-rates", None),
+    ("PUT", "/staff/settings/tax-rates", {"rates": {}}),
+    ("GET", "/staff/settings/config", None),
+    ("PUT", "/staff/settings/config", {"values": []}),
+    ("GET", "/staff/settings/api-keys", None),
+    ("POST", "/staff/settings/api-keys", {"provider": "pytest"}),
+    ("DELETE", "/staff/settings/api-keys/pytest-no-such-key", None),
 )
 
 # The money surface. Both list doors are probed past the last page so the admin leg reads an empty
@@ -72,6 +96,10 @@ PAYMENTS = (
     ("GET", "/staff/orders/999999999999", None),
     ("GET", "/staff/customers", {"limit": 1, "offset": 1_000_000}),
     ("GET", "/staff/customers/999999999999", None),
+    # The reconciliation ledger: bank credits and how much of each has been explained. No paging
+    # and no id to aim past, so this one is read whole by the admin leg - an admin reading what an
+    # admin may read. The refusal is still proved by the three legs that return nothing at all.
+    ("GET", "/staff/logistics/payouts", None),
 )
 
 

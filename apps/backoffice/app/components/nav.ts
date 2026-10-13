@@ -48,11 +48,12 @@ export const GROUPS: NavGroup[] = [
   ] },
   { id: "commerce", heading: "Commerce", icon: "receipt", items: [
     { href: "/admin/orders", label: "Orders" },
-    /* Pick & Pack sits under Commerce beside Orders rather than in the logistics category: it is
-       what happens TO an order after it is paid, and an operator who has just taken money is the
-       person looking for it. The category holds the things that happen to STOCK; this is the
-       order's own next step. */
+    /* The order's own second half, in the order an operator lives it: take the money, pack and send
+       it, then watch it and reconcile what it earned. Both entries sit under Commerce rather than
+       in the inventory category because the category holds what happens to STOCK, and these two are
+       what happens to an ORDER - the heading is shared, the entries under it are this list's. */
     { href: "/admin/shipping", label: "Pick & Pack" },
+    { href: "/admin/logistics", label: "Logistics" },
     { href: "/admin/customers", label: "Customers" },
     { href: "/admin/audit", label: "Audit" },
   ] },
