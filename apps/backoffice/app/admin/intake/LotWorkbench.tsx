@@ -33,13 +33,34 @@
    other three are dimmed - see GRADE_ACTIVE/GRADE_IDLE. The bright state moves on the press rather
    than on the round trip: the request is still the only thing that writes a grade, but the operator
    grading down a list reads that chip to know where they are, and a chip that lags a request behind
-   the row above it is a chip they cannot trust. */
+   the row above it is a chip they cannot trust.
 
-import { useCallback, useRef, useState } from "react";
+   THE BUTTONS ALSO CARRY THE GUIDE. "Which grade does this unit hold" was answered; "where is the
+   line between a B and a C" was not, and that is the question a grader is holding in their head at
+   the moment they press one. Each button opens the shop's published criterion for its own grade -
+   see GradeTip.tsx, which owns both the panel and the reasoning about where it is allowed to be
+   drawn. It opens for the pointer AND for the keyboard, because the keyboard is the workflow this
+   table is built around and a hover-only guide would be missing for the operator it is written for.
+
+   THE DESCRIPTION HAS PRESETS. An upgrade note is usually two or three findings out of a short
+   vocabulary, so the cell carries them as buttons: press one and its words are appended and SAVED.
+   Saved, not staged - the field saves on blur and a tag press never focuses the field, so a tag
+   that only edited a draft would be a change with no blur coming to write it. The preset press
+   keeps the caret where it was (the field's own press is cancelled) so the two never race.
+
+   THE PAGE CAN BE ENTERED ON A UNIT. It takes `?q=` from the address, which is how the dashboard's
+   Priority Queue card opens straight onto the oldest ungraded unit of the biggest lot, and it runs
+   that search on the way in. Read off the location rather than through the framework's search-params
+   hook: this screen reads the term exactly once, on arrival, and the hook would put a Suspense
+   boundary in front of every render of the page to buy a subscription nothing here needs. */
+
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Badge, Button, Card, Heading, Input, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
+import { gradeHelpId } from "@/lib/grading";
 import { kickerClass } from "@/lib/ui";
+import { GRADE_TIP_HEIGHT, GRADE_TIP_WIDTH, GradeHelp, GradeTip } from "./GradeTip";
 
 type WorkUnit = {
   id: number;
@@ -74,9 +95,24 @@ type Worklist = {
 
 const GRADES = ["A", "B", "C", "D"] as const;
 
-/* The grade buttons sit inside the table's horizontal scroll region, which trims anything its
-   descendants paint outside its own box - so the cue is drawn INSIDE the button's edge. */
-const GRADE_FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-900";
+/* The findings a grader writes up most, in the shop's own vocabulary (see lib/grading.ts, which
+   holds the A-D criteria in the same voice). Pressing one appends its words to the description -
+   as a comma-list item, not a sentence: a unit normally carries two or three findings, and a
+   grader composing one clause per finding would spend exactly the time the preset exists to save. */
+const QUICK_TAGS = [
+  "Surface Wear",
+  "Screen Scratch",
+  "Dented Frame",
+  "Battery Health Low",
+  "Camera Lens Scuffed",
+  "Charging Port Worn",
+] as const;
+
+/* Every control that lives inside the table's scroll region - the grade buttons and the preset
+   tags - takes this focus cue. The region trims anything its descendants paint outside its own
+   box, so the cue is drawn INSIDE the control's edge; one constant rather than the same string
+   written at two call sites, which is how two cues that were meant to agree stop agreeing. */
+const CELL_FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-900";
 
 /* The two states of a grade button, as classes rather than `gradeTone`: that helper paints ONE
    colour per grade for a chip that NAMES a grade, and it paints all four of these the same, which
@@ -114,6 +150,9 @@ export default function LotWorkbench() {
      then owned by the field until it saves. Held across reloads on purpose: a save on one row must
      not throw away what is half-typed on another. */
   const [drafts, setDrafts] = useState<Record<number, string>>({});
+  /* The grading guide: which grade's panel is open and where it sits, in viewport coordinates.
+     Null is the closed state, so there is no "is it visible" flag to keep in step with the grade. */
+  const [tip, setTip] = useState<{ grade: string; x: number; y: number; above: boolean } | null>(null);
   const gradeRefs = useRef(new Map<string, HTMLButtonElement | null>());
 
   const seed = useCallback((units: WorkUnit[]) => {
@@ -123,6 +162,49 @@ export default function LotWorkbench() {
       return next;
     });
   }, []);
+
+  /* Opened on a unit. The Priority Queue card on the dashboard links here as ?q=<asset id>, so the
+     workstation can arrive ON the unit that needs grading rather than at an empty search box. Read
+     once, on arrival: a later edit of the address is not a search, and re-reading it on every render
+     would re-run the search under the operator's hands. */
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q && q.trim()) {
+      const term = q.trim();
+      setText(term);
+      void load(term);
+    }
+    // Mount only, on purpose - see above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* The guide cannot stay where it was put once the ground under it moves, and re-measuring on
+     every scroll frame would cost more than the panel is worth - so a scroll or a resize simply
+     closes it. The listener is capturing: the table's own scrolling region is a descendant, and a
+     bubble-phase listener on the window never sees a scroll that happens inside it. */
+  useEffect(() => {
+    if (!tip) return;
+    const close = () => setTip(null);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [tip]);
+
+  /* Opens the guide on the control that assigns the grade. The centre is clamped against the
+     window because the last grade button of a wide row sits close to the right edge, and the panel
+     is drawn above the button only when there is room for it up there - the first row of a lot is
+     exactly where "above" would push it off the top of the screen. */
+  function openTip(grade: string, el: HTMLElement | null) {
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const half = GRADE_TIP_WIDTH / 2;
+    const x = Math.max(half + 8, Math.min(window.innerWidth - half - 8, r.left + r.width / 2));
+    const above = r.top > GRADE_TIP_HEIGHT + 16;
+    setTip({ grade, x, y: above ? r.top - 8 : r.bottom + 8, above });
+  }
 
   async function load(term: string) {
     setBusy(true);
@@ -180,6 +262,9 @@ export default function LotWorkbench() {
     setInFlight(unit.id);
     setErr("");
     setMsg("");
+    // The guide has been read by the time the grade is pressed; it would otherwise hang over the
+    // row the operator has just moved on from.
+    setTip(null);
     const order = (list?.assets ?? []).map((a) => a.id);
     const at = order.indexOf(unit.id);
     const nextId = at >= 0 && at + 1 < order.length ? order[at + 1] : null;
@@ -215,9 +300,11 @@ export default function LotWorkbench() {
     }
   }
 
-  async function saveNotes(unit: WorkUnit) {
-    const draft = drafts[unit.id] ?? "";
-    if (draft === (unit.notes ?? "")) return;      // nothing changed: no request, no audit row
+  /* The one write the description makes, whichever control started it: the field leaving focus, or
+     a preset tag being pressed. Both send the whole note, both take the server's answer as the
+     field's new value, and both put the field back to what the server holds when the write is
+     refused rather than leaving the screen disagreeing with the database. */
+  async function writeNotes(unit: WorkUnit, next: string, done: string) {
     if (inFlight !== null) return;
     setInFlight(unit.id);
     setErr("");
@@ -226,7 +313,7 @@ export default function LotWorkbench() {
       const r = await apiFetch(`/staff/assets/${unit.id}/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: draft }),
+        body: JSON.stringify({ notes: next }),
       });
       const j: any = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -236,13 +323,37 @@ export default function LotWorkbench() {
         return;
       }
       setDrafts((prev) => ({ ...prev, [unit.id]: j.notes ?? "" }));
-      setMsg(`Description saved for asset ${unit.id}.`);
+      setMsg(done);
       await reload();
     } catch (e: any) {
       setErr(String(e?.message ?? e));
+      setDrafts((prev) => ({ ...prev, [unit.id]: unit.notes ?? "" }));
     } finally {
       setInFlight(null);
     }
+  }
+
+  async function saveNotes(unit: WorkUnit) {
+    const draft = drafts[unit.id] ?? "";
+    if (draft === (unit.notes ?? "")) return;      // nothing changed: no request, no audit row
+    await writeNotes(unit, draft, `Description saved for asset ${unit.id}.`);
+  }
+
+  /* A preset tag: the same write the field makes, only started from a button. It goes to the
+     SERVER immediately rather than waiting for a blur - the field was never focused, so there is
+     no blur coming, and a tag that edited a draft nobody would save is worse than no tag at all.
+     A word already in the note is not added twice: the press is easy to repeat and the second one
+     is nearly always a slip of the hand, not a second finding. */
+  async function appendTag(unit: WorkUnit, tag: string) {
+    const draft = drafts[unit.id] ?? "";
+    if (draft.toLowerCase().includes(tag.toLowerCase())) {
+      setErr("");
+      setMsg(`"${tag}" is already written up on asset ${unit.id}.`);
+      return;
+    }
+    const next = draft.trim() ? `${draft.trimEnd()}; ${tag}` : tag;
+    setDrafts((prev) => ({ ...prev, [unit.id]: next }));
+    await writeNotes(unit, next, `Added "${tag}" to asset ${unit.id}.`);
   }
 
   const progress = list?.progress ?? null;
@@ -344,7 +455,11 @@ export default function LotWorkbench() {
                   A grade saves on the press. A description saves when you leave the field or press
                   Enter. A unit that has not been tested is marked tested on the way through - the
                   database will not let a unit skip that step, and both steps reach the audit trail.
+                  Hover a grade button, or land on it with the keyboard, for what that grade means.
                 </p>
+                {/* The four criteria, rendered once for the page and referenced by every row's
+                    grade buttons - see GradeTip.tsx. */}
+                <GradeHelp />
                 <Table label={`Units in lot ${list.lot.lot_number}`}>
                   <THead>
                     <TH>Asset ID</TH>
@@ -397,6 +512,30 @@ export default function LotWorkbench() {
                                 "disabled:opacity-50",
                               )}
                             />
+                            {/* The presets. The press is cancelled so the field keeps the caret -
+                                otherwise the field would blur first and save itself a moment before
+                                the tag was appended to it. */}
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              {QUICK_TAGS.map((tag) => (
+                                <button
+                                  key={tag}
+                                  type="button"
+                                  disabled={inFlight !== null}
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => appendTag(u, tag)}
+                                  aria-label={`Add "${tag}" to the upgrade description for asset ${u.id}`}
+                                  className={cn(
+                                    "rounded-control bg-surface-sunken px-2 py-0.5 text-xs text-ink-500 ring-1 ring-line",
+                                    "transition duration-fast ease-out motion-reduce:transition-none",
+                                    "hover:bg-brand-700 hover:text-white",
+                                    "disabled:opacity-40 disabled:pointer-events-none",
+                                    CELL_FOCUS,
+                                  )}
+                                >
+                                  {tag}
+                                </button>
+                              ))}
+                            </div>
                           </TD>
                           <TD>
                             {u.gradable ? (
@@ -408,17 +547,25 @@ export default function LotWorkbench() {
                                     ref={(el) => { gradeRefs.current.set(`${u.id}:${g}`, el); }}
                                     disabled={inFlight !== null}
                                     onClick={() => quickGrade(u, g)}
+                                    onMouseEnter={(e) => openTip(g, e.currentTarget)}
+                                    onMouseLeave={() => setTip(null)}
+                                    onFocus={(e) => openTip(g, e.currentTarget)}
+                                    onBlur={() => setTip(null)}
                                     onKeyDown={(e) => {
                                       if (e.key === "ArrowDown") { e.preventDefault(); moveFocus(u.id, g, 1); }
                                       if (e.key === "ArrowUp") { e.preventDefault(); moveFocus(u.id, g, -1); }
+                                      if (e.key === "Escape") setTip(null);
                                     }}
                                     aria-label={`Grade asset ${u.id} as ${g}`}
                                     aria-pressed={u.grade === g}
+                                    // The criteria belong to the grade, not to the row: every A
+                                    // button on the page points at the one description of an A.
+                                    aria-describedby={gradeHelpId(g)}
                                     className={cn(
                                       "h-7 w-7 rounded-control text-xs font-semibold",
                                       "transition duration-fast ease-out motion-reduce:transition-none",
                                       "disabled:opacity-40 disabled:pointer-events-none",
-                                      GRADE_FOCUS,
+                                      CELL_FOCUS,
                                       u.grade === g ? GRADE_ACTIVE : GRADE_IDLE,
                                     )}
                                   >
@@ -447,6 +594,9 @@ export default function LotWorkbench() {
           </Card>
         </>
       )}
+
+      {/* Outside every panel and every scrolling region, so nothing can trim it - see GradeTip.tsx. */}
+      {tip && <GradeTip grade={tip.grade} x={tip.x} y={tip.y} above={tip.above} />}
     </div>
   );
 }

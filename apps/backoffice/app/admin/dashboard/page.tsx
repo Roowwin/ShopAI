@@ -8,6 +8,7 @@ import { aud } from "@/lib/format";
 import { NOTICE_TONE } from "@/app/components/dashboard/tokens";
 import { GradeBars, Sparkline, StatusDonut, type Slice } from "@/app/components/dashboard/charts";
 import AttentionFeed, { type FeedItem } from "./attention";
+import NextAssetCard from "./NextAssetCard";
 import KpiTile from "@/app/components/dashboard/KpiTile";
 import PipelineMap, { lifecycleStages, stuckNote } from "@/app/components/dashboard/PipelineMap";
 
@@ -22,7 +23,13 @@ import PipelineMap, { lifecycleStages, stuckNote } from "@/app/components/dashbo
    `dashboard` block, added to that same endpoint rather than to a new route.
 
    Read-only by construction, like the home page it sits beside: nothing here writes, and every
-   count links out to the workbench page that owns the fix. */
+   count links out to the workbench page that owns the fix.
+
+   ONE EXCEPTION, AND IT IS BUILT NOT TO COUNT AS ONE. The Priority Queue card - the biggest lot
+   still waiting on a grade, and the oldest ungraded unit inside it - needs a search the overview
+   payload does not carry, so it is its own client component with its own reads, mounted BELOW the
+   payload. It is not part of this page's round trip and cannot delay or damage it: the KPI row
+   paints from the overview whether that walk is slow, empty, refused or still going. */
 
 type Overview = {
   inventory: { by_status: Record<string, number>; total_units: number };
@@ -141,6 +148,10 @@ export default function DashboardPage() {
             </KpiTile>
             <KpiTile label="Stuck assets" value={d.stuck_assets.count} sub="received/tested over 7 days" />
           </section>
+
+          {/* Under the numbers, because the numbers are what the page is: this is the one card
+              that tells the operator what to DO, and it makes its own reads. */}
+          <NextAssetCard />
 
           <Card className="p-4">
             <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
