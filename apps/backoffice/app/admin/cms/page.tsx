@@ -19,8 +19,11 @@
       that says so and puts the control back, because an auto-save that silently does nothing is
       worse than a Save button that fails loudly.
 
-   THE HERO IS A SPLIT VIEW: the editor on the left, and the storefront's own hero and deal card on
-   the right (HeroPreview), redrawn from the draft on every keystroke. */
+   THE HOMEPAGE CARD EDITS THE DEAL, and nothing else. It used to be a split view - the hero's
+   headline, sub-heading and button label on the left, the shop's own hero and deal card on the
+   right - but the storefront no longer renders a hero, so both halves described something that
+   could not appear. The three copy fields still travel in the saved payload (see hero.ts); they
+   are simply no longer offered for editing. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -28,7 +31,7 @@ import { Button, Card, Heading, Input, Select, Switch, cn } from "@/app/componen
 import { apiFetch } from "@/lib/api";
 import { requireRole, useMe } from "@/lib/session";
 import { kickerClass } from "@/lib/ui";
-import HeroPreview, { HOME_DEFAULTS, heroAsPublished, type Hero } from "./HeroPreview";
+import { HOME_DEFAULTS, heroAsPublished, type Hero } from "./hero";
 import MediaTray, { type GalleryItem } from "./MediaTray";
 import Photo from "./Photo";
 import { SITE, storefrontPage, modelName, groupModels, type CProd, type Model } from "./site";
@@ -267,11 +270,10 @@ export default function CmsPage() {
 
   /* --------------------------------------------------------------- draw */
 
-  const dealProduct = hero.deal_of_month?.product_slug ? bySlug.get(hero.deal_of_month.product_slug) : undefined;
-  const previewDeal = hero.deal_of_month
-    ? { slug: hero.deal_of_month.product_slug, address: dealProduct?.image_url ?? null,
-        price: dealProduct?.price_from_cents ?? null, live: (dealProduct?.live_units ?? 0) > 0 }
-    : null;
+  /* `dealProduct` and `previewDeal` were built for the hero preview: it drew the deal card with
+     the model's photo and said so when the product had no listed unit. Both are gone with it - and
+     nothing is lost, because the select's own option groups already say which products are ready
+     to sell and which the shop would hold back. */
   const knownSlug = !hero.deal_of_month || prods.length === 0 || bySlug.has(hero.deal_of_month.product_slug);
 
   /* The gates above stop the data loads, but this page still RENDERS the whole form - so without
@@ -299,73 +301,64 @@ export default function CmsPage() {
 
       {msg && (<div className="rounded-control bg-accent-100 text-accent-700 px-3 py-2 mb-3 text-sm">{msg}</div>)}
 
-      {/* ------------------------------------------------ homepage hero */}
+      {/* -------------------------------------------------------- homepage */}
       <Card className="p-4 mb-4">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-          <Heading level="h3" as="h2">Homepage hero</Heading>
+          <Heading level="h3" as="h2">Homepage</Heading>
           <span className={cn(kickerClass, "text-ink-500")}>
             {heroSave === "saving" ? "saving..." : heroSave === "saved" ? "saved" :
              heroSave === "error" ? "not saved" : "saves as you type"}
           </span>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div>
-            <label htmlFor="cms-hero-title" className={cn(kickerClass, "block pb-1")}>Headline</label>
-            <Input id="cms-hero-title" className="mb-3" placeholder={HOME_DEFAULTS.hero_title}
-                   value={hero.hero_title}
-                   onChange={(e) => patchHero({ hero_title: e.target.value })} />
+        {/* THE HERO EDITOR AND ITS PREVIEW ARE GONE. This card used to be a split view: the
+            headline, sub-heading and button label on the left, the shop's own hero and deal card
+            redrawn on the right. The storefront no longer renders a hero, so those three fields
+            edited copy that could not appear anywhere and the picture showed something that could
+            not exist.
 
-            <label htmlFor="cms-hero-sub" className={cn(kickerClass, "block pb-1")}>Sub-heading</label>
-            <Input id="cms-hero-sub" className="mb-3" placeholder={HOME_DEFAULTS.hero_sub}
-                   value={hero.hero_sub}
-                   onChange={(e) => patchHero({ hero_sub: e.target.value })} />
-
-            <label htmlFor="cms-hero-cta" className={cn(kickerClass, "block pb-1")}>Button label</label>
-            <Input id="cms-hero-cta" className="mb-3" placeholder={HOME_DEFAULTS.cta_label}
-                   value={hero.cta_label}
-                   onChange={(e) => patchHero({ cta_label: e.target.value })} />
-
-            <label htmlFor="cms-hero-deal" className={cn(kickerClass, "block pb-1")}>Deal of the month</label>
-            <Select id="cms-hero-deal" className="w-full"
-                    value={hero.deal_of_month?.product_slug ?? ""}
-                    onChange={(e) => setDeal(e.target.value)}>
-              <option value="">No deal - the section is off</option>
-              {hero.deal_of_month && !knownSlug && (
-                <option value={hero.deal_of_month.product_slug}>
-                  {hero.deal_of_month.product_slug} (not in the catalogue)
-                </option>
-              )}
-              {readyDeals.length > 0 && (
-                <optgroup label="Ready to sell">
-                  {readyDeals.map((p) => (
-                    <option key={p.id} value={p.slug}>{p.title}</option>
-                  ))}
-                </optgroup>
-              )}
-              {restDeals.length > 0 && (
-                <optgroup label="No unit listed yet - the shop would hold this back">
-                  {restDeals.map((p) => (
-                    <option key={p.id} value={p.slug}>{p.title}</option>
-                  ))}
-                </optgroup>
-              )}
-            </Select>
-
-            {hero.deal_of_month && (
-              <>
-                <label htmlFor="cms-hero-badge" className={cn(kickerClass, "mt-3 block pb-1")}>Deal badge</label>
-                <Input id="cms-hero-badge" placeholder="Deal of the Month"
-                       value={hero.deal_of_month.badge}
-                       onChange={(e) => {
-                         const d = hero.deal_of_month;
-                         if (d) { patchHero({ deal_of_month: { ...d, badge: e.target.value } }); }
-                       }} />
-              </>
+            The fields themselves are NOT removed from the payload - they share an object with
+            `deal_of_month`, which is what this card now exists to edit, and the whole object is
+            what PUT /staff/cms/home receives. They are loaded and written back untouched, so a save
+            here cannot blank what a hero would need if one came back. See hero.ts. */}
+        <div className="max-w-xl">
+          <label htmlFor="cms-hero-deal" className={cn(kickerClass, "block pb-1")}>Deal of the month</label>
+          <Select id="cms-hero-deal" className="w-full"
+                  value={hero.deal_of_month?.product_slug ?? ""}
+                  onChange={(e) => setDeal(e.target.value)}>
+            <option value="">No deal - the section is off</option>
+            {hero.deal_of_month && !knownSlug && (
+              <option value={hero.deal_of_month.product_slug}>
+                {hero.deal_of_month.product_slug} (not in the catalogue)
+              </option>
             )}
-          </div>
+            {readyDeals.length > 0 && (
+              <optgroup label="Ready to sell">
+                {readyDeals.map((p) => (
+                  <option key={p.id} value={p.slug}>{p.title}</option>
+                ))}
+              </optgroup>
+            )}
+            {restDeals.length > 0 && (
+              <optgroup label="No unit listed yet - the shop would hold this back">
+                {restDeals.map((p) => (
+                  <option key={p.id} value={p.slug}>{p.title}</option>
+                ))}
+              </optgroup>
+            )}
+          </Select>
 
-          <HeroPreview hero={hero} deal={previewDeal} promoActive={promos.some((p) => p.active)} />
+          {hero.deal_of_month && (
+            <>
+              <label htmlFor="cms-hero-badge" className={cn(kickerClass, "mt-3 block pb-1")}>Deal badge</label>
+              <Input id="cms-hero-badge" placeholder="Deal of the Month"
+                     value={hero.deal_of_month.badge}
+                     onChange={(e) => {
+                       const d = hero.deal_of_month;
+                       if (d) { patchHero({ deal_of_month: { ...d, badge: e.target.value } }); }
+                     }} />
+            </>
+          )}
         </div>
       </Card>
 
