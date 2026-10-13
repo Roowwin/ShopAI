@@ -87,6 +87,10 @@ export default function Header() {
             links={[{ href: "/", label: "Shop" }, ...cats.map(catLink)]} />
           <a href="/faq" className={cn("inline-flex items-center min-h-[44px] px-3 text-sm", navLinkClass)}>FAQ</a>
           <a href="/assistant" className={cn("inline-flex items-center min-h-[44px] px-3 text-sm", navLinkClass)}>Ask AI</a>
+          {/* The way into the account, and the only one: it is where a shopper finds the orders they
+              have placed, and the confirmation links themselves are unguessable so they are not a
+              navigable destination. */}
+          <a href="/account" className={cn("inline-flex items-center min-h-[44px] px-3 text-sm", navLinkClass)}>Account</a>
         </div>
         <div className="relative flex-1 min-w-0 max-w-xl mx-auto">
           <Input tone="sunken"
@@ -168,6 +172,7 @@ export default function Header() {
           })}
           <a href="/faq" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>FAQ</a>
           <a href="/assistant" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>Ask AI</a>
+          <a href="/account" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>Account</a>
         </nav>
       )}
     </header>
