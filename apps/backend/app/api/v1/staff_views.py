@@ -386,3 +386,132 @@ async def get_asset_image(asset_id: int, image_id: int,
     return Response(content=bytes(row["bytes"]), media_type=row["content_type"],
                     headers={"X-Content-Type-Options": "nosniff",
                              "Cache-Control": "private, max-age=300"})
+
+
+@router.get("/products/{product_id}")
+async def get_product(product_id: int, staff: dict = Depends(require_roles(*READ_ROLES)),
+                      db=Depends(get_db)):
+    """The PARENT product and EVERY one of its children - the read that did not exist before.
+
+    `GET /catalog/{slug}` (`store_catalog.py`) is the shopper's view of the same product, and it is
+    deliberately narrower: its `units` are filtered to `status = 'listed'` rows on an ACTIVE lot,
+    because a shelf shows what can be bought today. That makes it useless for the question this
+    route answers - "what is behind this model?" - which has to include a unit still on the intake
+    dock, one graded but unpriced, one already sold, and the ones in a lot nobody has released yet.
+    So there is NO status filter here and no lot-status filter either; the only predicate is the
+    parent link. Every child arrives with the status, grade, prices, location and lot a person
+    needs to see why it is where it is, plus a per-status count so a caller does not have to
+    re-tally the list to label it.
+
+    The media list is the parent's photo set, primary first. Both kinds of row are here - a
+    byte-backed one carries `media_row_id` for the raw door below, a url-backed one carries the
+    `storage_key` the catalog has always held. `image_url` is ALSO returned, unchanged: it is what
+    the storefront renders today, and this route does not pretend the storefront reads the set yet.
+
+    A read wall, strict as the rest of this module: admin or manager, nothing weaker. It returns
+    full serial numbers, exactly as `GET /staff/assets/{id}` above already does - the wall is what
+    keeps them off a shop floor, not redaction inside it.
+    """
+    p = (await db.execute(text("""
+        SELECT p.id, p.public_id::text AS public_id, p.slug, p.title, p.model, p.description,
+               p.specs, p.status, p.image_url, p.featured, p.created_at, p.updated_at,
+               b.name AS brand, c.name AS category
+        FROM products p
+        JOIN brands b ON b.id = p.brand_id
+        JOIN categories c ON c.id = p.category_id
+        WHERE p.id = :i
+    """), {"i": product_id})).mappings().first()
+    if p is None:
+        raise HTTPException(status_code=404, detail="product not found")
+
+    # No `bytes` in this payload - a 4 MB photo base64'd into a list would be most of the response.
+    # The byte-backed rows are fetched one at a time from the raw door, exactly like the asset hub.
+    media = (await db.execute(text("""
+        SELECT pm.id, pm.kind, pm.position, pm.is_primary, pm.alt_text, pm.storage_key,
+               pm.media_id, pm.created_at, mo.public_id::text AS media_public_id,
+               mo.filename, mo.content_type, mo.byte_size
+        FROM product_media pm
+        LEFT JOIN media_objects mo ON mo.id = pm.media_id
+        WHERE pm.product_id = :i
+        ORDER BY pm.is_primary DESC, pm.position, pm.id
+    """), {"i": product_id})).mappings().all()
+
+    assets = (await db.execute(text("""
+        SELECT a.id, a.public_id::text AS public_id, a.serial_number::text AS serial_number,
+               a.imei, a.status, a.grade, a.cost_cents, a.sale_price_cents, a.intake_at,
+               a.location, a.lot_id, l.lot_number, l.status AS lot_status
+        FROM assets a
+        JOIN lots l ON l.id = a.lot_id
+        WHERE a.product_id = :i
+        ORDER BY a.id
+    """), {"i": product_id})).mappings().all()
+
+    # Counted here rather than left to the caller: the list is unordered by status and a page
+    # labels its tabs from these numbers, which should come from the same rows it renders.
+    status_counts: dict[str, int] = {}
+    for a in assets:
+        status_counts[a["status"]] = status_counts.get(a["status"], 0) + 1
+
+    return {
+        "product": {
+            "id": p["id"], "public_id": p["public_id"], "slug": p["slug"], "title": p["title"],
+            "model": p["model"], "brand": p["brand"], "category": p["category"],
+            "description": p["description"], "specs": p["specs"], "status": p["status"],
+            "image_url": p["image_url"], "featured": bool(p["featured"]),
+            "created_at": _iso(p["created_at"]), "updated_at": _iso(p["updated_at"]),
+        },
+        "media": [{
+            "media_row_id": m["id"], "kind": m["kind"], "position": m["position"],
+            "is_primary": bool(m["is_primary"]), "alt_text": m["alt_text"],
+            "created_at": _iso(m["created_at"]),
+            # Exactly one of these two is the photo's address, mirroring the table's own CHECK.
+            "storage_key": m["storage_key"],
+            "media_id": m["media_id"], "media_public_id": m["media_public_id"],
+            "filename": m["filename"], "content_type": m["content_type"],
+            "byte_size": (int(m["byte_size"]) if m["byte_size"] is not None else None),
+            "raw_path": (f"/staff/products/{product_id}/media/{m['id']}/raw"
+                         if m["media_id"] is not None else None),
+        } for m in media],
+        "assets": [{
+            "id": a["id"], "public_id": a["public_id"], "serial_number": a["serial_number"],
+            "imei": a["imei"], "status": a["status"], "grade": a["grade"],
+            "cost_cents": (int(a["cost_cents"]) if a["cost_cents"] is not None else None),
+            "sale_price_cents": (int(a["sale_price_cents"])
+                                 if a["sale_price_cents"] is not None else None),
+            "location": a["location"], "intake_at": _iso(a["intake_at"]),
+            "lot_id": a["lot_id"], "lot_number": a["lot_number"], "lot_status": a["lot_status"],
+        } for a in assets],
+        "asset_count": len(assets),
+        "status_counts": status_counts,
+    }
+
+
+@router.get("/products/{product_id}/media/{media_row_id}/raw")
+async def get_product_media(product_id: int, media_row_id: int,
+                            staff: dict = Depends(require_roles(*READ_ROLES)),
+                            db=Depends(get_db)):
+    """The bytes of one stock photo, addressed by its product_media row AND its product.
+
+    Served through the API rather than as a bucket URL for the reason the asset hub is: the staff
+    token is a bearer header no `<img src>` can carry, so the page fetches through the same
+    authenticated door as the page itself.
+
+    A URL-BACKED row has no bytes to serve - its `storage_key` IS the address, an external one the
+    catalog has always held - and that is a 409 with a reason rather than an empty 200 or a 404,
+    because "this photo lives somewhere else" and "this photo does not exist" are different
+    answers and a caller has to be able to tell them apart.
+    """
+    row = (await db.execute(text("""
+        SELECT pm.storage_key, mo.content_type, mo.bytes
+        FROM product_media pm
+        LEFT JOIN media_objects mo ON mo.id = pm.media_id
+        WHERE pm.id = :r AND pm.product_id = :p
+    """), {"r": media_row_id, "p": product_id})).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="media not found on that product")
+    if row["bytes"] is None:
+        raise HTTPException(status_code=409,
+                            detail="this stock photo is url-backed; fetch its storage_key")
+    return Response(content=bytes(row["bytes"]), media_type=row["content_type"],
+                    headers={"X-Content-Type-Options": "nosniff",
+                             "Cache-Control": "private, max-age=300"})
