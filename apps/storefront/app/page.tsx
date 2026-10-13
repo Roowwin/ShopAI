@@ -43,7 +43,23 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
           that is a screen-reader problem rather than a visual one, which is why this one is
           `sr-only`. The first visible heading below is "New arrivals". */}
       <h1 className="sr-only">RFO Store - certified refurbished devices</h1>
+      {/* THE CATALOGUE LEADS. It used to be the last section on the page, under New arrivals and
+          the best sellers, with the filter bar at the very bottom - so the shop's actual controls
+          sat below three shelves, and a filter pick changed a grid the shopper had to scroll back
+          to. The bar and the grid it drives are now the first thing under the header, and the
+          curated shelves follow.
+
+          The heading stays ABOVE the bar rather than under it: the toolbar's negative margins exist
+          to line its first trigger up with the heading above it (see LoadMore), so the two are a
+          pair and the order inside this section is not free. */}
+      <section id="shop" className="max-w-6xl mx-auto px-4 pt-16 pb-20">
+        <Heading level="h2">Our products</Heading>
+        <LoadMore initial={catalog.items ?? []} applied={catalog.applied ?? filters}
+          brands={catalog.brands ?? []} categories={cats} />
+      </section>
+
       <DealOfMonth deal={hero.deal_of_month} />
+
       <section className="max-w-6xl mx-auto px-4 pt-16">
         <div className="flex items-end justify-between"><Heading level="h2">New arrivals</Heading><a href="/" className={cn("text-xs", linkClass)}>View all</a></div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-6">
@@ -54,7 +70,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
         </div>
       </section>
       {best.length > 0 && (
-      <section className="max-w-6xl mx-auto px-4 pt-14">
+      <section className="max-w-6xl mx-auto px-4 pt-14 pb-20">
         <Heading level="h2">Best sellers</Heading>
         <p className="text-xs text-ink-400 mt-2">Most purchased by real customers (paid orders).</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-6">
@@ -64,15 +80,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
           ))}
         </div>
       </section>)}
-
-      {/* pt-12, not pt-16: the gap above "Our products" closes onto the best-sellers grid, which is
-          the pairing a shopper reads as one shelf ("everything else"), while the gaps between the
-          page's other sections keep their own rhythm. 48px against the 64px it was. */}
-      <section id="shop" className="max-w-6xl mx-auto px-4 pt-12 pb-20">
-        <Heading level="h2">Our products</Heading>
-        <LoadMore initial={catalog.items ?? []} applied={catalog.applied ?? filters}
-          brands={catalog.brands ?? []} categories={cats} />
-      </section>
     </main>
   );
 }
