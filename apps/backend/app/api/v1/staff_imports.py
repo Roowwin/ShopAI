@@ -607,12 +607,12 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
             flag("price", "status is listed but there is no resale price - the shop cannot list a unit with no price")
         if status == "listed" and grade is None and not grade_err:
             flag("grade", "status is listed but there is no grade - the shop cannot list an ungraded unit")
-        # MARGIN GUARD (importer layer). A row priced below its cost is blocked, and because the
+        # MARGIN GUARD (importer layer). A row priced below its cost basis is blocked, and because the
         # import is all-or-nothing the whole FILE is then refused: a sheet that would put loss-makers
-        # on the shelf is one to correct, not one to import around. The staff doors and the
-        # storefront apply the same rule (services/margin), so a row refused here could not have been
-        # rescued by pricing or listing it by hand afterwards either.
-        margin_issue = margin_refusal(price, cost)
+        # on the shelf is one to correct, not one to import around. The basis is the same
+        # COALESCE(cost, settlement) the storefront floor and the staff doors use (services/margin),
+        # so a row refused here is exactly the row the shop would refuse to publish.
+        margin_issue = margin_refusal(price, cost, settlement)
         if margin_issue:
             flag("price", margin_issue)
 

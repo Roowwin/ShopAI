@@ -385,7 +385,7 @@ async def set_status(asset_id: int, body: StatusIn, staff: dict = Depends(requir
     # a loss-maker is stopped: the shop hides one anyway (store_catalog), but a unit that can never
     # be sold at a profit must not be walked into `listed` in the first place.
     if body.status == "listed":
-        refusal = margin_refusal(asset.sale_price_cents, asset.cost_cents)
+        refusal = margin_refusal(asset.sale_price_cents, asset.cost_cents, asset.settlement_cents)
         if refusal:
             raise HTTPException(status_code=422, detail=refusal)
     before = {"status": asset.status}
@@ -630,7 +630,7 @@ async def set_price(asset_id: int, body: PriceIn, staff: dict = Depends(require_
     # MARGIN GUARD (staff layer). A price below the unit's known cost is refused here rather than
     # stored and hidden later, so the operator learns at the moment of pricing - and the storefront
     # filter (store_catalog) is the belt to this brace, not the only check.
-    refusal = margin_refusal(body.sale_price_cents, asset.cost_cents)
+    refusal = margin_refusal(body.sale_price_cents, asset.cost_cents, asset.settlement_cents)
     if refusal:
         raise HTTPException(status_code=422, detail=refusal)
     before = {"sale_price_cents": asset.sale_price_cents}

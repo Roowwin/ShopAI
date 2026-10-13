@@ -4,20 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 
 from app.core.db import get_db
-from app.services.margin import PUBLISHABLE_SQL
+# The margin floor's SQL predicate. It lives with the rest of the margin rule
+# (services/margin) rather than here, because the importer, the staff pricing/listing doors and the
+# checkout all enforce the same rule in Python, and a second definition of it is a second thing to
+# keep true. Splicing it from one place is what makes the guard that admits a unit to `listed` and
+# the guard that publishes it here incapable of disagreeing.
+from app.services.margin import ON_SALE
 
 router = APIRouter(prefix="/store", tags=["store-catalog"])
-
-# ---------------------------------------------------------------------------
-# THE MARGIN GUARD, AS A CONSTANT. A unit priced below its cost is not for sale, so every storefront
-# query that counts or prices LISTED units carries `%MARGIN%`. It is a business rule rather than a
-# shopper filter - it does not vary with the request and is expanded into the statement UNCONDITIONALLY
-# - but it hangs off the assets join like the unit filters do, because it narrows which UNITS count:
-# a product whose only listed units are loss-makers drops out of the list, and a brand whose only
-# units are loss-makers drops off the facet, for exactly the reason the grade filter does. It is
-# expanded from `services/margin.py` so the shop and the checkout enforce the same rule, and it is
-# stated on the ALLOW side so a unit with no cost on record stays in the shop.
-# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # The catalog list, and the filters the storefront's chip rows are built from.
@@ -35,6 +29,22 @@ router = APIRouter(prefix="/store", tags=["store-catalog"])
 # stay in the WHERE.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# THE MARGIN FLOOR - the shop must not offer a unit priced below what it cost.
+#
+# Selling under cost loses money on every order, and the loss is invisible on a product page that
+# shows only the price. So the predicate is part of "which units are the shopper's" and rides on the
+# ASSETS JOIN, exactly like the grade and price-band filters and for the reason stated above: the
+# joined set IS the sellable stock, so `units_available` and `price_from_cents` describe only that,
+# and HAVING count(a.id) > 0 then takes a product whose every listed unit is under water off the
+# catalogue entirely rather than showing it with a count of none. An absent cost publishes - see
+# `services/margin`, which owns the rule, its cost basis and the three other layers that enforce it.
+#
+# `ON_SALE` is spliced into each statement's CONSTANT (not a new placeholder) so the unfiltered
+# statement remains byte-for-byte what it always was, which is what the catalog query's own test
+# asserts.
+# ---------------------------------------------------------------------------
+
 CATALOG_SELECT = """SELECT p.id, p.public_id::text AS public_id, p.slug, p.title, p.model,
        b.name AS brand, c.name AS category, p.specs, p.image_url, p.featured,
        count(a.id) AS units_available,
@@ -43,8 +53,8 @@ FROM products p
 JOIN brands b ON b.id = p.brand_id
 JOIN categories c ON c.id = p.category_id
 LEFT JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
-                  AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
-                  AND %MARGIN%%UNIT%
+                  AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')""" \
+    + ON_SALE + """%UNIT%
 WHERE p.status = 'active' %CAT%
 GROUP BY p.id, p.public_id, p.slug, p.title, p.model, b.name, c.name, p.specs, p.image_url, p.featured
 HAVING count(a.id) > 0
@@ -79,8 +89,8 @@ FROM brands b
 JOIN products p ON p.brand_id = b.id
 JOIN categories c ON c.id = p.category_id
 JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
-             AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
-             AND %MARGIN%%UNIT%
+             AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')""" \
+    + ON_SALE + """%UNIT%
 WHERE p.status = 'active' %CAT%
 GROUP BY b.slug, b.name
 HAVING count(DISTINCT a.id) > 0
@@ -125,7 +135,6 @@ def _brand_facet_sql(category: str | None, q: str | None, grade: str | None,
     endpoint has always run for the facet, character for character.
     """
     return (CATALOG_BRANDS.replace("%CAT%", " ".join(_product_clauses(category, None, q)))
-            .replace("%MARGIN%", PUBLISHABLE_SQL)
             .replace("%UNIT%", _unit_clauses(grade, min_cents, max_cents)))
 
 
@@ -165,8 +174,7 @@ def _catalog_sql(category: str | None, brand: str | None, grade: str | None,
     """
     where = _product_clauses(category, brand, q)
     unit = _unit_clauses(grade, min_cents, max_cents)
-    return (CATALOG_SELECT.replace("%CAT%", " ".join(where)).replace("%MARGIN%", PUBLISHABLE_SQL)
-            .replace("%UNIT%", unit)
+    return (CATALOG_SELECT.replace("%CAT%", " ".join(where)).replace("%UNIT%", unit)
             .replace(CATALOG_SORTS["featured"], CATALOG_SORTS.get(sort, CATALOG_SORTS["featured"])))
 
 
@@ -248,13 +256,12 @@ async def catalog_item(slug: str, db=Depends(get_db)):
     """), {"s": slug})).mappings().first()
     if row is None:
         raise HTTPException(status_code=404, detail="product not found")
-    units = (await db.execute(text(f"""
+    units = (await db.execute(text("""
         SELECT a.id, a.public_id::text AS public_id, a.grade, a.sale_price_cents,
                right(a.serial_number, 4) AS serial_tail
         FROM assets a JOIN lots l ON l.id = a.lot_id
         WHERE a.product_id = :p AND a.status = 'listed' AND l.status = 'active'
-              AND {PUBLISHABLE_SQL}
-        ORDER BY a.sale_price_cents
+        """ + ON_SALE + """ORDER BY a.sale_price_cents
     """), {"p": row["id"]})).mappings().all()
     return {"id": row["id"], "public_id": row["public_id"], "slug": row["slug"], "title": row["title"],
             "model": row["model"], "description": row["description"], "specs": row["specs"],
@@ -266,14 +273,14 @@ async def catalog_item(slug: str, db=Depends(get_db)):
 
 @router.get("/search")
 async def search(q: str = Query(min_length=2), limit: int = Query(24, le=100), offset: int = 0, db=Depends(get_db)):
-    rows = (await db.execute(text(f"""
+    rows = (await db.execute(text("""
         SELECT p.id, p.slug, p.title, p.model, b.name AS brand,
                count(a.id) AS units_available, min(a.sale_price_cents) AS price_from_cents
         FROM products p
         JOIN brands b ON b.id = p.brand_id
         LEFT JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
                           AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
-                          AND {PUBLISHABLE_SQL}
+                          """ + ON_SALE + """
         WHERE p.status = 'active' AND p.search_vec @@ websearch_to_tsquery('english', :q)
         GROUP BY p.id, p.slug, p.title, p.model, b.name
         ORDER BY p.title LIMIT :lim OFFSET :off
@@ -321,12 +328,15 @@ async def home_content(db=Depends(get_db)):
                 # INNER JOIN on purpose: the deal card may only publish when the product has at
                 # least one listed asset in an active lot. A LEFT JOIN would still return the
                 # product row (null price) for a stockless product and publish an empty card.
-                prod = (await db.execute(text(f"""
+                # The margin floor rides in the same join, so a pinned product that has become a
+                # loss-maker takes its card off the home page in exactly the same way - the pin is
+                # a wish, and this join is what decides whether the shop can honour it.
+                prod = (await db.execute(text("""
                     SELECT p.title, p.image_url, min(a.sale_price_cents) AS price_from_cents
                     FROM products p
                     JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
                                  AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
-                                 AND {PUBLISHABLE_SQL}
+                                 """ + ON_SALE + """
                     WHERE p.slug = :s AND p.status = 'active'
                     GROUP BY p.title, p.image_url
                 """), {"s": slug})).mappings().first()
@@ -344,7 +354,7 @@ async def home_content(db=Depends(get_db)):
 
 @router.get("/best-sellers")
 async def best_sellers(limit: int = Query(4, le=12), db=Depends(get_db)):
-    rows = (await db.execute(text(f"""
+    rows = (await db.execute(text("""
         SELECT p.id, p.slug, p.title, p.model, b.name AS brand,
                sum(ol.qty) AS sold, min(a.sale_price_cents) AS price_from_cents
         FROM order_lines ol
@@ -353,7 +363,7 @@ async def best_sellers(limit: int = Query(4, le=12), db=Depends(get_db)):
         JOIN brands b ON b.id = p.brand_id
         LEFT JOIN assets a ON a.product_id = p.id AND a.status = 'listed' AND
                EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
-               AND {PUBLISHABLE_SQL}
+               """ + ON_SALE + """
         WHERE ol.product_id IS NOT NULL
         GROUP BY p.id, p.slug, p.title, p.model, b.name
         ORDER BY sold DESC

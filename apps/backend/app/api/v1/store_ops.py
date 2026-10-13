@@ -37,13 +37,15 @@ def _tax_cents(subtotal: int, rate_bp: int) -> int:
     return (subtotal * rate_bp + 5000) // 10000   # half-up to the cent
 
 
-def _margin_409(asset_id: int, sale_price_cents: int | None, cost_cents: int | None) -> None:
+def _margin_409(asset_id: int, sale_price_cents: int | None, cost_cents: int | None,
+                settlement_cents: int | None = None) -> None:
     """Refuse the storefront half of the margin guard.
 
     The shop already hides a loss-maker (see store_catalog), so this is the belt to that brace: a
-    crafted POST that names the id directly must not buy a unit the shop would not display.
+    crafted POST that names the id directly must not buy a unit the shop would not display. Same
+    rule, same cost basis (services/margin), as the shop's own floor.
     """
-    if is_loss_maker(sale_price_cents, cost_cents):
+    if is_loss_maker(sale_price_cents, cost_cents, settlement_cents):
         raise HTTPException(status_code=409,
                             detail=f"unit {asset_id} is priced below its cost and is not for sale")
 
@@ -76,13 +78,13 @@ class ReserveIn(BaseModel):
 
 @router.post("/reservations", status_code=201)
 async def reserve(body: ReserveIn, db=Depends(get_db)):
-    row = (await db.execute(text("SELECT a.id, a.status, a.sale_price_cents, a.cost_cents FROM assets a JOIN lots l ON l.id = a.lot_id WHERE a.id = :i AND l.status = 'active' FOR UPDATE OF a SKIP LOCKED"),
+    row = (await db.execute(text("SELECT a.id, a.status, a.sale_price_cents, a.cost_cents, a.settlement_cents FROM assets a JOIN lots l ON l.id = a.lot_id WHERE a.id = :i AND l.status = 'active' FOR UPDATE OF a SKIP LOCKED"),
                             {"i": body.asset_id})).first()
     if row is None:
         raise HTTPException(status_code=409, detail="unit not available (locked, sold, or lot not active)")
     if row.status != "listed":
         raise HTTPException(status_code=409, detail=f"unit not available (status {row.status})")
-    _margin_409(row.id, row.sale_price_cents, row.cost_cents)
+    _margin_409(row.id, row.sale_price_cents, row.cost_cents, row.settlement_cents)
     a = await db.get(Asset, row.id)
     exp = datetime.now(timezone.utc) + timedelta(minutes=body.hold_minutes)
     r = Reservation(asset_id=row.id, status="active", expires_at=exp)
@@ -132,7 +134,7 @@ async def checkout(body: CheckoutIn, customer: dict | None = Depends(_opt_custom
     sub = 0
     locked = []
     for aid in ids:
-        row = (await db.execute(text("SELECT a.id, a.status, a.sale_price_cents, a.cost_cents FROM assets a JOIN lots l ON l.id = a.lot_id WHERE a.id = :i AND l.status = 'active' FOR UPDATE OF a SKIP LOCKED"),
+        row = (await db.execute(text("SELECT a.id, a.status, a.sale_price_cents, a.cost_cents, a.settlement_cents FROM assets a JOIN lots l ON l.id = a.lot_id WHERE a.id = :i AND l.status = 'active' FOR UPDATE OF a SKIP LOCKED"),
                                 {"i": aid})).first()
         if row is None:
             raise HTTPException(status_code=409, detail=f"unit {aid} unavailable (locked, sold, or lot not active)")
@@ -140,7 +142,7 @@ async def checkout(body: CheckoutIn, customer: dict | None = Depends(_opt_custom
             raise HTTPException(status_code=409, detail=f"unit {aid} not purchasable (status {row.status})")
         if row.sale_price_cents is None:
             raise HTTPException(status_code=409, detail=f"unit {aid} has no sale price")
-        _margin_409(aid, row.sale_price_cents, row.cost_cents)
+        _margin_409(aid, row.sale_price_cents, row.cost_cents, row.settlement_cents)
         sub += row.sale_price_cents
         locked.append(await db.get(Asset, aid))
     country = body.shipping_country
