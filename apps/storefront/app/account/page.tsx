@@ -19,7 +19,7 @@ import { Badge, Button, Card, EmptyState, Heading } from "../components/ui";
 const STATUS_TONE: Record<string, string> = {
   paid: "bg-brand-500/15 text-brand-300",
   shipped: "bg-brand-500/15 text-brand-300",
-  delivered: "bg-brand-700 text-white",
+  delivered: "bg-brand-700 text-ink-inverse",
   pending: "bg-surface-sunken text-ink-600",
   cancelled: "bg-surface-sunken text-ink-500",
   refunded: "bg-surface-sunken text-ink-500",

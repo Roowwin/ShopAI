@@ -146,12 +146,13 @@ export default function PurchasePanel({ units, title, brand, category, slug, spe
         </div>
       ) : (
         <>
-          {/* THE PRICE. The brief asked for the brand green here, and the brand green as INK on
-              this charcoal is 2.3:1 - unreadable, and the exact "one token, two jobs" trap the
-              palette documents. brand-300 is the same hue's light step and measures 6.9:1, which
-              is what the charcoal footer already uses for the same reason. */}
+          {/* THE PRICE is the brass FILL colour, which is the one place in the app where a value
+              used as a button fill is also used as ink. It is allowed here because the price is
+              LARGE text (32px semibold), so it clears the 3:1 large-text bar at 4.4:1 - at body
+              size the same brass measures 4.40:1 on a card and would fail. Every other ink site
+              uses brand-300, the ladder's light step (6.1-8.1:1). */}
           <div className="mt-5 flex flex-wrap items-end gap-x-3 gap-y-1">
-            <p className="font-display text-display text-brand-300">{unitPrice !== undefined ? aud(unitPrice) : "-"}</p>
+            <p className="font-display text-display text-brand-700">{unitPrice !== undefined ? aud(unitPrice) : "-"}</p>
             <p className="text-xs text-ink-500 pb-1.5">incl. GST</p>
           </div>
           {qty > 1 && (

@@ -25,11 +25,15 @@ type Props = {
   className?: string;
 };
 
-const SHELL = "rounded-card ring-1 ring-brand-500/20 backdrop-blur-md";
+const SHELL = "rounded-card ring-1 ring-line backdrop-blur-md";
 
 const TONE: Record<"default" | "brand", string> = {
-  default: "bg-surface-glass/5",
-  brand: "bg-brand-500/10 text-brand-300",
+  /* The design's floating container: the raised surface at 80%, so the ground reads faintly
+     through it, on the #264D40 hairline (`--line`). It was a 5% white film; this is the green
+     panel the system actually asks for, and the difference is the point - a white film over a
+     brass-and-green page reads grey. */
+  default: "bg-surface/80",
+  brand: "bg-brand-700/10 text-brand-300",
 };
 
 /* An interactive card is a link: it takes the brand glow and lifts on hover, settles back on

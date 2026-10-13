@@ -84,7 +84,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                  the current view and the ring says so. With one shot (today) that is the whole
                  rail; the ring is written by index rather than unconditionally so a second shot
                  does not arrive looking equally selected. */
-              <div key={i} className={"shrink-0 w-20 lg:w-full rounded-control overflow-hidden " + (i === 0 ? "ring-2 ring-brand-300" : "ring-1 ring-line")}>
+              <div key={i} className={"shrink-0 w-20 lg:w-full rounded-control overflow-hidden " + (i === 0 ? "ring-2 ring-brand-700" : "ring-1 ring-line")}>
                 <ProductArt slug={slug} imageUrl={shot} alt={shot ? p.title + " (view " + (i + 1) + ")" : p.title}
                   className="w-full aspect-[4/3] object-cover" fallback={initials} />
               </div>
@@ -124,7 +124,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           </p>
         </section>
 
-        <div className="mt-8 rounded-card bg-surface-glass/5 backdrop-blur-md ring-1 ring-brand-500/20 p-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="mt-8 rounded-card bg-surface/80 backdrop-blur-md ring-1 ring-line p-6 flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-ink-900">Not sure which unit fits?</p>
             <p className="text-xs text-ink-500 mt-1">Ask the AI - it answers from live stock only.</p>
@@ -144,7 +144,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
             {GRADES.map((g) => (
-              <div key={g.letter} className="rounded-card bg-surface-glass/5 backdrop-blur-md ring-1 ring-brand-500/20 p-4">
+              <div key={g.letter} className="rounded-card bg-surface/80 backdrop-blur-md ring-1 ring-line p-4">
                 <Badge colorClass={g.pill}>Grade {g.letter}</Badge>
                 <p className="text-sm font-medium text-ink-900 mt-2">{g.label}</p>
                 <p className="text-xs text-ink-500 mt-1">{g.spec}</p>
@@ -170,7 +170,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
         <section className="mt-16 grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
           {["Serialised units", "Graded quality", "Fast AU-NZ delivery", "Secure checkout", "GST-compliant invoices"].map((t) => (
-            <div key={t} className="rounded-control bg-surface-glass/5 backdrop-blur-md ring-1 ring-brand-500/20 px-3 py-4 text-xs text-ink-600">{t}</div>
+            <div key={t} className="rounded-control bg-surface/80 backdrop-blur-md ring-1 ring-line px-3 py-4 text-xs text-ink-600">{t}</div>
           ))}
         </section>
       </div>

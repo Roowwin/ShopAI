@@ -66,12 +66,9 @@ const config: Config = {
           page: token("--surface-page"),
           "page-alt": token("--surface-page-alt"),
           /* A fill that is dark BY NAME - the footer, the promo band, the cart count, a numbered
-             step. It exists because `ink-900` was doing that job and is now near-white: a token
+             step. It exists because `ink-900` was doing that job and is now pure white: a token
              whose value flips under a role the page did not mean. Always a fill, never an ink. */
           deep: token("--surface-deep"),
-          /* The glass tint, used at a low alpha: `bg-surface-glass/5 backdrop-blur-md`. Held as
-             channels so the alpha is the call site's decision, not the token's. */
-          glass: token("--surface-glass"),
         },
         // hairlines
         line: {

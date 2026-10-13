@@ -30,7 +30,7 @@ export const GRADES: Grade[] = [
     letter: "A",
     label: "Like new",
     tone: "bg-grade-a-solid",
-    pill: "bg-grade-a-soft text-grade-a-ink",
+    pill: "bg-grade-a-solid/15 text-grade-a-ink ring-1 ring-grade-a-solid/30",
     battery: "Battery health 90% or better",
     looks: [
       "No visible marks when you hold it at arm's length",
@@ -44,7 +44,7 @@ export const GRADES: Grade[] = [
     letter: "B",
     label: "Excellent",
     tone: "bg-grade-b-solid",
-    pill: "bg-grade-b-soft text-grade-b-ink",
+    pill: "bg-grade-b-solid/15 text-grade-b-ink ring-1 ring-grade-b-solid/30",
     battery: "Battery health 85% or better",
     looks: [
       "Light micro-scratches on the frame or back cover",
@@ -58,7 +58,7 @@ export const GRADES: Grade[] = [
     letter: "C",
     label: "Good",
     tone: "bg-grade-c-solid",
-    pill: "bg-grade-c-soft text-grade-c-ink",
+    pill: "bg-grade-c-solid/15 text-grade-c-ink ring-1 ring-grade-c-solid/30",
     battery: "Battery health 80% or better",
     looks: [
       "Visible scuffs, scratches or small dents on the frame",
@@ -72,7 +72,7 @@ export const GRADES: Grade[] = [
     letter: "D",
     label: "Fair",
     tone: "bg-grade-d-solid",
-    pill: "bg-grade-d-soft text-grade-d-ink",
+    pill: "bg-grade-d-solid/15 text-grade-d-ink ring-1 ring-grade-d-solid/30",
     battery: "Battery health 80% or better",
     looks: [
       "Obvious cosmetic wear: scuffed edges, deeper scratches, small dents",

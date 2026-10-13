@@ -199,7 +199,7 @@ export default function FacetDropdown({ label, value, options, onSelect, open, o
         <div role="listbox" aria-labelledby={baseId + "-trigger"} tabIndex={-1} onKeyDown={onKey}
           style={{ position: "fixed", width: panel.w, left: panel.left, maxHeight: panel.maxH,
             ...(panel.flip ? { bottom: panel.bottom } : { top: panel.top }) }}
-          className="z-40 overflow-y-auto rounded-control bg-surface-glass/10 backdrop-blur-md text-ink-900 shadow-glow-sm ring-1 ring-brand-500/20 py-1">
+          className="z-40 overflow-y-auto rounded-control bg-surface/95 backdrop-blur-md text-ink-900 shadow-glow-sm ring-1 ring-line py-1">
           {options.map((o, i) => {
             const isSel = o.value === value;
             return (

@@ -18,7 +18,7 @@
    any of this. */
 export const linkClass =
   "text-brand-300 font-medium underline underline-offset-2 decoration-brand-700 rounded-sm " +
-  "transition-colors duration-fast ease-out hover:text-brand-100 hover:decoration-brand-300 active:text-brand-300 " +
+  "transition-colors duration-fast ease-out hover:text-brand-500 hover:decoration-brand-300 active:text-brand-300 " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 " +
   "motion-reduce:transition-none";
 

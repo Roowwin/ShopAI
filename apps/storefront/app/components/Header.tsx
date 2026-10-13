@@ -74,7 +74,7 @@ export default function Header() {
           backdrop blur with a single brand hairline, so the ground gradient reads straight through
           and the chrome sits ON the page rather than over it. `sticky` stays - a catalog is long,
           and the search and the cart have to be reachable from the bottom of it. */}
-      <div className="bg-surface-glass/5 backdrop-blur-md border-b border-brand-500/20 text-ink-900 px-4 md:px-6 py-2 flex items-center gap-2 md:gap-3">
+      <div className="bg-surface/80 backdrop-blur-md border-b border-line text-ink-900 px-4 md:px-6 py-2 flex items-center gap-2 md:gap-3">
         {/* The left and right groups both take `flex-1`, which is what actually CENTRES the search:
             two equal-grow flanks around it put the field on the page's centre line whatever the
             wordmark and the controls measure. */}
@@ -112,7 +112,7 @@ export default function Header() {
             onKeyDown={(e) => { if (e.key === "Enter" && q.trim().length >= 2) { setOpen(false); router.push("/search?q=" + encodeURIComponent(q.trim())); } }}
             onBlur={() => setTimeout(() => setOpen(false), 150)} />
           {open && items.length > 0 && (
-            <div className="absolute left-0 right-0 mt-1 bg-surface-glass/10 backdrop-blur-md text-ink-900 rounded-control shadow-glow-sm ring-1 ring-brand-500/20 overflow-hidden">
+            <div className="absolute left-0 right-0 mt-1 bg-surface/95 backdrop-blur-md text-ink-900 rounded-control shadow-glow-sm ring-1 ring-line overflow-hidden">
               {items.slice(0, 5).map((s) => (
                 <button key={s.slug} className="w-full text-left px-4 py-2.5 text-sm transition-colors duration-fast ease-out hover:bg-surface-pressed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset motion-reduce:transition-none"
                   onMouseDown={() => router.push("/products/" + s.slug)}>
@@ -120,7 +120,7 @@ export default function Header() {
                   <span className="text-xs text-ink-500 ml-2">{s.units_available} available{s.price_from_cents !== null ? " from " + aud(s.price_from_cents) : ""}</span>
                 </button>
               ))}
-              <button className="w-full text-left px-4 py-2 text-xs bg-surface-glass/5 text-brand-300 transition-colors duration-fast ease-out hover:bg-surface-pressed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset motion-reduce:transition-none"
+              <button className="w-full text-left px-4 py-2 text-xs bg-surface text-brand-300 transition-colors duration-fast ease-out hover:bg-surface-pressed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset motion-reduce:transition-none"
                 onMouseDown={() => router.push("/search?q=" + encodeURIComponent(q.trim()))}>See all results</button>
             </div>
           )}
@@ -148,7 +148,7 @@ export default function Header() {
       </div>
       {/* The category nav is hidden below md, and there was no way to reach it on a phone. */}
       {menu && (
-        <nav className="md:hidden bg-surface-glass/10 backdrop-blur-md ring-1 ring-brand-500/20 border-t border-brand-500/20 px-4 py-1 flex flex-col text-sm text-ink-600">
+        <nav className="md:hidden bg-surface/95 backdrop-blur-md ring-1 ring-line border-t border-line px-4 py-1 flex flex-col text-sm text-ink-600">
           <a href="/" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>Shop</a>
           {/* A category with sub-categories becomes an accordion here, because hover does not exist on
               a phone. The word still goes to the category - a shopper who wants all of Accessories has

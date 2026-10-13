@@ -33,7 +33,7 @@ export default function GradesPage() {
       {GRADES.map((g) => (
         <Card key={g.letter} className="p-5">
           <div className="flex items-center gap-3">
-            <Badge shape="tile" colorClass={g.tone + " text-white"}>{g.letter}</Badge>
+            <Badge shape="tile" colorClass={g.tone + " text-ink-inverse"}>{g.letter}</Badge>
             <div>
               <Heading level="h2">Grade {g.letter} - {g.label}</Heading>
               <p className="text-xs text-ink-500">{g.battery}</p>

@@ -252,7 +252,7 @@ export default function NavDropdown({ label, links, open, onOpenChange }: Props)
         <ul id={id + "-menu"} role="list" aria-labelledby={id + "-trigger"} onKeyDown={onKey}
           style={{ position: "fixed", width: box.w, left: box.left, maxHeight: box.maxH,
             ...(box.flip ? { bottom: box.bottom } : { top: box.top }) }}
-          className="z-40 overflow-y-auto rounded-control bg-surface-glass/10 backdrop-blur-md text-ink-900 shadow-glow-sm ring-1 ring-brand-500/20 py-1">
+          className="z-40 overflow-y-auto rounded-control bg-surface/95 backdrop-blur-md text-ink-900 shadow-glow-sm ring-1 ring-line py-1">
           {links.map((l, i) => {
             const kids = l.children ?? [];
             const subOpen = sub === l.href;
@@ -308,7 +308,7 @@ export default function NavDropdown({ label, links, open, onOpenChange }: Props)
                     aria-label={"Sub-categories of " + l.label}
                     style={{ position: "fixed", width: subBox.w, left: subBox.left, top: subBox.top,
                       maxHeight: subBox.maxH }}
-                    className="z-40 overflow-y-auto rounded-control bg-surface-glass/10 backdrop-blur-md text-ink-900 shadow-glow-sm ring-1 ring-brand-500/20 py-1">
+                    className="z-40 overflow-y-auto rounded-control bg-surface/95 backdrop-blur-md text-ink-900 shadow-glow-sm ring-1 ring-line py-1">
                     {kids.map((c, j) => (
                       <li key={c.href}>
                         <a ref={(el) => { (subItems.current[l.href] ??= [])[j] = el; }}

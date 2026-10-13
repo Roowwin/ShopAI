@@ -12,9 +12,9 @@ import { cn } from "./cn";
    shifts under the cursor is a usability defect, not a state - so `active:` here is the darker
    shade on its own. */
 const TONES: Record<"light" | "sunken" | "deep", string> = {
-  light: "bg-surface-glass/5 backdrop-blur-md text-ink-900 ring-1 ring-line placeholder:text-ink-500 hover:ring-line-strong active:bg-surface-pressed",
-  sunken: "bg-surface-sunken text-ink-900 ring-1 ring-line placeholder:text-ink-500 hover:ring-line-strong active:bg-surface-pressed",
-  deep: "bg-surface-deep/60 text-ink-900 ring-1 ring-line placeholder:text-ink-400 hover:ring-line-strong active:bg-surface-deep",
+  light: "bg-surface text-ink-900 ring-1 ring-line placeholder:text-ink-500 hover:ring-brand-500 active:bg-surface-pressed",
+  sunken: "bg-surface-sunken text-ink-900 ring-1 ring-line placeholder:text-ink-500 hover:ring-brand-500 active:bg-surface-pressed",
+  deep: "bg-surface-deep/60 text-ink-900 ring-1 ring-line placeholder:text-ink-400 hover:ring-brand-500 active:bg-surface-deep",
 };
 
 /* The control shell, shared with a bare <select> that cannot be an <Input>. The focus ring is

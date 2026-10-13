@@ -35,11 +35,15 @@ const BASE =
   "motion-reduce:transition-none motion-reduce:active:translate-y-0";
 
 const VARIANTS: Record<Variant, string> = {
-  // white on brand-700 is the darkest green step that still clears 4.5:1 - do not lighten it
-  primary: "bg-brand-700 text-white hover:bg-brand-800 active:bg-brand-900 focus-visible:ring-brand-300",
-  secondary: "bg-surface-glass/5 backdrop-blur-md text-ink-700 ring-1 ring-line hover:bg-surface-pressed hover:ring-line-strong active:bg-surface-pressed focus-visible:ring-brand-300",
+  /* THE PRIMARY BUTTON IS DARK-ON-BRASS. Brass is a bright fill: white on #B08D57 measures 2.9:1,
+     the dark canvas 5.5:1 - so the label is `ink-inverse`, and this is the one control in the app
+     whose ink is not light. The hover LIGHTENS (brand-600, not brand-800): the two steps above the
+     fill are brighter on purpose, because metal catches light as you reach for it. */
+  primary: "bg-brand-700 text-ink-inverse hover:bg-brand-600 active:bg-brand-500 focus-visible:ring-brand-300",
+  /* The secondary boundary goes brass under the cursor, which is the design's own rule for it. */
+  secondary: "bg-surface text-ink-700 ring-1 ring-line hover:bg-surface-muted hover:ring-brand-500 active:bg-surface-pressed focus-visible:ring-brand-300",
   ghost: "text-ink-700 hover:bg-surface-pressed active:bg-surface-pressed focus-visible:ring-brand-300",
-  danger: "bg-surface-glass/5 backdrop-blur-md text-danger-600 ring-1 ring-danger-200 hover:bg-surface-pressed active:bg-danger-50 focus-visible:ring-brand-300",
+  danger: "bg-surface text-danger-600 ring-1 ring-danger-200 hover:bg-surface-muted active:bg-danger-50 focus-visible:ring-brand-300",
 };
 
 const SIZES: Record<Size, string> = {
