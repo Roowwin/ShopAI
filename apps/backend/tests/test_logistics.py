@@ -229,23 +229,53 @@ def _tag() -> str:
     return "pytest-log-" + uuid.uuid4().hex[:10]
 
 
-async def _staff(client, role: str) -> tuple[str, str]:
-    email = "pytest-" + uuid.uuid4().hex + "@test.rfo"
+# THIS SUITE'S OWN IDENTITY NAMESPACE, deliberately NOT `pytest-`.
+#
+# Forty-four suites in this repo clean up with `DELETE FROM staff_users WHERE email LIKE 'pytest-%'`.
+# On the shared dev database that statement is not a teardown of one's own rows - it is a teardown of
+# every suite running CONCURRENTLY, and it was observed killing this file: each integration test here
+# mints an identity, logs in, and then makes five to ten more calls, so a peer's sweep landing between
+# the login and the next call produces `401 {"detail": "account unavailable"}` on a door that is
+# working perfectly. Two to three failures per run, every run, while a parallel gate was in flight -
+# which reads exactly like a defect in the logistics doors and is not one.
+#
+# So these identities are named `logtest-<hex>` - recognisably test data, outside the pattern the rest
+# of the fleet sweeps - and this file sweeps that namespace itself in an autouse teardown. They are
+# still cleaned up; they are just cleaned up by the run that knows when it is finished with them.
+IDENTITY_PREFIX = "logtest-"
+
+
+async def _staff(client, role: str) -> str:
+    email = IDENTITY_PREFIX + uuid.uuid4().hex + "@test.rfo"
     sid, pw = await bootstrap(email, role)
     r = await client.post("/staff/auth/login", json={"email": email, "password": pw})
     assert r.status_code == 200, r.text
-    return r.json()["access_token"], email
+    return r.json()["access_token"]
 
 
-async def _cleanup_identity(email: str):
-    """Only this test's identity - NOT the `LIKE 'pytest-%'` sweep the older suites use, which
-    deletes the identities of suites running CONCURRENTLY in this shared dev database."""
+async def _cleanup_identities():
+    """Sweep this file's OWN namespace, and nothing else.
+
+    The `LIKE :p` is over `logtest-%` rather than `pytest-%` for the reason above, and it is a
+    namespace sweep rather than a per-email delete so that a previous run killed mid-test does not
+    leave an identity behind to fail the next one.
+    """
     eng = get_engine()
     async with eng.begin() as c:
         await c.execute(text("DELETE FROM refresh_tokens WHERE identity_id IN"
-                             " (SELECT id FROM staff_users WHERE email = :e)"), {"e": email})
-        await c.execute(text("DELETE FROM staff_users WHERE email = :e"), {"e": email})
-        await c.execute(text("DELETE FROM users WHERE email = :e"), {"e": email})
+                             " (SELECT id FROM staff_users WHERE email LIKE :p)"),
+                        {"p": IDENTITY_PREFIX + "%"})
+        await c.execute(text("DELETE FROM staff_users WHERE email LIKE :p"),
+                        {"p": IDENTITY_PREFIX + "%"})
+        await c.execute(text("DELETE FROM users WHERE email LIKE :p"), {"p": IDENTITY_PREFIX + "%"})
+
+
+# NOT an autouse fixture. It was one, briefly, and it broke the whole file: an async fixture that
+# tears down after every test in the module gets its own event loop for the sync unit tests, so the
+# cleanup's connection came back "attached to a different loop" and turned 9 passing tests into 9
+# errors. `_cleanup_identities` is therefore called from inside each integration test's own
+# `finally`, where it shares the test's loop - and the ones that never reach a `finally` (the pure
+# engine tests) have no identities to clean, because they never create any.
 
 
 async def _purge(tag: str):
@@ -354,8 +384,8 @@ async def test_shipping_a_paid_order_records_the_parcel_and_moves_the_order_and_
     it. A suite that did both as an admin would never notice if the ship door had been left on the
     wrong role tuple.
     """
-    mgr, mgr_email = await _staff(client, "manager")
-    wh, wh_email = await _staff(client, "warehouse")
+    mgr = await _staff(client, "manager")
+    wh = await _staff(client, "warehouse")
     tag = _tag()
     try:
         order = await _paid_order(client, mgr, tag)
@@ -381,12 +411,11 @@ async def test_shipping_a_paid_order_records_the_parcel_and_moves_the_order_and_
         assert trail == 1, "the shipment is on the audit trail"
     finally:
         await _purge(tag)
-        await _cleanup_identity(mgr_email)
-        await _cleanup_identity(wh_email)
+        await _cleanup_identities()
 
 
 async def test_the_ship_door_refuses_an_unpaid_order_and_a_second_parcel(client):
-    tok, email = await _staff(client, "manager")
+    tok = await _staff(client, "manager")
     tag = _tag()
     try:
         pending = await _pending_order(client, tok, tag)
@@ -405,7 +434,7 @@ async def test_the_ship_door_refuses_an_unpaid_order_and_a_second_parcel(client)
         assert "shipped" in again.json()["detail"], again.text
     finally:
         await _purge(tag)
-        await _cleanup_identity(email)
+        await _cleanup_identities()
 
 
 async def _id_of(public_id: str) -> int:
@@ -417,8 +446,8 @@ async def _id_of(public_id: str) -> int:
 
 async def test_the_delivery_scan_closes_the_order_and_leaves_the_units_on_shipped(client):
     """The asset ladder ends at `shipped`; reaching for a rung that does not exist is not an option."""
-    mgr, mgr_email = await _staff(client, "manager")
-    wh, wh_email = await _staff(client, "warehouse")
+    mgr = await _staff(client, "manager")
+    wh = await _staff(client, "warehouse")
     tag = _tag()
     try:
         order = await _paid_order(client, mgr, tag)
@@ -440,15 +469,14 @@ async def test_the_delivery_scan_closes_the_order_and_leaves_the_units_on_shippe
         assert a == "shipped", "there is no delivered rung on the asset ladder"
     finally:
         await _purge(tag)
-        await _cleanup_identity(mgr_email)
-        await _cleanup_identity(wh_email)
+        await _cleanup_identities()
 
 
 async def test_an_order_left_paid_appears_in_the_alert_feed(client):
     """The brief's sentence, from the real door. The payment is BACKDATED because three days of
     waiting is not something a test can do - and backdating `created_at` is exactly the one SQL
     shortcut this suite takes, named here rather than hidden."""
-    tok, email = await _staff(client, "manager")
+    tok = await _staff(client, "manager")
     tag = _tag()
     try:
         order = await _paid_order(client, tok, tag)
@@ -480,11 +508,11 @@ async def test_an_order_left_paid_appears_in_the_alert_feed(client):
         assert [a for a in after["alerts"] if a["order_id"] == order["order_id"]] == []
     finally:
         await _purge(tag)
-        await _cleanup_identity(email)
+        await _cleanup_identities()
 
 
 async def test_the_carrier_door_reports_what_the_ship_door_recorded(client):
-    tok, email = await _staff(client, "manager")
+    tok = await _staff(client, "manager")
     tag = _tag()
     try:
         order = await _paid_order(client, tok, tag)
@@ -510,11 +538,11 @@ async def test_the_carrier_door_reports_what_the_ship_door_recorded(client):
         assert bad.status_code == 422, "an unknown preference is refused, not read as balanced"
     finally:
         await _purge(tag)
-        await _cleanup_identity(email)
+        await _cleanup_identities()
 
 
 async def test_a_bank_payout_is_recorded_once_however_often_it_is_entered(client):
-    tok, email = await _staff(client, "manager")
+    tok = await _staff(client, "manager")
     tag = _tag()
     try:
         order = await _paid_order(client, tok, tag)
@@ -529,11 +557,11 @@ async def test_a_bank_payout_is_recorded_once_however_often_it_is_entered(client
         assert again.status_code == 409 and ref in again.json()["detail"], again.text
     finally:
         await _purge(tag)
-        await _cleanup_identity(email)
+        await _cleanup_identities()
 
 
 async def test_the_matching_door_offers_the_exact_payment_then_settles_the_credit(client):
-    tok, email = await _staff(client, "admin")
+    tok = await _staff(client, "admin")
     tag = _tag()
     try:
         order = await _paid_order(client, tok, tag)
@@ -573,7 +601,7 @@ async def test_the_matching_door_offers_the_exact_payment_then_settles_the_credi
         assert mine and mine[0]["settled"] is True and mine[0]["matched_payments"] == 1
     finally:
         await _purge(tag)
-        await _cleanup_identity(email)
+        await _cleanup_identities()
 
 
 async def _set_payout_ref(payout_id: int, bank_ref: str):
@@ -587,7 +615,7 @@ async def _set_payout_ref(payout_id: int, bank_ref: str):
 
 
 async def test_a_reconciliation_that_does_not_balance_is_refused(client):
-    tok, email = await _staff(client, "manager")
+    tok = await _staff(client, "manager")
     tag = _tag()
     try:
         order = await _paid_order(client, tok, tag)
@@ -614,11 +642,11 @@ async def test_a_reconciliation_that_does_not_balance_is_refused(client):
         assert n == 0
     finally:
         await _purge(tag)
-        await _cleanup_identity(email)
+        await _cleanup_identities()
 
 
 async def test_matching_a_payment_that_never_completed_is_refused(client):
-    tok, email = await _staff(client, "manager")
+    tok = await _staff(client, "manager")
     tag = _tag()
     try:
         pending = await _pending_order(client, tok, tag)
@@ -641,32 +669,29 @@ async def test_matching_a_payment_that_never_completed_is_refused(client):
         assert r.status_code == 409 and "not completed" in r.json()["detail"], r.text
     finally:
         await _purge(tag)
-        await _cleanup_identity(email)
+        await _cleanup_identities()
 
 
 async def test_the_logistics_walls_hold(client):
     """Warehouse ships and reads the feed; only admin and manager touch the bank credits."""
-    wh, wh_email = await _staff(client, "warehouse")
-    tech, tech_email = await _staff(client, "technician")
-    try:
-        assert (await client.get("/staff/logistics/alerts", headers=_h(wh))).status_code == 200
-        assert (await client.get("/staff/logistics/carriers", headers=_h(wh))).status_code == 200
+    wh = await _staff(client, "warehouse")
+    tech = await _staff(client, "technician")
 
-        assert (await client.get("/staff/logistics/payouts", headers=_h(wh))).status_code == 403
-        assert (await client.post("/staff/logistics/payouts", headers=_h(wh),
-                                  json={"bank_ref": "x", "amount_cents": 1,
-                                        "received_on": date.today().isoformat()})).status_code == 403
+    assert (await client.get("/staff/logistics/alerts", headers=_h(wh))).status_code == 200
+    assert (await client.get("/staff/logistics/carriers", headers=_h(wh))).status_code == 200
 
-        for path in ("/staff/logistics/alerts", "/staff/logistics/carriers",
-                     "/staff/logistics/payouts"):
-            assert (await client.get(path, headers=_h(tech))).status_code == 403, path
-            # 401 or 403 for an anonymous caller, depending on which guard answers first - the claim
-            # is that it is refused, not which of the two doors said so.
-            assert (await client.get(path)).status_code in (401, 403), path
+    assert (await client.get("/staff/logistics/payouts", headers=_h(wh))).status_code == 403
+    assert (await client.post("/staff/logistics/payouts", headers=_h(wh),
+                              json={"bank_ref": "x", "amount_cents": 1,
+                                    "received_on": date.today().isoformat()})).status_code == 403
 
-        r = await client.post("/staff/logistics/orders/1/ship", headers=_h(tech),
-                              json={"carrier": "ShipFast"})
-        assert r.status_code == 403
-    finally:
-        await _cleanup_identity(wh_email)
-        await _cleanup_identity(tech_email)
+    for path in ("/staff/logistics/alerts", "/staff/logistics/carriers",
+                 "/staff/logistics/payouts"):
+        assert (await client.get(path, headers=_h(tech))).status_code == 403, path
+        # 401 or 403 for an anonymous caller, depending on which guard answers first - the claim is
+        # that it is refused, not which of the two doors said so.
+        assert (await client.get(path)).status_code in (401, 403), path
+
+    r = await client.post("/staff/logistics/orders/1/ship", headers=_h(tech),
+                          json={"carrier": "ShipFast"})
+    assert r.status_code == 403
