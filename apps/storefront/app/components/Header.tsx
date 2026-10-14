@@ -77,11 +77,15 @@ export default function Header() {
      sr-only h1 uses only the second half of this one. */
   return (
     <header className="sticky top-0 z-50">
-      {/* FLOATING. The header is not an opaque bar laid across the page: it is a 5% glass wash over a
-          backdrop blur with a single brand hairline, so the ground gradient reads straight through
-          and the chrome sits ON the page rather than over it. `sticky` stays - a catalog is long,
-          and the search and the cart have to be reachable from the bottom of it. */}
-      <div className="bg-surface/80 backdrop-blur-md border-b border-line text-ink-900 px-4 md:px-6 py-2 flex items-center gap-2 md:gap-3">
+      {/* FLOATING, AND NOW FULLY SO. The header is not an opaque bar laid across the page: it is a
+          backdrop blur over a single hairline, so the ground shows straight through and the chrome
+          sits ON the page rather than over it. The `bg-surface/80` wash that used to sit under the
+          blur is gone, which is what lets the new green canvas read all the way up to the top edge
+          instead of stopping at a charcoal band.
+          `sticky` stays - a catalog is long, and the search and the cart have to be reachable from
+          the bottom of it - and so does the blur, which is what keeps the nav legible when the
+          catalogue scrolls underneath it. */}
+      <div className="backdrop-blur-md border-b border-line text-ink-900 px-4 md:px-6 py-2 flex items-center gap-2 md:gap-3">
         {/* The left and right groups both take `flex-1`, which is what actually CENTRES the search:
             two equal-grow flanks around it put the field on the page's centre line whatever the
             wordmark and the controls measure. */}

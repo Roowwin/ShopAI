@@ -94,8 +94,16 @@
     /* The surface ladder: one neutral charcoal family, four named steps. No green, no blue.
        The direction is unchanged - `surface` is the raised step, `muted` the alternate band,
        `page` the canvas - and `sunken`/`deep` remain the wells and full-bleed bands that sit BELOW
-       the canvas rather than above it. */
-    --surface-page: 15 17 20;      /* #0F1114 - the main canvas, a cool charcoal */
+       the canvas rather than above it.
+
+       EXCEPT THE CANVAS, which is the one step that is no longer neutral. The page ground went to a
+       deep forest green (#042F2A) while every other step stayed charcoal, so the ladder now runs
+       from a green ground up into a neutral raised one. Nothing else moved with it: the ink stays
+       near-white, and white on #042F2A measures ~15:1, so the change costs the text nothing. The
+       steps that sit BELOW the canvas are untouched and still read as wells - `--surface-page-alt`
+       (#15181C) and `--surface-deep` (#0A0B0D) are near-black, so a band or a footer filled with
+       them still separates from the green ground rather than blending into it. */
+    --surface-page: 4 47 42;       /* #042F2A - the main canvas, a deep forest green */
     --surface-page-alt: 21 24 28;  /* #15181C - the inset tone, and a chat bubble's fill */
     --surface: 26 29 33;           /* #1A1D21 - product cards & sidebar */
     --surface-muted: 22 25 29;     /* between the canvas and a card */
