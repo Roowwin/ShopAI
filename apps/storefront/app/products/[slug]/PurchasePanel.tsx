@@ -84,9 +84,15 @@ const TRUST: { label: string; icon: ReactNode }[] = [
   },
 ];
 
-export default function PurchasePanel({ units, title, brand, model, slug, specs }: {
+export default function PurchasePanel({ units, title, brand, model, slug, specs, grade, onGradeChange }: {
   units: Unit[]; title: string; brand: string; model: string; slug: string;
   specs: [string, string][];
+  /* THE GRADE IS CONTROLLED NOW. It used to live here, and it was the only thing on the page that
+     knew it. It moved up to `ProductStage` because the gallery beside this panel shows a different
+     photograph per grade, so the two must read the same value - one owner, two controls. This panel
+     still decides everything the panel shows; it simply no longer decides what the page is looking
+     at. `onGradeChange` is the whole of the contract. */
+  grade: string; onGradeChange: (grade: string) => void;
 }) {
   /* Every grade A-D, with the units behind it. A grade with nothing on the shelf is still
      listed (disabled, "out of stock") rather than dropped: the ladder is a fact about the shop,
@@ -96,8 +102,6 @@ export default function PurchasePanel({ units, title, brand, model, slug, specs 
     [units],
   );
 
-  const firstStocked = shelf.find((g) => g.units.length > 0)?.letter ?? GRADES[0].letter;
-  const [grade, setGrade] = useState<string>(firstStocked);
   const [qty, setQty] = useState(1);
   const [bag, setBag] = useState<number[]>(() => cartGet().map((c) => c.asset_id));
 
@@ -115,7 +119,7 @@ export default function PurchasePanel({ units, title, brand, model, slug, specs 
   const allInBag = picked.length > 0 && already === picked.length;
 
   function pickGrade(next: string) {
-    setGrade(next);
+    onGradeChange(next);
     /* The quantity belongs to the grade that was showing. `Grade A x3` becoming `Grade D` must
        not silently mean three Grade D units, which the shopper never asked for - and on a grade
        with one unit it would not even be expressible. Back to one, so the next press is always

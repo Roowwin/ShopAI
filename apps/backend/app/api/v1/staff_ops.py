@@ -12,6 +12,9 @@ from app.models import Asset, Lot, StockMovement
 from app.models.catalog import Brand, Product
 from app.services.audit import audit
 from app.services.margin import margin_refusal
+# The one definition of what an upload may be. Re-exported (see GRADE_TEMPLATE_GRADES below) because
+# this module is where `store_returns` has always imported them from.
+from app.services.media import IMAGE_MAX_BYTES, IMAGE_TYPES, safe_filename as _safe_filename
 
 router = APIRouter(prefix="/staff", tags=["staff-ops"])
 
@@ -1284,26 +1287,12 @@ ACTION_APPLY_IMAGE_TO_MODEL = "apply_image_to_model"
 ACTION_APPLY_IMAGE_TO_SELECTION = "apply_image_to_selection"
 ACTION_SET_GRADE_TEMPLATE = "set_grade_template"
 
-# What may be stored, and how much. The migration carries the same two rules as CHECKs; these are
-# the copies that answer with a sentence instead of a 23514, and the 5 MB read below is capped by
-# `IMAGE_MAX_BYTES + 1` so an oversized upload is refused WITHOUT being held in memory first.
-# SVG is deliberately absent: it is a document format that can carry script, and this door serves
-# what it stores back to a browser, so the whitelist is raster-only.
-IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp", "image/gif")
-IMAGE_MAX_BYTES = 5 * 1024 * 1024
+# WHAT MAY BE STORED, AND HOW MUCH, NOW HAS ONE DEFINITION AND IT IS NOT HERE. The whitelist, the
+# 5 MB cap and the filename sanitiser moved to `services/media.py` when the product-group door grew
+# a second upload: the same three rules were about to exist in two places, and a whitelist that can
+# be widened in one of them without the other is not a whitelist. They are imported above and
+# re-exported under these names, which is what `store_returns` imports them as.
 GRADE_TEMPLATE_GRADES = ("A", "B", "C", "D")
-
-
-def _safe_filename(raw: str | None) -> str:
-    """The display name of an uploaded file: its basename, stripped of control characters.
-
-    The name is never used as a path or a key - the bytes go in a row and are addressed by id - so
-    this is about what the hub may RENDER and what a header may echo, not about traversal. A
-    browser sends a path for some clients and a NUL is legal in no filename worth keeping.
-    """
-    name = (raw or "").replace("\\", "/").split("/")[-1]
-    name = "".join(ch for ch in name if ch.isprintable()).strip()
-    return name[:120] or "image"
 
 
 async def _image_row(db, *, asset_id: int, image_id: int):

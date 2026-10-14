@@ -64,6 +64,14 @@ async def _purge(tag: str):
     """
     eng = get_engine()
     async with eng.begin() as c:
+        # The product groups FIRST, and this line exists because the importer grew a side effect:
+        # every commit now declares one `product_groups` row per brand+model+grade on the sheet
+        # (`_ensure_product_groups`). Nothing else in this file creates them, nothing else removes
+        # them, and they hang off the BRAND - so left alone they would pile up one set per run and,
+        # worse, sit between the brand delete below and its own NOT EXISTS guard.
+        await c.execute(text(
+            "DELETE FROM product_groups WHERE brand_id IN"
+            " (SELECT id FROM brands WHERE name LIKE :p)"), {"p": tag + "%"})
         await c.execute(text(
             "DELETE FROM products WHERE slug LIKE :p AND NOT EXISTS"
             " (SELECT 1 FROM assets a WHERE a.product_id = products.id)"), {"p": tag + "%"})
@@ -410,8 +418,17 @@ async def test_commit_refuses_the_whole_file_when_one_row_is_blocked(client):
         await _purge(tag)
 
 
-async def test_commit_rejects_duplicate_serials(client):
-    """A serial twice in one file, and a serial already on the shelf - both are blocking."""
+async def test_commit_rejects_a_serial_twice_in_one_file_but_skips_one_already_on_the_shelf(client):
+    """TWO DIFFERENT MISTAKES, TWO DIFFERENT ANSWERS, and the split is the point.
+
+    A serial twice in ONE file is a supplier sheet contradicting itself, and it is still refused:
+    there is no way to tell which of the two rows is the unit and which is the typo.
+
+    A serial already ON THE SHELF is not a mistake at all - it is the ordinary case on a second
+    sheet, because a supplier runs the same catalogue twice. That used to refuse the WHOLE file with
+    a 422, which meant the handful of genuinely new units in it could never be brought in. It is now
+    SKIPPED and counted, and the file is written.
+    """
     tag = _tag()
     try:
         tok = await _staff(client, "admin")
@@ -423,10 +440,13 @@ async def test_commit_rejects_duplicate_serials(client):
 
         good = _csv([_row(tag, tag + "-S1")])
         assert (await _post(client, tok, good, phase="commit")).status_code == 200
-        # Re-importing the same sheet must not double the stock.
+        # Re-importing the same sheet must not double the stock - and must not refuse the file
+        # either. It writes nothing, and says so in the same screen as the count.
         again = await _post(client, tok, good, phase="commit")
-        assert again.status_code == 422, again.text
-        assert any("already in the system" in i["message"] for i in again.json()["detail"]["issues"])
+        assert again.status_code == 200, again.text
+        assert again.json()["summary"]["assets_created"] == 0
+        assert again.json()["summary"]["skipped_existing"] == 1
+        assert [s["serial"] for s in again.json()["skipped"]] == [tag + "-S1"]
         assert (await _counts(tag))["assets"] == 1
     finally:
         await _purge(tag)

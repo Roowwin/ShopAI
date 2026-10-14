@@ -29,6 +29,20 @@ async def _staff_and_token(client, role: str) -> str:
     return r.json()["access_token"]
 
 
+async def _some_product_id() -> int:
+    """A product that exists RIGHT NOW, looked up rather than assumed.
+
+    These two tests used to send `product_id: 2`, which was a product when they were written on
+    2026-10-09 and has not been one since the demo catalogue was re-seeded (the lowest id in the
+    table is now 175). The door answered 404 "product not found" - correctly - and both tests failed
+    for a reason that had nothing to do with what they are testing. A product id is a sequence value,
+    not a fact about the platform, so it is read here instead of written down.
+    """
+    eng = get_engine()
+    async with eng.begin() as c:
+        return (await c.execute(text("SELECT id FROM products ORDER BY id LIMIT 1"))).scalar_one()
+
+
 async def test_vision_intake_draft_contract(client):
     tok = await _staff_and_token(client, "technician")
     r = await client.post("/staff/ai/intake-draft",
@@ -51,7 +65,8 @@ async def test_chat_grounding(client):
 
 async def test_description_draft(client):
     tok = await _staff_and_token(client, "manager")
-    r = await client.post("/staff/ai/description-draft", json={"product_id": 2}, headers=_h(tok))
+    pid = await _some_product_id()
+    r = await client.post("/staff/ai/description-draft", json={"product_id": pid}, headers=_h(tok))
     assert r.status_code == 200, r.text
     d = r.json()
     assert all(k in d for k in ("title", "description", "keywords"))
@@ -95,8 +110,9 @@ async def test_description_draft_rejects_an_unknown_vibe(client):
 async def test_description_draft_accepts_a_known_vibe(client):
     """A known vibe is a normal draft request: same contract, plus the tone in the prompt."""
     tok = await _staff_and_token(client, "sales")
+    pid = await _some_product_id()
     r = await client.post("/staff/ai/description-draft",
-                          json={"product_id": 2, "tone": "professional"},
+                          json={"product_id": pid, "tone": "professional"},
                           headers=_h(tok))
     assert r.status_code == 200, r.text
     assert all(k in r.json() for k in ("title", "description", "keywords"))

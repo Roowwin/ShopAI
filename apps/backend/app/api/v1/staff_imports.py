@@ -770,13 +770,25 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
     # The DB check has to happen after the file-wide pass: a duplicate INSIDE the file is a
     # different operator mistake from a serial that is already on the shelf, and they read
     # differently in the report.
+    #
+    # A SERIAL ALREADY IN THE SYSTEM IS NOT AN ERROR - IT IS THE ORDINARY CASE ON A SECOND SHEET.
+    # This used to be a blocking issue, and that made the importer unusable for the thing it is
+    # actually for: a supplier runs the same catalogue twice, the second workbook repeats hundreds
+    # of serials that are already on the shelf and adds a few, and the old rule refused the WHOLE
+    # file with a 422 - so the new stock could not be brought in at all. A serial is a per-unit
+    # identity, so a serial that already exists names a unit this database already holds: that row
+    # is SKIPPED and counted, and the rest of the file is written.
+    #
+    # It is a skip and not a silent drop. `report["skipped"]` names every row by row number, serial
+    # and lot, so "the file said 400 rows and the report says 388 written" always has an answer
+    # visible in the same screen as the number.
     existing = await _lookup_existing_serials(db, [r["serial_number"] for r in parsed if r["serial_number"]])
+    skipped: list[dict] = []
     for record in parsed:
         if record["serial_number"] and record["serial_number"].lower() in existing:
-            issue = {"row": record["row"], "field": "serial",
-                     "message": "this serial is already in the system"}
-            record["issues"].append(issue)
-            issues.append(issue)
+            record["skip"] = "already imported"
+            skipped.append({"row": record["row"], "serial": record["serial_number"],
+                            "lot": record["lot_number"], "model": record["model"]})
 
     # SKU UNIQUENESS, the DB half. Same shape as the serial check above and for the same reason: a
     # SKU already on the shelf is a different operator mistake from one repeated inside the file, and
@@ -797,8 +809,13 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
     warnings = _price_rows(parsed, comparables)
 
     blocked = [r for r in parsed if r["issues"]]
+    # Ready is neither blocked nor skipped. Three outcomes, not two: a row can be REFUSED (it is
+    # wrong), SKIPPED (it is already here) or WRITTEN, and a count that folded the last two together
+    # would make "400 rows, 400 ready" true of a file that wrote twelve.
+    writable = [r for r in parsed if not r["issues"] and not r.get("skip")]
     report["issues"] = issues
     report["warnings"] = warnings
+    report["skipped"] = skipped
 
     # Every translation the mapper made, aggregated by (field, from, to) with its row count. The
     # per-row translation stays on the row, but 200 rows all reading "Active -> received" is not a
@@ -816,11 +833,14 @@ async def parse_and_validate(db, data: bytes, filename: str) -> dict:
     report["truncated"] = len(parsed) > PREVIEW_ROWS
     report["summary"] = {
         "rows": len(parsed),
-        "ready": len(parsed) - len(blocked),
+        "ready": len(writable),
         "blocked": len(blocked),
+        # Rows this database already holds, named by serial. Not failures - see the note beside the
+        # lookup that produces them - and separated from `ready` so the two can never be added up.
+        "skipped_existing": len(skipped),
         "translated": len([r for r in parsed if r["translations"]]),
         "lots": len({r["lot_number"] for r in parsed if r["lot_number"]}),
-        "would_list": len([r for r in parsed if r["status"] == "listed" and not r["issues"]]),
+        "would_list": len([r for r in writable if r["status"] == "listed"]),
         "issues": len(issues),
         # Smart pricing, counted rather than listed. `low_margin` is the number the operator acts
         # on, and it counts WARNINGS - nothing in this report refuses a file for a thin margin.
@@ -951,8 +971,77 @@ async def _resolve_product(db, brand: str, category: str, model: str) -> tuple[i
     return product_id, True
 
 
+async def _ensure_product_groups(db, parsed: list[dict]) -> dict:
+    """Make sure a `product_groups` row exists for every brand+model+grade this file mentions.
+
+    WHY AN IMPORT CREATES GROUPS, when it deliberately does not price or photograph them. The group
+    is the unit of DECISION - one image, one price - and the operator's worklist has to be the set of
+    decisions not yet taken. If groups were only born when someone visited a screen, a 400-row sheet
+    would present a blank page and the operator would have to retype 295 model strings to say what
+    they already told the importer. So the import declares the groups and leaves every one of them
+    UNPRICED and UNPHOTOGRAPHED; pricing and photography stay manual, which is the whole point.
+
+    IT DOES NOT TOUCH A GROUP THAT ALREADY EXISTS. Not its price, not its image, not its
+    `storefront_id`. That is what makes a second sheet with a familiar model+grade cheap: the group
+    is already set up, so the answer to "what does this cost and what does it look like" is already
+    on file and nothing asks again. `groups_ready` is that set - the groups that already carry a
+    `storefront_id`, which the publish door mints and nothing else does - named back to the caller so
+    the screen can offer the one button that is still needed: publish the new units.
+
+    Matched on (brand, lower(model), grade), never on product_id: `_resolve_product` keys a product on
+    (brand, category, model), so a sheet whose Category column is spelled differently mints a SECOND
+    product row for one model. Keying the group on the product would fork it and ask the operator
+    again for a photograph they had already given. See 0024.
+    """
+    groups_new: list[dict] = []
+    groups_ready: list[dict] = []
+    needing_setup = 0
+    seen: set[tuple[str, str, str]] = set()
+    for record in parsed:
+        brand, model, grade = record.get("brand"), record.get("model"), record.get("grade")
+        if not brand or not model or not grade:
+            # A row with no brand, model or grade names no group. It is not an error here - the row
+            # itself has already been flagged or written without a group, exactly as it was before
+            # this table existed.
+            continue
+        key = (brand.lower(), model.lower(), grade)
+        if key in seen:
+            continue
+        seen.add(key)
+        brand_id = await _resolve_brand(db, brand)
+        params = {"b": brand_id, "m": model, "g": grade}
+        created = (await db.execute(text("""
+            INSERT INTO product_groups (brand_id, model, grade)
+            VALUES (:b, :m, :g)
+            ON CONFLICT (brand_id, lower(model), grade) DO NOTHING
+            RETURNING id
+        """), params)).scalar_one_or_none()
+        row = (await db.execute(text("""
+            SELECT id, storefront_id, price_override, image_url FROM product_groups
+            WHERE brand_id = :b AND lower(model) = lower(:m) AND grade = :g
+        """), params)).mappings().first()
+        named = {"id": row["id"], "brand": brand, "model": model, "grade": grade}
+        if created is not None:
+            groups_new.append(named)
+        elif row["storefront_id"] is not None:
+            # ALREADY IN THE STOREFRONT. `storefront_id` is minted by the publish door and by nothing
+            # else (0024), so a non-null one is the operator's own record that this model+grade has
+            # been given an image and a price and put on the shelf. A second sheet that mentions it
+            # must not ask again - which is the entire point of the marker.
+            groups_ready.append(named)
+        if row["price_override"] is None or row["image_url"] is None:
+            needing_setup += 1
+    return {"groups_new": groups_new, "groups_ready": groups_ready,
+            "groups_needing_setup": needing_setup}
+
+
 async def _run_import(db, staff: dict, parsed: list[dict], filename: str) -> dict:
     """Write the parsed rows. One transaction: every lot, product, asset and movement or none."""
+    # Rows the database already holds are dropped HERE, at the one place that writes, and not only
+    # in the report: `parse_and_validate` marks them so the preview can count them, and this is the
+    # line that makes the mark mean something. A skipped row still names a lot and a model, and
+    # looping it into the asset list below would duplicate stock that is already on the shelf.
+    parsed = [r for r in parsed if not r.get("skip")]
     lot_ids: dict[str, int] = {}
     lots_created: list[dict] = []
     lots_reused: list[str] = []
@@ -1060,8 +1149,13 @@ async def _run_import(db, staff: dict, parsed: list[dict], filename: str) -> dic
                        # answer it.
                        "low_margin": len([r for r in parsed if r["margin"]["band"] == "low"])},
                 meta={"source": "product_import", "products_created": len(products_created)})
+
+    groups = await _ensure_product_groups(db, parsed)
+
     return {"lots_created": lots_created, "lots_reused": lots_reused,
             "products_created": products_created,
+            "groups_new": groups["groups_new"], "groups_ready": groups["groups_ready"],
+            "groups_needing_setup": groups["groups_needing_setup"],
             # The commit response carries the workbook's own columns back, not just the three the
             # original door echoed. An importer that reports only what it always reported cannot be
             # checked against the sheet it just consumed, and "did my Model # land" is the first
@@ -1144,10 +1238,23 @@ async def commit_product_import(file: UploadFile = File(...),
             "lots_reused": len(written["lots_reused"]),
             "products_created": len(written["products_created"]),
             "listed": len([a for a in written["assets"] if a["status"] == "listed"]),
+            # Rows the database already held. Reported on the COMMIT reply as well as the preview,
+            # because the number an operator checks against the sheet is the one that came back from
+            # the write - "400 rows, 388 written, 12 already here" is the whole story of a re-import.
+            "skipped_existing": report["summary"]["skipped_existing"],
+            "groups_new": len(written["groups_new"]),
+            # Groups a sheet touched that are ALREADY set up - an image and a price on file. These are
+            # the ones "Publish remaining lots" can push straight out, because nothing about them has
+            # to be decided again.
+            "groups_ready": len(written["groups_ready"]),
+            "groups_needing_setup": written["groups_needing_setup"],
         },
         "lots_created": written["lots_created"],
         "lots_reused": written["lots_reused"],
         "products_created": written["products_created"],
+        "groups_new": written["groups_new"],
+        "groups_ready": written["groups_ready"],
+        "skipped": report["skipped"],
         "assets": written["assets"],
     }
 

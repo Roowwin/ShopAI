@@ -80,6 +80,7 @@ server {
   server_name ${DOMAIN_STORE};
   set $up_store storefront:3001;
   set $up_storage storage:5000;
+  set $up_store_api api:8000;
   include /etc/nginx/snippets/tls.conf;
   include /etc/nginx/snippets/headers.conf;
   add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://${DOMAIN_API} ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
@@ -89,8 +90,30 @@ server {
   proxy_set_header X-Forwarded-Proto https;
   proxy_set_header Upgrade $http_upgrade;
   proxy_set_header Connection $connection_upgrade;
+  # PRODUCT PHOTOGRAPHY, SERVED FROM THE PAGE'S OWN ORIGIN. A catalogue tile renders
+  # `products.image_url` in a plain <img> with no credential, and the shop's CSP is
+  # `img-src 'self'`, so the address has to be on THIS host or the browser refuses it.
+  #
+  # It used to point at the object store ($up_storage) - the moto bucket from ADR 0005, which
+  # nothing in apps/backend ever wrote to, because uploaded bytes go to `media_objects` in
+  # Postgres (0013). So this prefix answered 404 for every product photo the shop has ever had.
+  # It now fronts the one route that actually holds them: /store/media/<public_id>, public and
+  # immutable, and limited to images a product_group points at.
+  #
+  # When media moves to MinIO/S3 as ADR 0001 intends, this block points back at $up_storage and
+  # nothing else in the stack changes - `services/media.py:public_address` is what mints the path.
+  # THE REWRITE IS NOT OPTIONAL, AND IT IS NOT DECORATION. `proxy_pass` with a URI part
+  # (`.../store/media/`) replaces the matched location prefix - but ONLY when the target is a
+  # literal. The moment the host is a VARIABLE (as it must be here, to name the compose service and
+  # let nginx resolve it at request time), nginx cannot work out the replacement at config time and
+  # passes the request URI through UNCHANGED. The first cut of this block did exactly that and every
+  # photo asked the API for `/media/<uuid>`, which is not a route: FastAPI answered its own generic
+  # `{"detail":"Not Found"}`, so the shop showed broken tiles on every product with a photograph -
+  # while `https://api.<domain>/store/media/<uuid>` returned the image perfectly, which is what made
+  # it look like a frontend bug. `rewrite ... break` does the substitution explicitly.
   location /media/ {
-    proxy_pass http://$up_storage/rfo-media/;
+    rewrite ^/media/(.*)$ /store/media/$1 break;
+    proxy_pass http://$up_store_api;
     proxy_set_header Connection "";
     expires 365d;
     add_header Cache-Control "public, immutable" always;

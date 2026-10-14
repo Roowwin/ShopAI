@@ -160,9 +160,14 @@ type Preview = {
     by_basis: Record<string, number>;
     comparable_pairs: number;
   };
+  /* Rows the database already holds, by serial. Shown at PREVIEW time as well as after the commit:
+     "this file will write 12 of its 400 rows and skip the rest" is a thing an operator wants to know
+     BEFORE pressing the button that writes, not after. */
+  skipped: { row: number; serial: string; lot: string; model: string }[];
   summary: {
     rows: number; ready: number; blocked: number; lots: number; would_list: number;
     issues: number; translated: number; suggested: number; low_margin: number; cost_unknown: number;
+    skipped_existing: number;
   };
 };
 
@@ -176,10 +181,24 @@ type Commit = {
     lots_reused: number;
     products_created: number;
     listed: number;
+    /* Rows the database already held. Not failures: a serial is a per-unit identity, so a serial
+       already on the shelf names a unit this database already has, and the file is written around
+       it. Reported on the commit reply as well as the preview because the number an operator
+       checks against the sheet is the one that came back from the write. */
+    skipped_existing: number;
+    groups_new: number;
+    /* Groups this sheet touched that are ALREADY in the storefront - image and price on file. These
+       are what "Publish remaining lots" pushes out, because nothing about them has to be decided
+       again. */
+    groups_ready: number;
+    groups_needing_setup: number;
   };
   lots_created: { lot_number: string; id: number }[];
   lots_reused: string[];
   products_created: { id: number; brand: string; category: string; model: string }[];
+  groups_new: { id: number; brand: string; model: string; grade: string }[];
+  groups_ready: { id: number; brand: string; model: string; grade: string }[];
+  skipped: { row: number; serial: string; lot: string; model: string }[];
   assets: { row: number; asset_id: number; serial_number: string; lot_number: string; status: string; grade: string | null; sale_price_cents: number | null; suggested_price_cents?: number | null; suggested_price_basis?: string | null }[];
 };
 
@@ -604,9 +623,17 @@ function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boole
           of "what would happen to these rows" as the row counts are - and they belong on THIS card
           rather than the mapping's, since they are claims about the rows and not about the sheet's
           shape. The grid widens on a roomy screen so six tiles do not wrap into two uneven rows. */}
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      {/* FOUR ACROSS, not six: there are seven tiles now, and seven into six leaves one stranded on
+          a row of its own. Four gives 4 + 3, which reads as two full rows at every width the admin
+          is used at. */}
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <Stat label="Rows read" value={summary.rows} sub="data rows, header excluded" />
         <Stat label="Ready" value={summary.ready} sub="rows that would import" />
+        {/* Not "blocked" and not "ready" - already here. A row whose serial is on the shelf will be
+            skipped by the write, so counting it as ready would promise stock the import will not
+            create. */}
+        <Stat label="Already on file" value={summary.skipped_existing}
+          sub={summary.skipped_existing ? "serials the database already has - these are skipped" : "every serial is new"} />
         <Stat label="Blocked" value={summary.blocked} sub={blocked ? "these stop the whole import" : "none - the file is clean"} />
         <Stat label="Translated" value={summary.translated} sub={summary.translated ? "rows rewritten - see the mapping above" : "no supplier wording needed translating"} />
         <Stat label="Suggested" value={summary.suggested} sub={summary.suggested ? "rows with a price to consider" : "no row had anything to price from"} />
@@ -824,21 +851,119 @@ function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boole
    because a lot is what the operator recognises and the units are what they will go and look at. */
 function ResultPanel({ result }: { result: Commit }) {
   const { summary } = result;
+  /* THE ONE BUTTON THIS STEP NEEDS, for the case this importer is actually used for: a second sheet
+     of a catalogue already on the shelf. The groups it mentions are already set up - each has its
+     image and its price - so there is nothing to decide, only new units to put on the shop. The call
+     names no ids and sends `only_published`, which the server reads as "the groups that already
+     carry a storefront_id": the screen does not re-derive a fact the database owns. */
+  const [publishing, setPublishing] = useState(false);
+  const [published, setPublished] = useState<string>("");
+  const [publishErr, setPublishErr] = useState("");
+
+  async function publishRemaining() {
+    setPublishing(true); setPublishErr(""); setPublished("");
+    try {
+      const r = await apiFetch("/staff/product-groups/publish", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ only_published: true }),
+      });
+      const j: any = await r.json().catch(() => ({}));
+      if (!r.ok) { setPublishErr(typeof j.detail === "string" ? j.detail : "that publish was refused"); return; }
+      const t = j.totals ?? {};
+      const held = (t.units_hidden_below_cost ?? 0) > 0
+        ? ` ${t.units_hidden_below_cost} are priced below cost, so the shop will not show them.` : "";
+      setPublished(`${t.units_listed ?? 0} units published across ${t.groups_published ?? 0} groups.${held}`);
+    } catch {
+      setPublishErr("that publish could not be sent");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
   return (
     <Card className="p-6 space-y-6">
       <div>
         <Heading level="h3" as="h2" className="!text-brand-300">4. {STAGES[3]}</Heading>
         <p className="mt-1 text-xs text-ink-500">
-          {result.file.name} - {summary.rows} rows read, {summary.assets_created} units created.
+          {result.file.name} - {summary.rows} rows read, {summary.assets_created} units created
+          {summary.skipped_existing > 0 ? `, ${summary.skipped_existing} already on file` : ""}.
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-5">
         <Stat label="Units created" value={summary.assets_created} sub="one per serial" />
+        {/* A THIRD OUTCOME, beside written and refused. A serial already on the shelf is not an
+            error - it is what a second sheet of a familiar catalogue looks like - so it is counted
+            here rather than shown as a problem, and never folded into "created". */}
+        <Stat label="Already on file" value={summary.skipped_existing} sub="skipped, not rewritten" />
         <Stat label="Lots created" value={summary.lots_created} sub={summary.lots_reused ? `${summary.lots_reused} existing lots reused` : "none reused"} />
         <Stat label="Products created" value={summary.products_created} sub="new brand + model combinations" />
         <Stat label="Now listed" value={summary.listed} sub={summary.listed ? "visible in the shop" : "not visible in the shop"} />
       </div>
+
+      {/* THE GROUPS THIS SHEET DECLARED. A group is the unit of decision - one image, one price - so
+          an operator who has just imported needs to know how many decisions are waiting, and how
+          many were already made on an earlier sheet. */}
+      {(summary.groups_new > 0 || summary.groups_ready > 0) && (
+        <section className="rounded-card bg-surface-muted p-4 ring-1 ring-line">
+          <Heading level="h3" as="h2" className="!text-eyebrow uppercase text-ink-500">
+            Model + grade groups
+          </Heading>
+          <p className="mt-2 text-sm text-ink-600">
+            {summary.groups_new > 0
+              ? `${summary.groups_new} group${summary.groups_new === 1 ? "" : "s"} on this sheet are new and need an image and a price. `
+              : ""}
+            {summary.groups_ready > 0
+              ? `${summary.groups_ready} already have both, so nothing needs deciding for them - just publish their new units.`
+              : ""}
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button variant="secondary" size="sm" href="/admin/product-groups">
+              Open product groups
+            </Button>
+            {summary.groups_ready > 0 && (
+              <Button size="sm" disabled={publishing} onClick={() => void publishRemaining()}>
+                {publishing ? "Publishing…" : "Publish remaining lots"}
+              </Button>
+            )}
+          </div>
+          {published && <p className="mt-2 text-sm text-brand-300">{published}</p>}
+          {publishErr && <p className="mt-2 text-sm text-danger-600">{publishErr}</p>}
+        </section>
+      )}
+
+      {/* The skipped rows, in full. "400 rows, 388 written" always has an answer on the same screen
+          as the number, rather than in a log nobody opens. */}
+      {result.skipped.length > 0 && (
+        <section>
+          <Heading level="h3" as="h2" className="!text-eyebrow uppercase text-ink-500">
+            Already imported ({result.skipped.length})
+          </Heading>
+          <div className="mt-3">
+            <Table label="Rows skipped because the serial is already on file">
+              <THead>
+                <TH>Row</TH>
+                <TH>Serial</TH>
+                <TH>Lot</TH>
+              </THead>
+              <TBody>
+                {result.skipped.slice(0, ISSUE_SHOWN).map((s) => (
+                  <TR key={s.row}>
+                    <TD>{s.row}</TD>
+                    <TD className="font-mono text-xs">{s.serial}</TD>
+                    <TD className="font-mono text-xs text-ink-600">{s.lot}</TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          </div>
+          {result.skipped.length > ISSUE_SHOWN && (
+            <p className="mt-2 text-xs text-ink-500">
+              and {result.skipped.length - ISSUE_SHOWN} more, all skipped the same way.
+            </p>
+          )}
+        </section>
+      )}
 
       <section>
         <Heading level="h3" as="h2" className="!text-eyebrow uppercase text-ink-500">

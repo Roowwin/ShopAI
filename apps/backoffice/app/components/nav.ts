@@ -81,6 +81,11 @@ export const GROUPS: NavGroup[] = [
         ],
       },
       { href: "/admin/product-import", label: "Product import" },
+      /* Where the work goes AFTER an import. The importer declares a group per brand+model+grade and
+         prices nothing; this is the screen that gives each one its picture and its price, once, for
+         every lot that will ever hold one. It sits beside Product import because that is the
+         sequence an operator actually works in. */
+      { href: "/admin/product-groups", label: "Product groups" },
       /* The marketplace hubs. There are three of them (eBay, Amazon, Facebook) and the roadmap gives
          the group one entry, so the parent is the hub for the marketplace the platform is actually
          wired toward. The other two are CHILDREN rather than - as this note used to claim -

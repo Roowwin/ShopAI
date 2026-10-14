@@ -1,0 +1,516 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { apiFetch } from "@/lib/api";
+import { aud } from "@/lib/format";
+import { requireRole, useMe } from "@/lib/session";
+import { Button, Card, Input, Select, Stat, cn } from "@/app/components/ui";
+import { kickerClass, linkClass } from "@/lib/ui";
+
+/* THE GROUP WORKLIST: one image and one price per model and grade.
+
+   WHAT THIS SCREEN IS FOR, in the operator's words: "I've imported the Excel, every row is already
+   graded. From here I only need to give each model+grade a picture and a price, once." So this page
+   is that worklist and nothing else - the set of decisions not yet taken, sorted so the ones that
+   need attention come first.
+
+   PRICE IS TYPED, NEVER APPLIED. The three quick-fill buttons put a NUMBER IN THE BOX. They do not
+   save, they do not publish, and nothing else on this page reads them. Save is a separate press and
+   it is the only thing that writes `price_override` (see the door's own docstring). That split is
+   why the buttons can be generous with what they offer: FMV and Resale disagree by an order of
+   magnitude on this data ($71 vs $732 on average), so a suggestion that wrote itself would be a
+   pricing decision made by nobody.
+
+   WHY THERE IS A HIGHEST/MEDIAN/AVERAGE PICKER UNDER THE FMV BUTTON. One price per group only works
+   if the group agrees, and on the imported data 284 of 295 groups hold more than one distinct FMV -
+   one keyboard's Grade A range runs $10.06 to $69.75. The picker is the operator choosing WHICH
+   summary they are accepting, which is a smaller question than the price itself and a much easier
+   one to answer than "type a number". Median is the default because one outlier drags that
+   keyboard's average from $69.75 down to $48.91.
+
+   A PHOTOGRAPH IS ATTACHED TO THE GROUP, so there is no "apply to all units" step: every lot of that
+   model and grade is already reading the same row. Upload is the whole action. */
+
+type Group = {
+  id: number; brand: string; model: string; grade: string;
+  state: "needs_setup" | "ready" | "live";
+  storefront_id: string | null; product_id: number | null;
+  media_id: number | null; image_url: string | null;
+  price_override: number | null; price_source: string | null;
+  published_at: string | null;
+  units_total: number; units_listed: number;
+  basis_max: number | null; fmv_variants: number;
+  below_cost_if_priced_here: boolean;
+};
+
+type Detail = Group & {
+  aggregates: {
+    units_total: number; units_listed: number; units_publishable: number;
+    fmv: { min: number | null; max: number | null; avg: number | null; median: number | null; variants: number };
+    resale: { min: number | null; max: number | null; avg: number | null; median: number | null; variants: number };
+    basis: { min: number | null; max: number | null };
+    target_markup_pct: number;
+  };
+};
+
+const STATE_TABS = [
+  { key: "needs_setup", label: "Needs setup" },
+  { key: "ready", label: "Ready" },
+  { key: "live", label: "Live" },
+  { key: "", label: "All" },
+] as const;
+
+/* Which of the three summaries a quick-fill button reads. `median` is first because it is the
+   default and the reason the picker exists. */
+const BASIS = [
+  { key: "median", label: "Median" },
+  { key: "max", label: "Highest" },
+  { key: "avg", label: "Average" },
+] as const;
+
+type BasisKey = (typeof BASIS)[number]["key"];
+
+function stateBadge(state: Group["state"]) {
+  if (state === "live") return { text: "Live", cls: "bg-status-listed-soft text-status-listed-ink" };
+  if (state === "ready") return { text: "Ready", cls: "bg-status-graded-soft text-status-graded-ink" };
+  return { text: "Needs setup", cls: "bg-status-received-soft text-status-received-ink" };
+}
+
+export default function GroupsPanel() {
+  const { me, checked } = useMe();
+  const allowed = requireRole(me, ["admin", "manager"]);
+
+  const [state, setState] = useState<string>("needs_setup");
+  const [term, setTerm] = useState("");
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+  const [loaded, setLoaded] = useState(false);
+
+  /* The confirmation is the same `role="status"` toast the grading workbench uses - an announcement
+     rather than an interruption, because publishing is a press an operator makes while looking at a
+     list, and a toast that took focus would move them off their place in it. */
+  const [toast, setToast] = useState<{ text: string; detail?: string } | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 8000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const load = useCallback(async (nextState: string, nextTerm: string) => {
+    const qs = new URLSearchParams();
+    if (nextState) qs.set("state", nextState);
+    if (nextTerm.trim()) qs.set("q", nextTerm.trim());
+    qs.set("limit", "200");
+    const r = await apiFetch("/staff/product-groups?" + qs.toString());
+    if (!r.ok) {
+      setErr(r.status === 403 ? "admin or manager role required" : "could not load product groups");
+      setLoaded(true);
+      return;
+    }
+    setErr("");
+    setGroups(await r.json());
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!checked) return;
+    if (!allowed) { setErr("admin or manager role required"); setLoaded(true); return; }
+    void load(state, term);
+  }, [checked, allowed, state, load]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const counts = useMemo(() => ({
+    units: groups.reduce((n, g) => n + g.units_total, 0),
+    listed: groups.reduce((n, g) => n + g.units_listed, 0),
+    priced: groups.filter((g) => g.price_override !== null).length,
+  }), [groups]);
+
+  async function publishAllSetUp() {
+    setErr(""); setMsg("");
+    const r = await apiFetch("/staff/product-groups/publish", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ only_published: true }),
+    });
+    const j: any = await r.json().catch(() => ({}));
+    if (!r.ok) { setErr(typeof j.detail === "string" ? j.detail : "that publish was refused"); return; }
+    const t = j.totals ?? {};
+    setToast({
+      text: `${t.units_listed ?? 0} unit${t.units_listed === 1 ? "" : "s"} published to the storefront.`,
+      detail: (t.units_hidden_below_cost ?? 0) > 0
+        ? `${t.units_hidden_below_cost} of them are priced below cost, so the shop will not show them.`
+        : undefined,
+    });
+    await load(state, term);
+  }
+
+  if (!checked || !loaded) {
+    return <Card className="p-4 text-sm text-ink-500">Loading product groups…</Card>;
+  }
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+      <div className="min-w-0">
+        <Card className="p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {STATE_TABS.map((t) => (
+              <button key={t.key} type="button" onClick={() => { setState(t.key); setOpenId(null); }}
+                aria-pressed={state === t.key}
+                className={cn("min-h-[36px] rounded-control px-3 text-sm font-semibold transition",
+                  "motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700",
+                  state === t.key ? "bg-brand-700 text-white" : "bg-surface-sunken text-ink-600 hover:ring-1 hover:ring-line-strong")}>
+                {t.label}
+              </button>
+            ))}
+            {/* The width is on a WRAPPER, not on the Input. Input's own base carries `w-full` and this
+                app has no tailwind-merge, so a caller's `w-48` would lose to it by stylesheet order -
+                see cn.ts and Select.tsx, which document the same trap. */}
+            <div className="ml-auto flex items-center gap-2">
+              <div className="w-56">
+                <Input value={term} placeholder="brand or model" aria-label="Search groups"
+                  onChange={(e) => setTerm(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { void load(state, term); } }} />
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => void load(state, term)}>Search</Button>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <Stat label="Groups" value={groups.length} />
+            <Stat label="Priced" value={counts.priced} sub={"of " + groups.length} />
+            <Stat label="Units" value={counts.units} sub={counts.listed + " on the shop"} />
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={() => void publishAllSetUp()}>
+              Publish remaining units for set-up groups
+            </Button>
+            <p className="text-xs text-ink-500">
+              Publishes only groups already in the storefront, reusing the image and price they have.
+            </p>
+          </div>
+
+          {msg && <p className="mt-3 text-sm text-brand-300">{msg}</p>}
+          {err && <p className="mt-3 text-sm text-danger-600">{err}</p>}
+        </Card>
+
+        <Card className="mt-4 p-4">
+          {groups.length === 0 ? (
+            <p className="text-sm text-ink-500">
+              Nothing here. Groups are declared by a product import - import a sheet and every
+              brand + model + grade on it appears in this list.
+            </p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {groups.map((g) => {
+                const badge = stateBadge(g.state);
+                return (
+                  <li key={g.id}>
+                    <button type="button" onClick={() => setOpenId(g.id === openId ? null : g.id)}
+                      aria-expanded={g.id === openId}
+                      className={cn("w-full text-left flex items-center gap-3 py-3 rounded-control transition",
+                        "hover:bg-surface-muted motion-reduce:transition-none",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700")}>
+                      <div className="min-w-0 flex-1">
+                        <p className={kickerClass}>{g.brand}</p>
+                        <p className="text-sm font-medium text-ink-900 truncate">{g.model}</p>
+                      </div>
+                      <span className="shrink-0 text-sm font-semibold text-ink-700">Grade {g.grade}</span>
+                      <span className="shrink-0 text-xs text-ink-500 w-24 text-right">
+                        {g.units_listed}/{g.units_total} on shop
+                      </span>
+                      <span className="shrink-0 text-sm w-24 text-right">
+                        {g.price_override === null ? <span className="text-ink-400">no price</span> : aud(g.price_override)}
+                      </span>
+                      <span className={cn("shrink-0 inline-flex items-center text-xs font-semibold rounded-full px-2 py-0.5", badge.cls)}>
+                        {badge.text}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+      </div>
+
+      <div className="lg:sticky lg:top-6">
+        {openId === null ? (
+          <Card className="p-4 text-sm text-ink-500">
+            Pick a row to give it an image and a price.
+          </Card>
+        ) : (
+          <GroupEditor key={openId} groupId={openId}
+            onSaved={() => void load(state, term)} onToast={setToast} />
+        )}
+      </div>
+
+      {toast && (
+        <div role="status"
+          className="fixed bottom-4 right-4 z-40 max-w-sm rounded-card bg-surface-glass/95 p-4 ring-1 ring-line backdrop-blur-md">
+          <p className="text-sm text-ink-900">{toast.text}</p>
+          {toast.detail && <p className="mt-1 text-xs text-ink-500">{toast.detail}</p>}
+          <button type="button" onClick={() => setToast(null)} className={cn("mt-2 text-xs", linkClass)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GroupEditor({ groupId, onSaved, onToast }: {
+  groupId: number;
+  onSaved: () => void;
+  onToast: (t: { text: string; detail?: string }) => void;
+}) {
+  const [d, setD] = useState<Detail | null>(null);
+  const [price, setPrice] = useState("");
+  const [source, setSource] = useState<string>("custom");
+  const [basis, setBasis] = useState<BasisKey>("median");
+  const [belowCost, setBelowCost] = useState(0);
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [thumb, setThumb] = useState<string | null>(null);
+  const [photoVersion, setPhotoVersion] = useState(0);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const load = useCallback(async () => {
+    const r = await apiFetch(`/staff/product-groups/${groupId}`);
+    if (!r.ok) { setErr("could not load that group"); return; }
+    const j: Detail = await r.json();
+    setD(j);
+    setPrice(j.price_override === null ? "" : String(j.price_override));
+    setSource(j.price_source ?? "custom");
+    setBelowCost(0);
+  }, [groupId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  /* THE THUMBNAIL GOES THROUGH THE AUTHENTICATED DOOR AND IS TURNED INTO A BLOB URL. The public
+     `/media/...` address the shop uses would resolve against the ADMIN host here, which does not
+     serve that prefix - the tile would be a broken image on a screen whose whole job is to show the
+     operator the photograph they are about to publish. The object URL is revoked when it is
+     replaced, or the tab leaks one blob per upload. */
+  useEffect(() => {
+    if (!d || !d.image_url) { setThumb(null); return; }
+    let url: string | null = null;
+    let dead = false;
+    void (async () => {
+      const r = await apiFetch(`/staff/product-groups/${groupId}/image/raw`);
+      if (!r.ok || dead) return;
+      url = URL.createObjectURL(await r.blob());
+      if (dead) { URL.revokeObjectURL(url); return; }
+      setThumb(url);
+    })();
+    return () => { dead = true; if (url) URL.revokeObjectURL(url); };
+  }, [groupId, d, photoVersion]);
+
+  async function savePrice() {
+    setErr(""); setMsg("");
+    const v = price.trim();
+    const cents = Number(v);
+    if (v === "" || !Number.isInteger(cents) || cents < 0) {
+      setErr("the price has to be a whole number of cents, zero or more.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await apiFetch(`/staff/product-groups/${groupId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ price_override: cents, price_source: source }),
+      });
+      const j: any = await r.json().catch(() => ({}));
+      if (!r.ok) { setErr(typeof j.detail === "string" ? j.detail : "that price was refused"); return; }
+      setBelowCost(j.units_below_cost ?? 0);
+      setMsg(`Saved ${aud(cents)} (${j.price_source}).`);
+      await load();
+      onSaved();
+    } catch {
+      setErr("that price could not be sent");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /* THE QUICK FILLS. Each one puts a number in the box and nothing else - no request is made, the
+     row is not touched, and until Save is pressed the group has no opinion about its price. */
+  function fillFrom(which: "fmv" | "resale" | "markup") {
+    setErr(""); setMsg("");
+    if (!d) return;
+    const agg = d.aggregates;
+    const base = which === "resale" ? agg.resale[basis] : agg.fmv[basis];
+    if (base === null || base === undefined) {
+      setErr(`this group has no ${which === "resale" ? "Resale" : "FMV"} value to suggest from.`);
+      return;
+    }
+    const cents = which === "markup"
+      ? Math.round(base * (1 + agg.target_markup_pct / 100))
+      : base;
+    setPrice(String(cents));
+    setSource(which === "resale" ? "resale" : which === "markup" ? "fmv" : "fmv");
+    setMsg(`Filled with ${aud(cents)} - press Save to confirm.`);
+  }
+
+  async function upload(file: File) {
+    setErr(""); setMsg(""); setBusy(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const r = await apiFetch(`/staff/product-groups/${groupId}/image`, { method: "POST", body: fd });
+      const j: any = await r.json().catch(() => ({}));
+      if (!r.ok) { setErr(typeof j.detail === "string" ? j.detail : "that image was refused"); return; }
+      setMsg("Image attached to this model and grade - every lot of it uses it now.");
+      setPhotoVersion((v) => v + 1);
+      await load();
+      onSaved();
+    } catch {
+      setErr("that image could not be sent");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function publish() {
+    setErr(""); setMsg(""); setBusy(true);
+    try {
+      const r = await apiFetch(`/staff/product-groups/${groupId}/publish`, { method: "POST" });
+      const j: any = await r.json().catch(() => ({}));
+      if (!r.ok) { setErr(typeof j.detail === "string" ? j.detail : "that publish was refused"); return; }
+      const missing: string[] = [];
+      if ((j.hidden_below_cost ?? 0) > 0) missing.push(`${j.hidden_below_cost} priced below cost (the shop hides those)`);
+      if (!j.has_image) missing.push("no image yet");
+      onToast({
+        text: `${j.listed} unit${j.listed === 1 ? "" : "s"} published for ${j.model} / Grade ${j.grade}.`,
+        detail: missing.length ? "Not showing: " + missing.join(", ") + "." : undefined,
+      });
+      await load();
+      onSaved();
+    } catch {
+      setErr("that publish could not be sent");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!d) return <Card className="p-4 text-sm text-ink-500">Loading…</Card>;
+
+  const agg = d.aggregates;
+  const badge = stateBadge(d.state);
+  const canPublish = d.price_override !== null && agg.units_publishable > 0;
+
+  return (
+    <Card className="p-4">
+      <p className={kickerClass}>{d.brand}</p>
+      <h2 className="text-h3 font-semibold text-ink-900">{d.model}</h2>
+      <div className="mt-1 flex items-center gap-2">
+        <span className="text-sm font-semibold text-ink-700">Grade {d.grade}</span>
+        <span className={cn("inline-flex items-center text-xs font-semibold rounded-full px-2 py-0.5", badge.cls)}>
+          {badge.text}
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-ink-500">
+        {agg.units_listed} of {agg.units_total} units on the shop
+        {agg.units_publishable > 0 ? `, ${agg.units_publishable} waiting` : ""}
+      </p>
+
+      {/* THE PHOTOGRAPH. One per model and grade: attaching it here is what every lot of that
+          model+grade reads, so there is no second "apply" step. */}
+      <div className="mt-4">
+        <p className={kickerClass}>Image</p>
+        <div className="mt-2 flex items-start gap-3">
+          <div className="h-20 w-28 shrink-0 rounded-control bg-surface-sunken ring-1 ring-line overflow-hidden flex items-center justify-center">
+            {thumb
+              ? <img src={thumb} alt="" className="h-full w-full object-cover" />
+              : <span className="text-xs text-ink-400">{d.image_url ? "…" : "none"}</span>}
+          </div>
+          <div>
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
+            <Button size="sm" variant="secondary" disabled={busy}
+              onClick={() => fileRef.current?.click()}>
+              {d.image_url ? "Replace image" : "Upload image"}
+            </Button>
+            <p className="mt-1 text-xs text-ink-500">JPEG, PNG, WebP or GIF, up to 5 MB.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* THE PRICE. Suggestions fill the box; Save is the only write. */}
+      <div className="mt-4">
+        <p className={kickerClass}>Price</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Select value={basis} aria-label="Which summary the quick fills use"
+            onChange={(e) => setBasis(e.target.value as BasisKey)}>
+            {BASIS.map((b) => <option key={b.key} value={b.key}>Use the {b.label.toLowerCase()}</option>)}
+          </Select>
+          <Button size="sm" variant="secondary" disabled={busy} onClick={() => fillFrom("fmv")}>
+            Use FMV
+          </Button>
+          <Button size="sm" variant="secondary" disabled={busy} onClick={() => fillFrom("resale")}>
+            Keep Resale
+          </Button>
+          <Button size="sm" variant="secondary" disabled={busy} onClick={() => fillFrom("markup")}>
+            FMV + {agg.target_markup_pct}%
+          </Button>
+        </div>
+
+        {/* What the buttons would read, before anybody presses one. The variant count is the honest
+            answer to "why is there a picker here at all". */}
+        <p className="mt-2 text-xs text-ink-500">
+          FMV {agg.fmv.min === null ? "none" : aud(agg.fmv.min) + "–" + aud(agg.fmv.max)}
+          {agg.fmv.variants > 1 ? ` (${agg.fmv.variants} different values in this group)` : ""}
+          {" · "}
+          Resale {agg.resale.min === null ? "none" : aud(agg.resale.min) + "–" + aud(agg.resale.max)}
+          {agg.basis.max !== null ? ` · cost up to ${aud(agg.basis.max)}` : ""}
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="w-44">
+            <Input value={price} inputMode="numeric" placeholder="price in cents"
+              aria-label="Price in cents" onChange={(e) => { setPrice(e.target.value); setSource("custom"); }} />
+          </div>
+          <Select value={source} aria-label="Where this price came from"
+            onChange={(e) => setSource(e.target.value)}>
+            <option value="custom">Custom</option>
+            <option value="fmv">FMV</option>
+            <option value="resale">Resale</option>
+          </Select>
+          <Button size="sm" disabled={busy} onClick={() => void savePrice()}>Save price</Button>
+        </div>
+
+        {belowCost > 0 && (
+          <p className="mt-2 text-xs text-accent-700">
+            At this price {belowCost} unit{belowCost === 1 ? "" : "s"} sell below what they cost, and
+            the shop hides those. It is saved either way - hiding is the shop's decision, not a refusal.
+          </p>
+        )}
+        {d.below_cost_if_priced_here && belowCost === 0 && (
+          <p className="mt-2 text-xs text-accent-700">
+            The saved price is below the cost of the dearest unit in this group.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-4">
+        <Button className="w-full" disabled={busy || !canPublish} onClick={() => void publish()}>
+          Publish {agg.units_publishable > 0 ? agg.units_publishable + " unit" + (agg.units_publishable === 1 ? "" : "s") : "to storefront"}
+        </Button>
+        <p className="mt-1 text-xs text-ink-500">
+          {d.price_override === null
+            ? "Save a price first - publishing refuses a group nobody has priced."
+            : agg.units_publishable === 0
+              ? "Nothing waiting: every unit of this group is already on the shop."
+              : d.image_url
+                ? "Sets this price on every lot, publishes the new units, and opens their lots."
+                : "Sets this price on every lot and publishes the new units. This group has no image yet, so the card falls back to the model's own photo."}
+        </p>
+      </div>
+
+      {msg && <p className="mt-3 text-sm text-brand-300">{msg}</p>}
+      {err && <p className="mt-3 text-sm text-danger-600">{err}</p>}
+    </Card>
+  );
+}

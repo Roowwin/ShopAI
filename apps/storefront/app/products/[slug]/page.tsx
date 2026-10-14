@@ -1,6 +1,5 @@
 import { apiInternal } from "@/lib/api";
-import PurchasePanel from "./PurchasePanel";
-import ProductArt from "../../components/ProductArt";
+import ProductStage from "./ProductStage";
 import { GRADES } from "@/lib/grades";
 import { Badge, Button, Heading, linkClass, ProductCard } from "../../components/ui";
 import { notFound } from "next/navigation";
@@ -78,20 +77,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const specs = specEntries(p.specs);
   const chips = specChips(p.specs);
 
-  /* The gallery holds the shots that EXIST. The catalogue carries one parent photograph per model
-     (`image_url`) and no per-shot list, so this is one thumbnail today - the rail is built to
-     take more rather than padded with placeholders, because a thumbnail that opens nothing is
-     worse than no thumbnail. Real photography lands here as `shots` grows. */
-  const shots: (string | null)[] = p.image_url ? [p.image_url] : [null];
-
-  /* The initials tile, used when the model has neither a photo nor a shipped glyph. */
-  const initials = (
-    <div className="w-full aspect-[4/3] bg-surface-sunken flex flex-col items-center justify-center text-ink-500">
-      <p className="font-display text-display text-ink-400">{(p.brand || "?").slice(0, 2).toUpperCase()}</p>
-      <p className="text-xs mt-2">Product photo coming soon</p>
-      <p className="text-xs text-ink-400 mt-0.5">{p.brand} {p.model}</p>
-    </div>
-  );
+  /* THE GALLERY AND THE PANEL ARE ONE COMPONENT NOW - see ProductStage. They had to be: the panel
+     owns "which grade", and a group can carry a different photograph for each grade, so the hero
+     shot has to follow a value that used to live entirely inside the panel. `p.groups` is that
+     per-grade photography, straight from /store/catalog/{slug}. */
 
   return (
     <main className="text-ink-900 min-h-screen">
@@ -133,84 +122,16 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             is what makes the panel sticky: without it the grid would stretch it to the height of the
             tallest column and it would have nowhere to travel. On a phone the row collapses and the
             photograph comes first - thumbnails above the fold on a 380px screen are a scroll before
-            the product. The shots and the panel are two nested grids rather than one three-column
-            row, because the thumb rail belongs to the gallery, not to the page: it has to sit beside
-            the photograph at sm and above, and above it below that. */}
+            the product.
+
+            ProductStage renders BOTH columns as its own children, so this grid's own geometry is
+            exactly what it was - the stage was extracted for the shared grade state, not to change
+            the layout. Everything below this line that used to be here now lives in that file. */}
         <div className="grid gap-8 lg:grid-cols-12 lg:items-start">
-          <div className="order-1 lg:col-span-7">
-            <div className="grid gap-3 sm:grid-cols-[88px_minmax(0,1fr)]">
-              <div className="order-2 flex gap-3 overflow-x-auto sm:order-1 sm:flex-col sm:overflow-visible">
-                {shots.map((shot, i) => (
-                  /* The hero above shows `image_url`, which is shots[0] - so the first thumbnail is
-                     the current view and the ring says so. With one shot (today) that is the whole
-                     rail; the ring is written by index rather than unconditionally so a second shot
-                     does not arrive looking equally selected. */
-                  <div key={i} className={"shrink-0 w-20 sm:w-full rounded-control overflow-hidden " + (i === 0 ? "ring-2 ring-ink-700" : "ring-1 ring-line")}>
-                    <ProductArt slug={slug} imageUrl={shot} alt={shot ? p.title + " (view " + (i + 1) + ")" : p.title}
-                      className="w-full aspect-[4/3] object-cover" fallback={initials} />
-                  </div>
-                ))}
-              </div>
-
-              {/* The well the hero is mounted in: the recessed #122922 fill on the #264D40 hairline,
-                  which is what makes a photograph read as set into the page rather than pasted onto
-                  it. `relative` exists for the inspection badge, which floats over the image's
-                  top-left corner.
-
-                  THE BADGE IS A CLAIM, so it is only made when there is something to claim: a model
-                  whose every unit has sold has no unit on the page to call inspected, and the badge
-                  is withheld. The wording is the shop's own published one ("checked and graded by
-                  hand, one at a time", below) rather than a new promise invented for a decoration. */}
-              <div className="order-1 sm:order-2">
-                <div className="relative rounded-card overflow-hidden ring-1 ring-line bg-surface-sunken">
-                  <ProductArt slug={slug} imageUrl={p.image_url} alt={p.title} priority
-                    className="w-full aspect-[4/3] object-cover" fallback={initials} />
-                  {inStock && (
-                    <p className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-surface-deep/85 px-3 py-1.5 text-xs font-medium text-ink-700 backdrop-blur-md ring-1 ring-line">
-                      <svg viewBox="0 0 20 20" className="h-3.5 w-3.5 shrink-0 text-grade-a-ink" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <circle cx="10" cy="10" r="7.5" />
-                        <path d="m6.8 10.2 2.2 2.2 4.2-4.6" />
-                      </svg>
-                      Hand-Inspected Unit
-                    </p>
-                  )}
-                </div>
-                {!inStock && (
-                  <p className="mt-3 text-sm text-ink-500">
-                    This model is sold out - the panel beside it lists nothing to buy.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* The three specs a buyer checks before anything else, as chips under the photograph.
-                They are the model's own `specs`, printed verbatim - see specChips: no chip upgrades
-                "8GB" to "DDR4" or "256GB" to "NVMe". The full sheet is still in the panel's
-                disclosure; this row is the glance, not the datasheet.
-
-                The value WRAPS rather than truncating. It is tempting to keep the row tidy with
-                `truncate`, but that would put an ellipsis in the middle of a CPU name ("AMD Ryzen 5
-                4500...") with nothing on the page to reveal the rest - the one spec a desktop buyer
-                cares most about, hidden by a layout decision. Two lines beat a lost fact. */}
-            {chips.length > 0 && (
-              <ul className="mt-3 grid grid-cols-3 gap-2">
-                {chips.map(([label, value]) => (
-                  <li key={label} className="rounded-control bg-surface-sunken px-3 py-2 ring-1 ring-line">
-                    <p className="text-[11px] text-ink-500">{label}</p>
-                    <p className="mt-0.5 text-xs font-medium text-ink-900">{value}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* The child half. Every price, grade and serial in this panel comes from one of the
-              units the page was handed - the two columns to its left never carry a price. */}
-          <div className="order-2 lg:col-span-5 lg:sticky lg:top-24">
-            <PurchasePanel units={p.units} title={p.title} brand={p.brand} model={p.model}
-              slug={slug} specs={specs} />
-          </div>
+          <ProductStage slug={slug} title={p.title} brand={p.brand} model={p.model} specs={specs}
+            imageUrl={p.image_url} groups={p.groups ?? []} units={p.units} />
         </div>
+
 
         {/* The model's own copy, full width under the fold. It is the same words for every unit,
             so it belongs to the page rather than to the panel - and it is what a shopper reads

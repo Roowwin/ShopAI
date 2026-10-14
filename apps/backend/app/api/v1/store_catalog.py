@@ -263,9 +263,25 @@ async def catalog_item(slug: str, db=Depends(get_db)):
         WHERE a.product_id = :p AND a.status = 'listed' AND l.status = 'active'
         """ + ON_SALE + """ORDER BY a.sale_price_cents
     """), {"p": row["id"]})).mappings().all()
+    # THE PER-GRADE PHOTOGRAPHS. `products.image_url` above holds ONE picture for the whole model,
+    # which is what the catalogue card renders - but a Grade D unit and a Grade A unit are not the
+    # same object and must not show the same photograph as each other. Each grade's own shot is
+    # carried here, keyed by grade, for the product page to swap in when the shopper changes grade.
+    #
+    # Read by brand+model rather than by product_id, for the same reason the group is keyed that way:
+    # a category re-spelling can mint a second `products` row for one model, and the photograph
+    # belongs to the model, not to whichever row the sheet happened to create.
+    groups = (await db.execute(text("""
+        SELECT g.grade, g.image_url, g.price_override
+        FROM product_groups g JOIN products p ON p.id = :p
+        WHERE g.brand_id = p.brand_id AND lower(g.model) = lower(p.model)
+        ORDER BY g.grade
+    """), {"p": row["id"]})).mappings().all()
     return {"id": row["id"], "public_id": row["public_id"], "slug": row["slug"], "title": row["title"],
             "model": row["model"], "description": row["description"], "specs": row["specs"],
             "image_url": row["image_url"], "brand": row["brand"], "category": row["category"],
+            "groups": [{"grade": g["grade"], "image_url": g["image_url"],
+                        "price_cents": g["price_override"]} for g in groups],
             "units": [{"id": u["id"], "grade": u["grade"],
                        "sale_price_cents": int(u["sale_price_cents"]),
                        "serial_tail": u["serial_tail"]} for u in units]}

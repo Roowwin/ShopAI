@@ -207,6 +207,12 @@ async def _purge(tag: str):
     eng = get_engine()
     async with eng.begin() as c:
         await c.execute(text(
+            # The product groups FIRST: the importer declares one per brand+model+grade on the
+            # sheet (`_ensure_product_groups`), they hang off the BRAND, and nothing here knew that
+            # until they started appearing under this suite's tag after every run.
+            "DELETE FROM product_groups WHERE brand_id IN"
+            " (SELECT id FROM brands WHERE name LIKE :p)"), {"p": tag + "%"})
+        await c.execute(text(
             "DELETE FROM products WHERE slug LIKE :p AND NOT EXISTS"
             " (SELECT 1 FROM assets a WHERE a.product_id = products.id)"), {"p": tag + "%"})
         await c.execute(text(

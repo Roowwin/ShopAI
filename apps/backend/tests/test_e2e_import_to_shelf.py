@@ -134,6 +134,13 @@ async def _cleanup(tag: str):
     """
     eng = get_engine()
     async with eng.begin() as c:
+        # The product groups FIRST. The importer now declares one per brand+model+grade on the
+        # sheet (`_ensure_product_groups`), and these hang off the BRAND rather than the product -
+        # so the brand delete below cannot succeed while one is left, and the suite would leave a
+        # row behind on every run for a reason that has nothing to do with what it tests.
+        await c.execute(text(
+            "DELETE FROM product_groups WHERE brand_id IN"
+            " (SELECT id FROM brands WHERE name = :n)"), {"n": tag})
         await c.execute(text("UPDATE lots SET status = 'cancelled' WHERE lot_number LIKE :p"
                              " AND status IN ('intake', 'active')"), {"p": tag + "%"})
         await c.execute(text(
