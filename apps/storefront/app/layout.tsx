@@ -55,27 +55,42 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             under the title. Nothing else on the shop renders one. */}
         <div className="flex-1">{children}</div>
         <footer className="bg-surface-deep text-ink-500 mt-12">
-          <div className="max-w-6xl mx-auto px-6 py-8 grid gap-8 md:grid-cols-3 text-sm">
-            <div>
-              <p className="font-semibold text-ink-900 flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-brand-500"></span>RFO Store</p>
-              <p className="text-xs text-ink-400 mt-1">Certified refurbished electronics. Every device renewed, graded and tracked - e-waste kept out of landfill.</p>
+          {/* SMALL AND CLEAN, which here means FEWER ROWS rather than less content. The footer was a
+              three-column grid of eight-unit gaps: the identity in one column, the seven links
+              STACKED in another (which is what made the band tall), and two legal notes in a third.
+              The links are a horizontal row now, so the band is three short lines instead of one
+              tall block - same links, same note, same newsletter, a third of the height.
+
+              THE LEGAL LINE IS A STRIP rather than a column, and it moved to `ink-500`. It used
+              `ink-400`, which measures 4.44:1 on this soft-green band - just under the 4.5:1 bar,
+              and the one place in the footer where the muted step landed on the tinted fill rather
+              than on the page. */}
+          <div className="max-w-6xl mx-auto px-6 py-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold text-ink-900 flex items-center gap-1.5 text-sm">
+                  <span className="h-2 w-2 rounded-full bg-brand-500"></span>RFO Store
+                </p>
+                <p className="text-xs mt-0.5">Certified refurbished electronics - renewed, graded and tracked.</p>
+              </div>
+              <nav aria-label="Footer" className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+                <a href="/" className={navLinkClass}>Shop</a>
+                <a href="/search" className={navLinkClass}>Search</a>
+                <a href="/assistant" className={navLinkClass}>Ask the AI</a>
+                <a href="/faq" className={navLinkClass}>FAQ</a>
+                <a href="/contact" className={navLinkClass}>Contact</a>
+                <a href="/grades" className={navLinkClass}>Our grades A-D</a>
+                <a href="/returns" className={navLinkClass}>Returns &amp; warranty</a>
+              </nav>
             </div>
-            <div className="text-xs space-y-1">
-              <a href="/" className={"block " + navLinkClass}>Shop</a>
-              <a href="/search" className={"block " + navLinkClass}>Search</a>
-              <a href="/assistant" className={"block " + navLinkClass}>Ask the AI</a>
-              <a href="/faq" className={"block " + navLinkClass}>FAQ</a>
-              <a href="/contact" className={"block " + navLinkClass}>Contact</a>
-              <a href="/grades" className={"block " + navLinkClass}>Our grades A-D</a>
-              <a href="/returns" className={"block " + navLinkClass}>Returns &amp; warranty</a>
-            </div>
-            <div className="text-xs text-ink-400">
-              <p>Prices in AUD incl. applicable GST (AU 10% / NZ 15%).</p>
-              <p className="mt-1">Serials shown masked for buyer confidence.</p>
+            <div className="mt-5">
+              <FooterNewsletter />
             </div>
           </div>
-          <div className="max-w-6xl mx-auto px-6 pb-8">
-            <FooterNewsletter />
+          <div className="border-t border-line">
+            <p className="max-w-6xl mx-auto px-6 py-3 text-[11px]">
+              Prices in AUD incl. applicable GST (AU 10% / NZ 15%). Serials are shown masked for buyer confidence.
+            </p>
           </div>
         </footer>
       </body>

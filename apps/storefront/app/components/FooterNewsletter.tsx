@@ -33,19 +33,36 @@ export default function FooterNewsletter() {
     setBusy(false);
   }
 
+  /* ONE ROW, AND NO BOX AROUND IT. The box it used to sit in was `bg-surface-deep/60` INSIDE a
+     `bg-surface-deep` footer - sixty percent of a colour over itself, which is that colour, so the
+     panel was never visible as a panel and only ever added padding. The same was true of the
+     field's `tone="deep"`: an invisible fill on an invisible box. The field is white now
+     (`tone="light"`), which is what makes it read as a field on the tinted band at all.
+
+     The label and the sub-copy are one line and the form sits beside it, so the whole block is
+     the height of the input instead of four stacked lines. The confirmation is a SIBLING of the
+     row rather than a child, so it appears under both halves and cannot change their alignment. */
   return (
-    <div className="rounded-control bg-surface-deep/60 px-4 py-3">
-      <p className="text-sm font-semibold text-ink-900">Get the drop list</p>
-      <p className="text-xs text-ink-400 mt-1">Fresh stock alerts and deals - no spam.</p>
-      <form className="mt-2 flex flex-wrap gap-2" onSubmit={submit}>
-        <Input tone="deep" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com" aria-label="Email address"
-          className="flex-1 min-w-[12rem] text-sm" />
-        <Button type="submit" disabled={busy}>
-          {busy ? "..." : "Subscribe"}
-        </Button>
-      </form>
+    <>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs">
+          <span className="font-semibold text-ink-900">Get the drop list</span>
+          {" - "}fresh stock alerts and deals, no spam.
+        </p>
+        <form className="flex flex-col gap-2 sm:flex-row" onSubmit={submit}>
+          {/* The width is on a WRAPPER: Input's base carries `w-full` and this app has no
+              tailwind-merge, so a width class passed to it would lose to that by stylesheet order. */}
+          <div className="sm:w-56">
+            <Input tone="light" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com" aria-label="Email address"
+              className="text-sm" />
+          </div>
+          <Button type="submit" size="sm" disabled={busy}>
+            {busy ? "..." : "Subscribe"}
+          </Button>
+        </form>
+      </div>
       {msg && (<p className="text-xs text-brand-300 mt-2">{msg}</p>)}
-    </div>
+    </>
   );
 }
