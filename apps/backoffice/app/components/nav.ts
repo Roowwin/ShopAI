@@ -70,12 +70,14 @@ export const GROUPS: NavGroup[] = [
     id: "catalog-inventory", heading: "Inventory", icon: "crate", items: [
       {
         /* The asset workbench: the unit-level inventory browser, which is what "Inventory"
-           names. Intake - the receiving and grading station - hangs under it, so
-           the inventory half of the platform is one entry with its two jobs inside it rather than
-           two peers that look like unrelated screens. */
+           names. Two jobs hang under it rather than sitting beside it as peers that look like
+           unrelated screens: Grading (the receiving-and-grading station) and Receive stock (the
+           lot and scan-in tools that used to be buried at the foot of Product import, where they
+           were the only renderer of an entry point nobody could find from the chrome). */
         href: "/admin/assets", label: "Inventory",
         children: [
-          { href: "/admin/intake", label: "Intake" },
+          { href: "/admin/intake", label: "Grading" },
+          { href: "/admin/receive", label: "Receive stock" },
         ],
       },
       { href: "/admin/product-import", label: "Product import" },
