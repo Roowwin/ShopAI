@@ -69,7 +69,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge, Button, Card, Heading, Input, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
 import { gradeHelpId } from "@/lib/grading";
-import { kickerClass } from "@/lib/ui";
+import { aud } from "@/lib/format";
+import { kickerClass, linkClass, statusTone } from "@/lib/ui";
+/* The shop's own origin, read from the one place the admin already keeps it (the CMS's preview
+   needs the same fact). "View in shop" is an absolute link because the shop is a different origin
+   from the admin, so a relative path would land on an admin route that does not exist. */
+import { SITE } from "@/app/admin/cms/site";
 import { GRADE_TIP_HEIGHT, GRADE_TIP_WIDTH, GradeHelp, GradeTip } from "./GradeTip";
 import PendingLots from "./PendingLots";
 
@@ -86,6 +91,13 @@ type WorkUnit = {
   notes: string | null;
   gradable: boolean;
   ready_for_pricing: boolean;
+  /* The Listing column's three inputs, all off the same joins the row already reads:
+     what the unit is priced at, the product's slug (to link at the shopfront) and the product's own
+     status - because a listed unit reaches the shop only when its LOT and its PRODUCT are both
+     active, so the message this column shows has to be able to say which of the two is missing. */
+  price_cents: number | null;
+  product_slug: string | null;
+  product_status: string | null;
   /* Where the unit is. Warehouse and Zone come from the unit's LOT - every unit in one lot shares
      them - while Pallet and Location are the unit's own. They arrive on the row rather than only on
      the lot header because a grader working down the list is asking about THIS unit. All optional:
@@ -176,6 +188,19 @@ export default function LotWorkbench() {
   const [inFlight, setInFlight] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  /* The toast is for the three actions that change what the SHOP shows - list, unlist, attach an
+     image - because those are the ones an operator wants confirming while looking somewhere else.
+     A grade or a price keeps the quiet line above the table it has always had: a toast for every
+     keystroke would be a toast nobody reads. */
+  const [toast, setToast] = useState<{ text: string; detail?: string } | null>(null);
+
+  /* It goes away on its own, which is what makes it a notification rather than a dialog. Cleared on
+     the way out too, so a queued dismissal cannot outlive the message it belongs to. */
+  useEffect(() => {
+    if (!toast) { return; }
+    const t = setTimeout(() => setToast(null), 7000);
+    return () => clearTimeout(t);
+  }, [toast]);
   /* Description drafts, keyed by unit id, seeded from the payload the first time a row is seen and
      then owned by the field until it saves. Held across reloads on purpose: a save on one row must
      not throw away what is half-typed on another. */
@@ -184,6 +209,10 @@ export default function LotWorkbench() {
      Null is the closed state, so there is no "is it visible" flag to keep in step with the grade. */
   const [tip, setTip] = useState<{ grade: string; x: number; y: number; above: boolean } | null>(null);
   const gradeRefs = useRef(new Map<string, HTMLButtonElement | null>());
+  /* ONE file input for the whole table, not one per row: the camera hands this the unit it was
+     pressed for, so a lot of forty units does not carry forty hidden inputs. */
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const imageFor = useRef<number | null>(null);
 
   const seed = useCallback((units: WorkUnit[]) => {
     setDrafts((prev) => {
@@ -279,6 +308,140 @@ export default function LotWorkbench() {
     setList((cur) =>
       cur ? { ...cur, assets: cur.assets.map((a) => (a.id === unitId ? { ...a, grade } : a)) } : cur,
     );
+  }
+
+  /* The same one-field optimism for the two facts the Listing column decides on. A status or a price
+     that has been written is patched into the row so the column changes in the same frame as the
+     press; the reload that follows is what makes the REST of the row true. */
+  function setRowStatus(unitId: number, status: string) {
+    setList((cur) =>
+      cur ? { ...cur, assets: cur.assets.map((a) => (a.id === unitId ? { ...a, status } : a)) } : cur,
+    );
+  }
+  function setRowPrice(unitId: number, price_cents: number | null) {
+    setList((cur) =>
+      cur ? { ...cur, assets: cur.assets.map((a) => (a.id === unitId ? { ...a, price_cents } : a)) } : cur,
+    );
+  }
+
+  /* THE LISTING COLUMN'S THREE STATES, and the one that has to be careful.
+
+     "Ready" is exactly what the doors require: a grade and a price (the database refuses a listed
+     unit carrying either NULL), and a status the lifecycle can move to `listed` FROM. The ladder
+     admits `graded -> listed` and `reserved -> listed`; this column offers only the first, because a
+     reserved unit is one a customer is holding and putting it on the shelf behind that reservation
+     is not a decision to take from a table cell.
+
+     The blocked sentence names the real reason. A sold or scrapped unit told to "complete grading &
+     pricing first" would be a lie about why it cannot be listed; only a unit that is genuinely short
+     of a grade or a price gets the brief's wording. */
+  function listingState(u: WorkUnit): "listed" | "ready" | "blocked" {
+    if (u.status === "listed") { return "listed"; }
+    if (u.status === "graded" && u.grade !== null && u.price_cents !== null) { return "ready"; }
+    return "blocked";
+  }
+  function blockedWhy(u: WorkUnit): string {
+    if (u.grade === null || u.price_cents === null) { return "Complete grading & pricing first"; }
+    return `A ${u.status} unit cannot be listed here.`;
+  }
+
+  /* WHAT THE CONFIRMATION IS ALLOWED TO CLAIM. A listed unit reaches the shop only when its LOT and
+     its PRODUCT are both active - the shop's own query joins on both - so a message saying "listed
+     on the storefront" would be false for a unit whose lot is still a draft, which is the common
+     case in the middle of intake. The toast says what happened and, when something is still
+     missing, which one. */
+  function publishNote(u: WorkUnit): string | undefined {
+    const missing: string[] = [];
+    if (list?.lot.status !== "active") { missing.push(`its lot is still a ${list?.lot.status ?? "draft"}`); }
+    if (u.product_status !== null && u.product_status !== "active") { missing.push(`its product is ${u.product_status}`); }
+    if (missing.length === 0) { return undefined; }
+    return `Not in the shop yet: ${missing.join(", and ")}.`;
+  }
+
+  /* List and unlist are one function because they are one door with two targets. Both patch the
+     row's status first so the column changes in the same frame as the press, put it back if the
+     server refuses, and only then reload for the rest of the row. */
+  async function setStatus(u: WorkUnit, status: "listed" | "graded", label: string) {
+    setErr(""); setMsg("");
+    const held = u.status;
+    setRowStatus(u.id, status);
+    try {
+      const r = await apiFetch(`/staff/assets/${u.id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const j: any = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setRowStatus(u.id, held);
+        setErr(typeof j.detail === "string" ? j.detail : `${label} was refused`);
+        return;
+      }
+      setToast(status === "listed"
+        ? { text: `Asset ${u.id} listed.`, detail: publishNote(u) }
+        : { text: `Asset ${u.id} unlisted.`,
+            detail: "It keeps its grade and its price, and can be listed again." });
+      await reload();
+    } catch {
+      setRowStatus(u.id, held);
+      setErr(`${label} could not be sent`);
+    }
+  }
+
+  /* THE INLINE PRICE WRITES ON BLUR OR ON ENTER - the same commit the description field beside it
+     uses. A field that saved on every keystroke would write a price of "1" on the way to "19900",
+     and one of those is a listing at one cent. */
+  async function savePrice(u: WorkUnit, raw: string) {
+    const v = raw.trim();
+    const cents = Number(v);
+    if (v === "" || !Number.isInteger(cents) || cents < 0) {
+      setMsg(""); setErr(`Asset ${u.id}: the price has to be a whole number of cents, zero or more.`);
+      return;
+    }
+    if (cents === u.price_cents) { return; }        // nothing changed, nothing written
+    setErr(""); setMsg("");
+    const held = u.price_cents;
+    setRowPrice(u.id, cents);
+    try {
+      const r = await apiFetch(`/staff/assets/${u.id}/price`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sale_price_cents: cents }),
+      });
+      const j: any = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setRowPrice(u.id, held);
+        setErr(typeof j.detail === "string" ? j.detail : "that price was refused");
+        return;
+      }
+      setMsg(`Asset ${u.id} priced ${aud(cents, "AUD")}.`);
+      await reload();
+    } catch {
+      setRowPrice(u.id, held);
+      setErr("that price could not be sent");
+    }
+  }
+
+  /* THE CAMERA IS AN UPLOAD, NOT A DIALOG TO OPEN. There is no image dialog in this app - the image
+     hub is its own page at /admin/assets/[id] - so the button opens the browser's own file picker
+     for this unit and posts the file through the same upload door the hub uses. The row never leaves
+     the workbench, which is the point of having it in the row. */
+  function pickImage(unitId: number) {
+    imageFor.current = unitId;
+    fileRef.current?.click();
+  }
+  async function uploadImage(u: WorkUnit, file: File) {
+    setErr(""); setMsg("");
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const r = await apiFetch(`/staff/assets/${u.id}/images`, { method: "POST", body: fd });
+      const j: any = await r.json().catch(() => ({}));
+      if (!r.ok) { setErr(typeof j.detail === "string" ? j.detail : "that image was refused"); return; }
+      setToast({ text: `Image attached to asset ${u.id}.`, detail: j.filename ?? undefined });
+    } catch {
+      setErr("that image could not be sent");
+    }
   }
 
   function focusGrade(unitId: number, grade: string) {
@@ -530,10 +693,12 @@ export default function LotWorkbench() {
                     <TH>Pallet</TH>
                     <TH>Upgrade Description</TH>
                     <TH>Grade</TH>
+                    <TH>Listing</TH>
                   </THead>
                   <TBody>
                     {list.assets.map((u) => {
                       const matched = u.id === list.highlight_asset_id;
+                      const lst = listingState(u);
                       return (
                         <TR
                           key={u.id}
@@ -603,6 +768,7 @@ export default function LotWorkbench() {
                             </div>
                           </TD>
                           <TD>
+                            <div className="flex items-center gap-2">
                             {u.gradable ? (
                               <div className="flex gap-1">
                                 {GRADES.map((g) => (
@@ -643,6 +809,64 @@ export default function LotWorkbench() {
                                 {u.grade ?? "no grade"} - not gradable at {u.status}
                               </span>
                             )}
+                              {/* THE INLINE PRICE, beside the grade it belongs with. It commits on
+                                  blur or on Enter rather than per keystroke - see savePrice. The value
+                                  is the server's (`price_cents`), and it is left uncontrolled on
+                                  purpose: a reload must not overwrite digits the operator is in the
+                                  middle of typing. */}
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                defaultValue={u.price_cents ?? ""}
+                                placeholder="cents"
+                                aria-label={`Sale price in cents for asset ${u.id}`}
+                                onBlur={(e) => void savePrice(u, e.currentTarget.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); }
+                                }}
+                                className="h-7 w-20 shrink-0 rounded-control bg-surface-sunken px-2 text-xs tabular-nums text-ink-900 ring-1 ring-line outline-none placeholder:text-ink-500 hover:ring-line-strong focus:ring-2 focus:ring-brand-300"
+                              />
+                            </div>
+                          </TD>
+
+                          {/* THE LISTING COLUMN: the last thing that happens to a unit before it is
+                              for sale, in the row it happens to. */}
+                          <TD>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {lst === "listed" ? (
+                                <>
+                                  <Badge colorClass={statusTone("listed")}>Listed</Badge>
+                                  <Button variant="secondary" size="sm" disabled={inFlight !== null}
+                                          onClick={() => void setStatus(u, "graded", "Unlist")}>Unlist</Button>
+                                  {u.product_slug ? (
+                                    <a href={SITE + "/products/" + u.product_slug} target="_blank" rel="noreferrer"
+                                       className={cn("text-xs", linkClass)}>View in shop</a>
+                                  ) : null}
+                                </>
+                              ) : lst === "ready" ? (
+                                <Button size="sm" disabled={inFlight !== null}
+                                        onClick={() => void setStatus(u, "listed", "Publish")}>Publish to Store</Button>
+                              ) : (
+                                <span className="text-xs text-ink-500">{blockedWhy(u)}</span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => pickImage(u.id)}
+                                aria-label={`Attach an image to asset ${u.id}`}
+                                title="Attach an image"
+                                className={cn(
+                                  "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-control",
+                                  "text-ink-500 ring-1 ring-line hover:text-ink-700 hover:ring-line-strong",
+                                  CELL_FOCUS,
+                                )}
+                              >
+                                <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor"
+                                  strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M3 7h3l1.2-1.8h5.6L14 7h3v9H3V7Z" />
+                                  <circle cx="10" cy="11" r="3" />
+                                </svg>
+                              </button>
+                            </div>
                           </TD>
                         </TR>
                       );
@@ -662,6 +886,45 @@ export default function LotWorkbench() {
 
       {/* Outside every panel and every scrolling region, so nothing can trim it - see GradeTip.tsx. */}
       {tip && <GradeTip grade={tip.grade} x={tip.x} y={tip.y} above={tip.above} />}
+
+      {/* One file input for the table. It is off-screen rather than `display:none`-equivalent, and it
+          is reset after every pick so choosing the same file twice still fires a change. */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        className="sr-only"
+        aria-hidden="true"
+        tabIndex={-1}
+        onChange={(e) => {
+          const f = e.currentTarget.files?.[0];
+          const forId = imageFor.current;
+          e.currentTarget.value = "";
+          imageFor.current = null;
+          const unit = (list?.assets ?? []).find((a) => a.id === forId);
+          if (f && unit) { void uploadImage(unit, f); }
+        }}
+      />
+
+      {/* THE CONFIRMATION. `role="status"` and no focus: it is an announcement, not an interruption -
+          the operator is usually already typing in the next row, and a toast that took focus would
+          cost them their place. It carries its own ground because it floats over the table. */}
+      {toast && (
+        <div
+          role="status"
+          className="fixed bottom-4 right-4 z-40 max-w-sm rounded-card bg-surface-glass/95 p-4 ring-1 ring-line backdrop-blur-md"
+        >
+          <p className="text-sm text-ink-900">{toast.text}</p>
+          {toast.detail && <p className="mt-1 text-xs text-ink-500">{toast.detail}</p>}
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className={cn("mt-2 text-xs", linkClass)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
     </div>
   );
 }

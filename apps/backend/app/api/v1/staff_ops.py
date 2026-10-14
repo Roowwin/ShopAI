@@ -722,6 +722,14 @@ async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_
                a.status, a.grade, a.product_id, a.notes, a.location, a.pallet, a.sku, a.asset,
                a.channel, a.on_shelf, a.model_number,
                p.title AS product_title, p.model AS product_model, c.name AS category_name,
+               -- The workbench's Listing column needs three more things off the same joins it already
+               -- makes: what the unit is priced at (to decide "ready to list" and to seed the inline
+               -- price field), the product's slug (to link at the shopfront), and the product's own
+               -- status - because the storefront shows a listed unit only when both its lot AND its
+               -- product are active, so a "published" message that ignored the product would be a
+               -- claim this payload could not support. `sale_price_cents` is what the price door
+               -- writes; there is no `resale_price` in this schema.
+               a.sale_price_cents, p.slug AS product_slug, p.status AS product_status,
                -- The batch columns ride on every row rather than only on the lot header: a grader
                -- working down a list is asking "which warehouse is THIS unit in", and making them
                -- scroll back to a header to find out is the visibility gap this closes.
@@ -754,6 +762,8 @@ async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_
                     "asset": r["asset"], "model_number": r["model_number"],
                     "location": r["location"], "pallet": r["pallet"], "sku": r["sku"],
                     "channel": r["channel"], "on_shelf": r["on_shelf"],
+                    "price_cents": r["sale_price_cents"], "product_slug": r["product_slug"],
+                    "product_status": r["product_status"],
                     "warehouse": r["lot_warehouse"], "zone": r["lot_zone"],
                     "load_id": r["lot_load_id"], "account": r["lot_account"],
                     "gradable": r["status"] in _GRADABLE_STATUSES,
