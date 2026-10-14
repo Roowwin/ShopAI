@@ -58,8 +58,8 @@ from app.api.v1.deps import require_roles
 from app.api.v1.staff_ops import _409, _audit_actor, _audit_execution, _require_role
 from app.core.db import get_db
 from app.services.group_image_match import candidates as match_candidates
-from app.services.media import (MediaRefused, public_address, read_for_upload, safe_filename,
-                                store_upload)
+from app.services.media import (MediaRefused, public_address, read_for_upload, remove_from_disk,
+                                safe_filename, store_upload)
 from app.services.pricing import TARGET_MARKUP_PCT
 
 router = APIRouter(prefix="/staff", tags=["staff-product-groups"])
@@ -374,7 +374,8 @@ async def discard_pool_image(media_id: int, staff: dict = Depends(require_roles(
     """
     await _require_role(staff, ROLES_GROUPS, "", db)
     before = (await db.execute(text(
-        "SELECT filename FROM media_objects WHERE id = :i"), {"i": media_id})).mappings().first()
+        "SELECT filename, disk_name FROM media_objects WHERE id = :i"),
+        {"i": media_id})).mappings().first()
     removed = (await db.execute(text("""
         DELETE FROM media_objects WHERE id = :i
           AND NOT EXISTS (SELECT 1 FROM product_groups g WHERE g.media_id = media_objects.id)
@@ -397,7 +398,12 @@ async def discard_pool_image(media_id: int, staff: dict = Depends(require_roles(
         await db.commit()
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
-    return {"media_id": media_id, "discarded": True}
+    # The copy on disk goes only AFTER the row is committed. Doing it first would delete the file for
+    # a discard that then failed at the commit, leaving a row whose bytes and whose file disagree -
+    # and there is no undo for a deleted file. This order can at worst leave an orphaned file, which
+    # the export script re-derives from the rows anyway.
+    file_gone = remove_from_disk(before["disk_name"])
+    return {"media_id": media_id, "discarded": True, "file_removed": file_gone}
 
 
 @router.get("/product-groups/{group_id}")

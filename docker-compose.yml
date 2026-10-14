@@ -157,6 +157,13 @@ services:
       PUBLIC_CHAT_ENABLED: ${PUBLIC_CHAT_ENABLED:-false}
       PUBLIC_CHAT_DAILY_MAX: ${PUBLIC_CHAT_DAILY_MAX:-500}
       DATABASE_AI_STAFF_URL: postgresql+asyncpg://rfo_ai_staff:${DB_AI_STAFF_PASSWORD:?missing in .env}@pgbouncer:5432/rfo
+      # WHERE THE COPY OF EVERY UPLOADED IMAGE GOES, as the container sees it. The mount below puts
+      # a HOST folder here so the operator can open it in Explorer and back it up; the path itself
+      # is set by MEDIA_DIR in .env (default: a folder BESIDE this repo, never inside it - the
+      # project tree is not a place to keep someone's product photography).
+      MEDIA_DIR: /media-files
+    volumes:
+      - ${MEDIA_DIR:-../rfo-media}:/media-files
     extra_hosts: ["host.docker.internal:host-gateway"]
     networks: [edge, core]
     depends_on:

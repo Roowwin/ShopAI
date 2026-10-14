@@ -14,7 +14,8 @@ from app.services.audit import audit
 from app.services.margin import margin_refusal
 # The one definition of what an upload may be. Re-exported (see GRADE_TEMPLATE_GRADES below) because
 # this module is where `store_returns` has always imported them from.
-from app.services.media import IMAGE_MAX_BYTES, IMAGE_TYPES, safe_filename as _safe_filename
+from app.services.media import (IMAGE_MAX_BYTES, IMAGE_TYPES, MediaRefused,  # noqa: F401 (re-export)
+                                read_for_upload, safe_filename as _safe_filename, store_upload)
 
 router = APIRouter(prefix="/staff", tags=["staff-ops"])
 
@@ -1322,24 +1323,21 @@ async def upload_asset_image(asset_id: int, file: UploadFile = File(...),
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
 
-    # A multipart part may carry parameters ("image/jpeg; charset=..."); the type is the bare one.
-    ctype = (file.content_type or "").split(";")[0].strip().lower()
-    if ctype not in IMAGE_TYPES:
-        raise HTTPException(status_code=422,
-                            detail="only JPEG, PNG, WebP or GIF images can be attached")
-    blob = await file.read(IMAGE_MAX_BYTES + 1)
-    if not blob:
-        raise HTTPException(status_code=422, detail="that file is empty")
-    if len(blob) > IMAGE_MAX_BYTES:
-        raise HTTPException(status_code=413, detail="images are capped at 5 MB")
+    # VALIDATED AND STORED BY THE SHARED HELPER, which also writes the copy into the media folder -
+    # so a unit's photograph lands in the same one place a product's does. The three rules that used
+    # to be spelled out here (whitelist, empty, cap) are the same three in `services/media.py`, and
+    # two copies of a rule is two chances to widen one of them by accident. The two status codes are
+    # kept exactly as they were: 413 for the cap, 422 for everything else.
+    try:
+        blob = await read_for_upload(file)
+        media = await store_upload(db, filename=file.filename, content_type=file.content_type,
+                                   blob=blob, uploaded_by=staff["id"])
+    except MediaRefused as refusal:
+        await db.rollback()
+        status = 413 if "5 MB" in str(refusal) else 422
+        raise HTTPException(status_code=status, detail=str(refusal))
 
     try:
-        media = (await db.execute(text("""
-            INSERT INTO media_objects (filename, content_type, byte_size, bytes, uploaded_by)
-            VALUES (:f, :c, :n, :b, :u)
-            RETURNING id, public_id::text AS public_id
-        """), {"f": _safe_filename(file.filename), "c": ctype, "n": len(blob), "b": blob,
-               "u": staff["id"]})).mappings().one()
         # No ON CONFLICT here, and no content de-duplication: every upload is a new file row and a
         # new assignment, because two photographs of one unit are two things the unit's page
         # should show. The unique key is an INVARIANT, not a de-duplicator - if it ever fires the
@@ -1361,7 +1359,7 @@ async def upload_asset_image(asset_id: int, file: UploadFile = File(...),
     except SQLAlchemyError as e:
         await db.rollback(); _409(e)
     return {"image_id": row["id"], "media_id": media["id"], "public_id": media["public_id"],
-            "filename": _safe_filename(file.filename), "content_type": ctype, "byte_size": len(blob),
+            "filename": _safe_filename(file.filename), "content_type": media["content_type"], "byte_size": len(blob),
             "applied_by_bulk": False}
 
 
@@ -1637,25 +1635,19 @@ async def upload_product_media(product_id: int, file: UploadFile = File(...),
     if known is None:
         raise HTTPException(status_code=404, detail="product not found")
 
-    # A multipart part may carry parameters ("image/jpeg; charset=..."); the type is the bare one.
-    ctype = (file.content_type or "").split(";")[0].strip().lower()
-    if ctype not in IMAGE_TYPES:
-        raise HTTPException(status_code=422,
-                            detail="only JPEG, PNG, WebP or GIF images can be attached")
-    blob = await file.read(IMAGE_MAX_BYTES + 1)
-    if not blob:
-        raise HTTPException(status_code=422, detail="that file is empty")
-    if len(blob) > IMAGE_MAX_BYTES:
-        raise HTTPException(status_code=413, detail="images are capped at 5 MB")
+    # Shared with every other upload door, so this photograph also lands in the media folder and the
+    # whitelist and cap have one definition rather than three. Same two status codes as before.
+    try:
+        blob = await read_for_upload(file)
+        media = await store_upload(db, filename=file.filename, content_type=file.content_type,
+                                   blob=blob, uploaded_by=staff["id"])
+    except MediaRefused as refusal:
+        await db.rollback()
+        status = 413 if "5 MB" in str(refusal) else 422
+        raise HTTPException(status_code=status, detail=str(refusal))
 
     clean_alt = (alt_text or "").strip()[:300] or None
     try:
-        media = (await db.execute(text("""
-            INSERT INTO media_objects (filename, content_type, byte_size, bytes, uploaded_by)
-            VALUES (:f, :c, :n, :b, :u)
-            RETURNING id, public_id::text AS public_id
-        """), {"f": _safe_filename(file.filename), "c": ctype, "n": len(blob), "b": blob,
-               "u": staff["id"]})).mappings().one()
         # One statement so the primary flag and the position are read from the same snapshot the
         # insert sees; the partial unique index on (product_id) WHERE is_primary is the backstop if
         # two uploads for one product ever race, and it answers 409 through the translator below.
@@ -1682,7 +1674,7 @@ async def upload_product_media(product_id: int, file: UploadFile = File(...),
     return {"media_row_id": row["id"], "media_id": media["id"], "public_id": media["public_id"],
             "product_id": product_id, "kind": "image", "position": row["position"],
             "is_primary": bool(row["is_primary"]), "alt_text": clean_alt,
-            "filename": _safe_filename(file.filename), "content_type": ctype,
+            "filename": _safe_filename(file.filename), "content_type": media["content_type"],
             "byte_size": len(blob)}
 
 

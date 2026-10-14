@@ -1,7 +1,22 @@
+import os
+import tempfile
+
 import pytest_asyncio
 import httpx
 
 from app.main import app
+
+# TESTS NEVER WRITE INTO THE OPERATOR'S MEDIA FOLDER. Every upload now also writes a real file into
+# `MEDIA_DIR`, and the compose service points that at a folder on the host that a person opens in
+# Explorer. A suite that uploaded fixtures would therefore be dropping `mission-pgroup-*.png` and
+# `defect.png` into somebody's product photography - which is exactly what happened once, before
+# this line existed (`1a06281f-defect.png`, left by an RMA fixture whose teardown knows about its own
+# tables but not about `media_objects`).
+#
+# FORCED, not `setdefault`: the compose service already sets `MEDIA_DIR=/media-files`, so a default
+# would never apply and the tests would write straight through to the host. A fresh temp directory
+# per run, thrown away by the OS.
+os.environ["MEDIA_DIR"] = tempfile.mkdtemp(prefix="rfo-test-media-")
 
 
 @pytest_asyncio.fixture

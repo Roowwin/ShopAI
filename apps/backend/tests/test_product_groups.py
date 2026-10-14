@@ -22,6 +22,7 @@ running beside it, and the failure would read as a 401 from the door rather than
 This file sweeps its own prefix, so nothing accumulates either way.
 """
 
+import os
 import uuid
 
 import pytest_asyncio
@@ -29,6 +30,7 @@ from sqlalchemy import text
 
 from app.bootstrap_staff import bootstrap
 from app.core.db import get_engine
+from app.services.media import media_dir, remove_from_disk
 
 # A 1x1 PNG: real bytes with a real signature, small enough not to carry a fixture megabyte around.
 PNG = bytes.fromhex(
@@ -78,6 +80,18 @@ async def _sweep(client):
     """
     async def sweep():
         eng = get_engine()
+        # THE COPIES ON DISK FIRST, and collected before the rows that name them are deleted - once
+        # the row is gone there is no way back to the filename. These tests upload real files, and
+        # every upload now writes one into the media folder, which on this machine is a folder a
+        # person opens and looks at. A suite that left those behind would be filling somebody's
+        # folder with `mission-pgroup-` photographs.
+        async with eng.begin() as c:
+            disk_names = (await c.execute(text(
+                "SELECT disk_name FROM media_objects WHERE disk_name IS NOT NULL AND uploaded_by IN "
+                "(SELECT id FROM staff_users WHERE email LIKE :i)"),
+                {"i": IDENTITY_PREFIX + "%"})).scalars().all()
+        for n in disk_names:
+            remove_from_disk(n)
         # Every predicate is `brand name LIKE 'mission-pgroup-%'` or a lot/category slug carrying the
         # same tag, so a run can only ever remove its own rows. The NOT EXISTS guards on the two
         # deletes that could be pinned by another table are belt-and-braces: nothing in this file
@@ -641,3 +655,28 @@ async def test_the_category_filter_narrows_the_list_and_carries_its_own_options(
     opts = {c["slug"]: c["groups"] for c in r.json()["categories"]}
     assert opts.get(tag + "-cat-one") == 1, opts.get(tag + "-cat-one")
     assert opts.get(tag + "-cat-two") == 1, opts.get(tag + "-cat-two")
+
+
+async def test_an_upload_writes_a_real_file_into_the_media_folder_and_discard_removes_it(client):
+    """The folder a person opens in Explorer is a COPY; the row stays the source of truth.
+
+    Both halves matter. The file has to appear, or "one folder where all the images are" is a
+    promise the app does not keep. And deleting the row has to take the file with it, or the folder
+    only ever grows - including with pictures the operator explicitly threw away.
+    """
+    tok = await _staff(client)
+    tag = _tag()
+    up = await _pool_upload(client, tok, [tag + "-folder.png"])
+    mid = up.json()["uploaded"][0]["media_id"]
+
+    name = await _one("SELECT disk_name FROM media_objects WHERE id = :i", i=mid)
+    assert name and name.endswith("-" + tag + "-folder.png"), name
+    path = os.path.join(media_dir(), name)
+    assert os.path.exists(path), path
+    with open(path, "rb") as fh:
+        assert fh.read() == PNG
+
+    r = await client.delete(f"/staff/product-groups/image-pool/{mid}", headers=_h(tok))
+    assert r.status_code == 200, r.text
+    assert r.json()["file_removed"] is True
+    assert not os.path.exists(path)
