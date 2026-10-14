@@ -435,3 +435,180 @@ async def test_bulk_publish_names_the_groups_it_held_back(client):
                       i=ready["asset_ids"]) == 2
     assert await _one("SELECT count(*) FROM assets WHERE id = ANY(:i) AND status = 'received'",
                       i=unpriced["asset_ids"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# The photo pool: a folder uploaded in one go, and the suggestion each group offers.
+#
+# The pure cases run without a database on purpose. The rule they pin - a grade is a TOKEN, not a
+# letter - is the one a substring implementation gets wrong, and it is worth being able to point at
+# a red test rather than at a paragraph of prose when somebody proposes "just use `in`".
+# ---------------------------------------------------------------------------
+
+
+def test_the_grade_marker_is_a_whole_token_and_not_a_letter():
+    """The trap the whole rule exists for: `a` lives inside latitude, apple and carbon."""
+    from app.services.group_image_match import grade_marker
+    assert grade_marker("latitude-5420_A.jpg") == "A"
+    assert grade_marker("latitude_5420_a.png") == "A"
+    assert grade_marker("Latitude 5420 Grade B.webp") == "B"
+    # ...and none of these claims anything, though every one of them contains the letter.
+    assert grade_marker("latitude.jpg") is None
+    assert grade_marker("apple-iphone-13.jpg") is None
+    assert grade_marker("carbon-x1-carbon.jpg") is None
+    assert grade_marker("") is None
+
+
+def test_a_file_naming_a_different_grade_is_excluded_rather_than_ranked_lower():
+    """Excluded, not down-ranked: the Grade B photograph must never reach a Grade A group."""
+    from app.services.group_image_match import candidates
+    pool = [{"media_id": 1, "filename": "latitude-5420_A.jpg", "uploaded_at": None},
+            {"media_id": 2, "filename": "latitude-5420_B.jpg", "uploaded_at": None}]
+    assert [c["media_id"] for c in candidates("Dell", "Latitude 5420", "A", pool)] == [1]
+    assert [c["media_id"] for c in candidates("Dell", "Latitude 5420", "B", pool)] == [2]
+
+
+def test_a_file_missing_a_word_of_the_model_matches_nothing():
+    """Not a weaker match - a different device."""
+    from app.services.group_image_match import candidates
+    assert candidates("Dell", "Latitude 5420", "A",
+                      [{"media_id": 1, "filename": "latitude.jpg", "uploaded_at": None}]) == []
+    # And the other direction: a longer model is not satisfied by the shorter name.
+    assert candidates("Dell", "Latitude 5420 Carbon", "A",
+                      [{"media_id": 1, "filename": "latitude-5420_A.jpg", "uploaded_at": None}]) == []
+
+
+def test_the_brand_is_not_required_because_filenames_do_not_carry_it():
+    """The first cut required it, and matched nothing at all."""
+    from app.services.group_image_match import candidates
+    pool = [{"media_id": 1, "filename": "latitude-5420_A.jpg", "uploaded_at": None}]
+    assert [c["media_id"] for c in candidates("Dell", "Latitude 5420", "A", pool)] == [1]
+
+
+def test_a_file_that_names_the_grade_outranks_one_that_says_nothing():
+    from app.services.group_image_match import candidates
+    pool = [{"media_id": 1, "filename": "latitude-5420.jpg", "uploaded_at": None},
+            {"media_id": 2, "filename": "latitude-5420_A.jpg", "uploaded_at": None}]
+    got = candidates("Dell", "Latitude 5420", "A", pool)
+    assert [c["media_id"] for c in got] == [2, 1]
+    assert got[0]["grade_marker"] == "A" and got[1]["grade_marker"] is None
+
+
+async def _pool_upload(client, tok, names):
+    """Post one batch of images into the pool. `names` are the filenames to invent."""
+    return await client.post("/staff/product-groups/images", headers=_h(tok),
+                             files=[("files", (n, PNG, "image/png")) for n in names])
+
+
+async def test_a_folder_upload_stores_every_image_and_names_the_ones_it_refused(client):
+    """One bad file must not fail the batch - a real folder always contains one."""
+    tok = await _staff(client)
+    tag = _tag()
+    r = await client.post("/staff/product-groups/images", headers=_h(tok), files=[
+        ("files", (tag + "-one.png", PNG, "image/png")),
+        ("files", (tag + "-two.png", PNG, "image/png")),
+        ("files", (tag + "-notes.pdf", b"%PDF-1.4 not an image", "application/pdf")),
+    ])
+    assert r.status_code == 201, r.text
+    j = r.json()
+    assert len(j["uploaded"]) == 2, j
+    assert len(j["refused"]) == 1, j
+    assert j["refused"][0]["filename"] == tag + "-notes.pdf"
+    assert "JPEG" in j["refused"][0]["reason"]
+    assert j["pool_size"] >= 2
+    # Both good files are in the pool, and nothing points at them yet - that is what a pool is.
+    pool = await client.get("/staff/product-groups/image-pool?limit=400", headers=_h(tok))
+    ids = [i["media_id"] for i in pool.json()["items"]]
+    assert {u["media_id"] for u in j["uploaded"]} <= set(ids)
+
+
+async def test_the_pool_stops_offering_an_image_a_group_already_points_at(client):
+    tok = await _staff(client)
+    seeded = await _seed(_tag())
+    rsp = await client.post(f"/staff/product-groups/{seeded['group_id']}/image", headers=_h(tok),
+                            files={"file": ("shot.png", PNG, "image/png")})
+    assert rsp.status_code == 201, rsp.text
+    mid = rsp.json()["media_id"]
+    pool = await client.get("/staff/product-groups/image-pool?limit=400", headers=_h(tok))
+    assert mid not in [i["media_id"] for i in pool.json()["items"]]
+
+
+async def test_attaching_points_a_group_at_a_pooled_image_without_moving_bytes(client):
+    """The pool's half of the upload door: three hundred files cross once, attaching is an UPDATE."""
+    tok = await _staff(client)
+    tag = _tag()
+    seeded = await _seed(tag, model="Latitude 5420")
+    up = await _pool_upload(client, tok, [tag + "-latitude-5420-A.png"])
+    mid = up.json()["uploaded"][0]["media_id"]
+    r = await client.post(f"/staff/product-groups/{seeded['group_id']}/image/attach",
+                          headers=_h(tok), json={"media_id": mid})
+    assert r.status_code == 200, r.text
+    assert r.json()["media_id"] == mid
+    assert r.json()["image_url"].startswith("/media/")
+    assert await _one("SELECT media_id FROM product_groups WHERE id = :i",
+                      i=seeded["group_id"]) == mid
+
+
+async def test_a_group_offers_the_photo_named_for_its_own_grade(client):
+    """End to end: upload a folder, ask a group, and the B file must not be in the answer."""
+    tok = await _staff(client)
+    tag = _tag()
+    seeded = await _seed(tag, model="Latitude 5420", grade="A")
+    up = await _pool_upload(client, tok, [tag + "-latitude-5420-A.png",
+                                          tag + "-latitude-5420-B.png"])
+    assert up.status_code == 201 and len(up.json()["uploaded"]) == 2, up.text
+    r = await client.get(f"/staff/product-groups/{seeded['group_id']}/image-suggestions",
+                         headers=_h(tok))
+    assert r.status_code == 200, r.text
+    names = [s["filename"] for s in r.json()["suggestions"]]
+    assert any("5420-A" in n for n in names), names
+    assert not any("5420-B" in n for n in names), names
+    assert r.json()["suggestions"][0]["raw_path"].endswith("/raw")
+
+
+async def test_discard_refuses_an_image_a_group_points_at_and_frees_the_rest(client):
+    tok = await _staff(client)
+    tag = _tag()
+    seeded = await _seed(tag)
+    up = await _pool_upload(client, tok, [tag + "-keep.png", tag + "-free.png"])
+    ids = [u["media_id"] for u in up.json()["uploaded"]]
+    await client.post(f"/staff/product-groups/{seeded['group_id']}/image/attach",
+                      headers=_h(tok), json={"media_id": ids[0]})
+    held = await client.delete(f"/staff/product-groups/image-pool/{ids[0]}", headers=_h(tok))
+    assert held.status_code == 409, held.text
+    assert "in use" in held.json()["detail"]
+    free = await client.delete(f"/staff/product-groups/image-pool/{ids[1]}", headers=_h(tok))
+    assert free.status_code == 200, free.text
+
+
+async def test_discard_refuses_an_image_only_a_return_photograph_points_at(client):
+    """`rma_photos.media_id` has NO foreign key - the reference a constraint-built check misses.
+
+    This is the one that would have shipped a defect: the pool would have offered a customer's
+    photograph of a broken laptop as a product photo, and `discard` would then have deleted it.
+    """
+    tok = await _staff(client)
+    tag = _tag()
+    up = await _pool_upload(client, tok, [tag + "-rma.png"])
+    mid = up.json()["uploaded"][0]["media_id"]
+    eng = get_engine()
+    try:
+        async with eng.begin() as c:
+            rma = (await c.execute(text("""
+                INSERT INTO rma_requests (number, order_id, email, reason)
+                VALUES (:n, 0, :e, 'defective') RETURNING id
+            """), {"n": tag + "-RMA", "e": tag + "@test.rfo"})).scalar_one()
+            await c.execute(text("INSERT INTO rma_photos (rma_id, media_id) VALUES (:r, :m)"),
+                            {"r": rma, "m": mid})
+        # Not offered as a product photo...
+        pool = await client.get("/staff/product-groups/image-pool?limit=400", headers=_h(tok))
+        assert mid not in [i["media_id"] for i in pool.json()["items"]]
+        # ...and not deletable through a door that only knows about products.
+        r = await client.delete(f"/staff/product-groups/image-pool/{mid}", headers=_h(tok))
+        assert r.status_code == 409, r.text
+    finally:
+        # The RMA is this test's own row and nothing in the sweep knows about it; left behind it
+        # would pin the media row for good.
+        async with eng.begin() as c:
+            await c.execute(text("DELETE FROM rma_photos WHERE media_id = :m"), {"m": mid})
+            await c.execute(text("DELETE FROM rma_requests WHERE number LIKE :p"), {"p": tag + "%"})

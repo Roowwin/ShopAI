@@ -57,7 +57,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.api.v1.deps import require_roles
 from app.api.v1.staff_ops import _409, _audit_actor, _audit_execution, _require_role
 from app.core.db import get_db
-from app.services.media import MediaRefused, public_address, read_for_upload, store_upload
+from app.services.group_image_match import candidates as match_candidates
+from app.services.media import (MediaRefused, public_address, read_for_upload, safe_filename,
+                                store_upload)
 from app.services.pricing import TARGET_MARKUP_PCT
 
 router = APIRouter(prefix="/staff", tags=["staff-product-groups"])
@@ -164,6 +166,190 @@ async def list_product_groups(state: str | None = None, q: str | None = None,
         " GROUP BY g.id, b.name, b.slug ORDER BY b.name, g.model, g.grade, g.id LIMIT :lim OFFSET :off"
     ), params)).mappings().all()
     return [_row(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# THE PHOTO POOL - a folder of images that belong to nobody yet.
+#
+# THESE ARE DECLARED BEFORE `/product-groups/{group_id}` AND THAT ORDER IS LOAD-BEARING. FastAPI
+# matches routes in registration order, so `/product-groups/image-pool` would be handed to the
+# `{group_id}: int` route first and answered 422 "image-pool is not a valid integer" - a failure
+# that reads like a client bug and is really a declaration-order bug. The literal path goes first;
+# do not move it below the parameterised one.
+# ---------------------------------------------------------------------------
+
+# WHAT "UNATTACHED" MEANS, and it is five tables rather than the two the rest of this codebase
+# checks. `media_objects` is referenced by `asset_images`, `lot_grade_templates`, `product_media`,
+# `product_groups` - and `rma_photos`, whose `media_id` carries NO foreign key at all (0021). A
+# pool built out of the catalog's own constraints therefore misses exactly the one table it cannot
+# see: it would offer a customer's defect photograph as a product photo, and `discard` would then
+# delete it. Every one of the five is spelled out here on purpose.
+POOL_SQL = """
+    SELECT mo.id AS media_id, mo.public_id::text AS public_id, mo.filename, mo.content_type,
+           mo.byte_size, mo.uploaded_at
+    FROM media_objects mo
+    WHERE NOT EXISTS (SELECT 1 FROM product_groups g WHERE g.media_id = mo.id)
+      AND NOT EXISTS (SELECT 1 FROM asset_images ai WHERE ai.media_id = mo.id)
+      AND NOT EXISTS (SELECT 1 FROM lot_grade_templates t WHERE t.media_id = mo.id)
+      AND NOT EXISTS (SELECT 1 FROM product_media pm WHERE pm.media_id = mo.id)
+      AND NOT EXISTS (SELECT 1 FROM rma_photos rp WHERE rp.media_id = mo.id)
+"""
+
+# How many files one upload request may carry. nginx caps the WHOLE request at 25 MB on both
+# vhosts, so the browser sends a folder in chunks; this is the ceiling that keeps a chunk from
+# being refused by the proxy before the API ever sees it. A 300-file folder sent as one request
+# would come back as a 413 from nginx - an error the operator could do nothing about.
+MAX_UPLOAD_FILES = 60
+
+
+@router.post("/product-groups/images", status_code=201)
+async def upload_group_images(files: list[UploadFile] = File(...),
+                              staff: dict = Depends(require_roles(*ROLES_GROUPS)),
+                              db=Depends(get_db)):
+    """Take a folder of photographs into the pool. Attaches nothing to anything.
+
+    WHY A POOL AND NOT AN ASSIGNMENT. The app cannot know that `IMG_4471.jpg` is a Grade B
+    Latitude, and this codebase's rule is that a guess about what a shopper will receive is not a
+    guess to make (`group_image_match` carries the full argument). So the upload's whole job is to
+    get the bytes in and say what arrived; which group each one belongs to is decided afterwards,
+    one press at a time, by somebody who can see the picture.
+
+    ONE COMMIT FOR THE BATCH. `store_upload` deliberately does not commit - the bytes belong to the
+    caller's transaction - so a request that failed halfway leaves neither a half-pool nor a
+    half-written row behind.
+
+    A REFUSED FILE DOES NOT FAIL THE BATCH. A folder of three hundred photographs will contain the
+    odd screenshot or PDF, and refusing the whole request over one of them would make this useless
+    exactly where it is worth most. Every refusal is named so the operator knows which file did not
+    go up and why.
+    """
+    await _require_role(staff, ROLES_GROUPS, "", db)
+    if not files:
+        raise HTTPException(status_code=422, detail="no files were sent")
+    if len(files) > MAX_UPLOAD_FILES:
+        raise HTTPException(status_code=422,
+                            detail=f"at most {MAX_UPLOAD_FILES} files per request - send the folder in batches")
+
+    uploaded: list[dict] = []
+    refused: list[dict] = []
+    for f in files:
+        try:
+            blob = await read_for_upload(f)
+            media = await store_upload(db, filename=f.filename, content_type=f.content_type,
+                                       blob=blob, uploaded_by=staff["id"])
+        except MediaRefused as refusal:
+            refused.append({"filename": safe_filename(f.filename), "reason": str(refusal)})
+            continue
+        uploaded.append({"media_id": media["id"], "public_id": media["public_id"],
+                         "filename": media["filename"], "content_type": media["content_type"],
+                         "byte_size": int(media["byte_size"])})
+
+    # ONE audit row for the batch, not one per file: the operator's action was "I uploaded a
+    # folder", and three hundred rows saying so would bury the trail they are meant to be.
+    await _audit_execution(db, staff, None, entity="media_pool", action="image_pool_upload",
+                           after={"uploaded": len(uploaded), "refused": len(refused),
+                                  "filenames": [u["filename"] for u in uploaded][:50]})
+    try:
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    pool_size = (await db.execute(text("SELECT count(*) FROM (" + POOL_SQL + ") p"))).scalar_one()
+    return {"uploaded": uploaded, "refused": refused, "pool_size": int(pool_size)}
+
+
+@router.get("/product-groups/image-pool")
+async def get_image_pool(q: str = Query("", max_length=80), limit: int = Query(120, le=400),
+                         staff: dict = Depends(require_roles(*ROLES_GROUPS)), db=Depends(get_db)):
+    """The photographs nobody has claimed yet, newest first.
+
+    A POOL NOBODY CAN SEE IS A POOL NOBODY CAN CLEAN UP. Without this the images that match nothing
+    would be invisible and permanent, and the only way to find out what was in the way would be to
+    read the database.
+    """
+    await _require_role(staff, ROLES_GROUPS, "", db)
+    term = q.strip().lower()
+    # The search clause is built in Python rather than written as `:like IS NULL` in the SQL: a
+    # parameter that appears only inside an IS NULL test has no column for asyncpg to infer a type
+    # from, and fails at execution with AmbiguousParameterError.
+    inner = POOL_SQL
+    params: dict = {"lim": limit}
+    if term:
+        inner = "SELECT * FROM (" + POOL_SQL + ") p WHERE lower(p.filename) LIKE :like"
+        params["like"] = "%" + term + "%"
+    else:
+        inner = "SELECT * FROM (" + POOL_SQL + ") p"
+    rows = (await db.execute(text(
+        inner + " ORDER BY p.uploaded_at DESC, p.media_id DESC LIMIT :lim"), params)).mappings().all()
+    total = (await db.execute(text(
+        "SELECT count(*) FROM (" + POOL_SQL + ") p"
+        + (" WHERE lower(p.filename) LIKE :like" if term else "")),
+        ({"like": params["like"]} if term else {}))).scalar_one()
+    return {
+        "total": int(total), "shown": len(rows),
+        "items": [{"media_id": r["media_id"], "public_id": r["public_id"], "filename": r["filename"],
+                   "content_type": r["content_type"], "byte_size": int(r["byte_size"]),
+                   "uploaded_at": r["uploaded_at"].isoformat(),
+                   "raw_path": f"/staff/product-groups/image-pool/{r['media_id']}/raw"}
+                  for r in rows],
+    }
+
+
+@router.get("/product-groups/image-pool/{media_id}/raw")
+async def get_pool_image_raw(media_id: int, staff: dict = Depends(require_roles(*ROLES_GROUPS)),
+                             db=Depends(get_db)):
+    """The bytes of one pooled photograph, so the screen can SHOW what it is offering.
+
+    `image_url` is a SHOP-relative `/media/<uuid>`, which on the admin host resolves to a path the
+    admin does not serve - the same reason `{group_id}/image/raw` exists. This is that door for a
+    file that no group owns yet, which is the only state a suggestion is ever in.
+    """
+    await _require_role(staff, ROLES_GROUPS, "", db)
+    row = (await db.execute(text(
+        "SELECT content_type, bytes FROM media_objects WHERE id = :i"), {"i": media_id})).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no such image")
+    return Response(content=bytes(row["bytes"]), media_type=row["content_type"],
+                    headers={"X-Content-Type-Options": "nosniff",
+                             "Cache-Control": "private, max-age=300"})
+
+
+@router.delete("/product-groups/image-pool/{media_id}")
+async def discard_pool_image(media_id: int, staff: dict = Depends(require_roles(*ROLES_GROUPS)),
+                             db=Depends(get_db)):
+    """Delete one pooled file, and ONLY while nothing references it.
+
+    The check is done by the DELETE itself rather than by a read-then-write, so a file that becomes
+    referenced between the two cannot slip through: the same five NOT EXISTS clauses as `POOL_SQL`
+    ride on the statement, and a row that is still in use simply matches nothing. A pool image is
+    the one file nothing else points at, so it is the only one this door may remove - the moment a
+    group claims it, it stops being deletable here and starts being replaceable there.
+    """
+    await _require_role(staff, ROLES_GROUPS, "", db)
+    before = (await db.execute(text(
+        "SELECT filename FROM media_objects WHERE id = :i"), {"i": media_id})).mappings().first()
+    removed = (await db.execute(text("""
+        DELETE FROM media_objects WHERE id = :i
+          AND NOT EXISTS (SELECT 1 FROM product_groups g WHERE g.media_id = media_objects.id)
+          AND NOT EXISTS (SELECT 1 FROM asset_images ai WHERE ai.media_id = media_objects.id)
+          AND NOT EXISTS (SELECT 1 FROM lot_grade_templates t WHERE t.media_id = media_objects.id)
+          AND NOT EXISTS (SELECT 1 FROM product_media pm WHERE pm.media_id = media_objects.id)
+          AND NOT EXISTS (SELECT 1 FROM rma_photos rp WHERE rp.media_id = media_objects.id)
+        RETURNING id
+    """), {"i": media_id})).scalar_one_or_none()
+    if removed is None:
+        await db.rollback()
+        if before is None:
+            raise HTTPException(status_code=404, detail="no such image")
+        raise HTTPException(
+            status_code=409,
+            detail="that image is in use - a group or a unit still points at it, so it cannot be discarded")
+    await _audit_execution(db, staff, None, entity="media_pool", entity_id=media_id,
+                           action="image_pool_discard", before={"filename": before["filename"]})
+    try:
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    return {"media_id": media_id, "discarded": True}
 
 
 @router.get("/product-groups/{group_id}")
@@ -376,6 +562,84 @@ async def get_group_image_raw(group_id: int, staff: dict = Depends(require_roles
     return Response(content=bytes(row["bytes"]), media_type=row["content_type"],
                     headers={"X-Content-Type-Options": "nosniff",
                              "Cache-Control": "private, max-age=300"})
+
+
+@router.get("/product-groups/{group_id}/image-suggestions")
+async def suggest_group_image(group_id: int, staff: dict = Depends(require_roles(*ROLES_GROUPS)),
+                              db=Depends(get_db)):
+    """Which pooled photographs might be this group's, best first.
+
+    A SUGGESTION, AND ONLY EVER THAT. Nothing here attaches anything - the ranked list goes to the
+    screen, a person looks at the pictures and presses once for the one they want. The ranking is
+    the deterministic subset test in `group_image_match`, so this door can be read and argued with;
+    it is not a score, and there is no threshold to tune.
+
+    An empty list is a normal answer, not a failure: it means the folder holds nothing whose name
+    contains every word of this brand and model, and the photograph has to be assigned by hand.
+    """
+    await _require_role(staff, ROLES_GROUPS, "", db)
+    group = (await db.execute(text("""
+        SELECT g.id, g.model, g.grade, b.name AS brand
+        FROM product_groups g JOIN brands b ON b.id = g.brand_id WHERE g.id = :i
+    """), {"i": group_id})).mappings().first()
+    if group is None:
+        raise HTTPException(status_code=404, detail="product group not found")
+    pool = (await db.execute(text("SELECT * FROM (" + POOL_SQL + ") p"))).mappings().all()
+    ranked = match_candidates(group["brand"], group["model"], group["grade"], [dict(r) for r in pool])
+    for c in ranked:
+        c["raw_path"] = f"/staff/product-groups/image-pool/{c['media_id']}/raw"
+    return {"group_id": group_id, "brand": group["brand"], "model": group["model"],
+            "grade": group["grade"], "suggestions": ranked}
+
+
+class AttachImageIn(BaseModel):
+    """Which pooled file to claim. The row id, never a filename: two files in one folder may share
+    a name, and picking by name would then attach whichever the database happened to return."""
+    media_id: int
+
+
+@router.post("/product-groups/{group_id}/image/attach")
+async def attach_group_image(group_id: int, body: AttachImageIn,
+                             staff: dict = Depends(require_roles(*ROLES_GROUPS)), db=Depends(get_db)):
+    """Claim an ALREADY-UPLOADED photograph for this group: the group points at it, no bytes move.
+
+    This is the pool's half of `upload_group_image`, and the two are deliberately separate doors
+    rather than one with a flag. That one stores a file and attaches it in the same breath - right
+    for replacing one photo on one group. This one moves nothing at all, which is the whole point of
+    a folder upload: three hundred photographs cross the network once, and attaching them is three
+    hundred small UPDATEs.
+
+    The image does not have to be unattached. The same photograph legitimately serves two grades
+    (a device that looks identical at A and B), and refusing the second claim would make the
+    operator upload a duplicate of a file the app already holds.
+    """
+    await _require_role(staff, ROLES_GROUPS, "", db)
+    group = (await db.execute(text(
+        "SELECT id, media_id, image_url FROM product_groups WHERE id = :i"),
+        {"i": group_id})).mappings().first()
+    if group is None:
+        raise HTTPException(status_code=404, detail="product group not found")
+    media = (await db.execute(text(
+        "SELECT id, public_id::text AS public_id, filename FROM media_objects WHERE id = :i"),
+        {"i": body.media_id})).mappings().first()
+    if media is None:
+        raise HTTPException(status_code=404, detail="no such image")
+
+    address = public_address(media["public_id"])
+    await db.execute(text("""
+        UPDATE product_groups SET media_id = :m, image_url = :u WHERE id = :i
+    """), {"m": media["id"], "u": address, "i": group_id})
+    await _audit_execution(db, staff, None, entity="product_group", entity_id=group_id,
+                           action="group_image_set",
+                           before={"media_id": group["media_id"], "image_url": group["image_url"]},
+                           after={"media_id": media["id"], "image_url": address,
+                                  "filename": media["filename"], "via": "pool"})
+    try:
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    return {"id": group_id, "media_id": media["id"], "image_url": address,
+            "filename": media["filename"]}
 
 
 async def _publish_group(db, staff: dict, group) -> dict:

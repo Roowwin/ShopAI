@@ -6,6 +6,7 @@ import { aud } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
 import { Button, Card, Input, Select, Stat, cn } from "@/app/components/ui";
 import { kickerClass, linkClass } from "@/lib/ui";
+import PhotoFolder from "./PhotoFolder";
 
 /* THE GROUP WORKLIST: one image and one price per model and grade.
 
@@ -151,6 +152,11 @@ export default function GroupsPanel() {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
       <div className="min-w-0">
+        {/* THE FOLDER COMES FIRST, because it is the first thing an operator with a folder of
+            photographs should do and everything below it is the consequence. */}
+        <div className="mb-4">
+          <PhotoFolder />
+        </div>
         <Card className="p-4">
           <div className="flex flex-wrap items-center gap-2">
             {STATE_TABS.map((t) => (
@@ -259,6 +265,34 @@ export default function GroupsPanel() {
   );
 }
 
+/* One pooled photograph as a thumbnail. Same discipline as the group's own preview below: the
+   public `/media/...` address does not exist on the admin host, so the bytes come through the
+   authenticated raw door into an object URL - revoked when the tile goes, or a scroll through a
+   folder's worth of suggestions leaks one blob each. */
+function SuggestedThumb({ rawPath }: { rawPath: string }) {
+  const [url, setUrl] = useState("");
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    let made = "";
+    apiFetch(rawPath).then(async (r) => {
+      if (!r.ok) { if (alive) setFailed(true); return; }
+      const b = await r.blob();
+      if (!alive) return;
+      made = URL.createObjectURL(b);
+      setUrl(made);
+    }).catch(() => { if (alive) setFailed(true); });
+    return () => { alive = false; if (made) URL.revokeObjectURL(made); };
+  }, [rawPath]);
+  if (failed || !url) {
+    return <span className="h-12 w-16 shrink-0 rounded-control bg-surface-sunken ring-1 ring-line" aria-hidden="true" />;
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- a blob: URL, not a remote asset
+    <img src={url} alt="" className="h-12 w-16 shrink-0 rounded-control object-cover ring-1 ring-line" />
+  );
+}
+
 function GroupEditor({ groupId, onSaved, onToast }: {
   groupId: number;
   onSaved: () => void;
@@ -306,6 +340,46 @@ function GroupEditor({ groupId, onSaved, onToast }: {
     })();
     return () => { dead = true; if (url) URL.revokeObjectURL(url); };
   }, [groupId, d, photoVersion]);
+
+  /* WHAT THE APP THINKS THIS GROUP'S PHOTOGRAPH IS. A READ, and only ever a read: the ranked list
+     arrives, a person looks at the pictures and presses once for the one they want. Nothing on this
+     path writes, which is the whole design - see `group_image_match.py` for why this app will not
+     attach a shopper's product photo on its own judgement.
+     Re-read whenever the pool changes, because accepting one photograph takes it out of the pool
+     and the next-best suggestion is now the first one. */
+  const [suggested, setSuggested] = useState<{ media_id: number; filename: string; raw_path: string; grade_marker: string | null }[]>([]);
+  const [showAll, setShowAll] = useState(false);
+  useEffect(() => {
+    let dead = false;
+    void (async () => {
+      const r = await apiFetch(`/staff/product-groups/${groupId}/image-suggestions`);
+      if (!r.ok || dead) return;
+      const j: any = await r.json().catch(() => ({}));
+      setSuggested(j.suggestions ?? []);
+    })();
+    return () => { dead = true; };
+  }, [groupId, photoVersion]);
+
+  async function attach(mediaId: number) {
+    setErr(""); setMsg(""); setBusy(true);
+    try {
+      const r = await apiFetch(`/staff/product-groups/${groupId}/image/attach`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ media_id: mediaId }),
+      });
+      const j: any = await r.json().catch(() => ({}));
+      if (!r.ok) { setErr(typeof j.detail === "string" ? j.detail : "that image was refused"); return; }
+      setMsg("Image attached to this model and grade - every lot of it uses it now.");
+      setShowAll(false);
+      setPhotoVersion((v) => v + 1);
+      await load();
+      onSaved();
+    } catch {
+      setErr("that image could not be attached");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function savePrice() {
     setErr(""); setMsg("");
@@ -436,6 +510,43 @@ function GroupEditor({ groupId, onSaved, onToast }: {
             <p className="mt-1 text-xs text-ink-500">JPEG, PNG, WebP or GIF, up to 5 MB.</p>
           </div>
         </div>
+
+        {/* THE SUGGESTION, from the folder that was uploaded. It is OFFERED and never applied: the
+            button beside it is the only thing that attaches anything, and it belongs to whoever is
+            looking at the picture. The matched words are printed with it so the offer can be
+            argued with rather than taken on faith - "matched on latitude, 5420" is a reason, and an
+            unexplained thumbnail is not.
+            ABSENT WHEN THERE IS NOTHING TO OFFER. A strip showing a weak guess would be worse than
+            no strip at all: the operator would learn to ignore it, and then to ignore the good ones. */}
+        {suggested.length > 0 && (
+          <div className="mt-3 rounded-control bg-surface-muted p-3 ring-1 ring-line">
+            <p className="text-xs font-semibold text-ink-900">
+              In the folder you uploaded
+            </p>
+            <ul className="mt-2 space-y-2">
+              {(showAll ? suggested : suggested.slice(0, 1)).map((s) => (
+                <li key={s.media_id} className="flex items-center gap-2">
+                  <SuggestedThumb rawPath={s.raw_path} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[11px] text-ink-600" title={s.filename}>{s.filename}</p>
+                    <p className="text-[10px] text-ink-500">
+                      {s.grade_marker ? `grade ${s.grade_marker} in the name` : "no grade in the name"}
+                    </p>
+                  </div>
+                  <Button size="sm" variant="secondary" disabled={busy} onClick={() => void attach(s.media_id)}>
+                    Use this photo
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            {suggested.length > 1 && (
+              <button type="button" onClick={() => setShowAll((v) => !v)}
+                className={cn("mt-2 text-[11px]", linkClass)}>
+                {showAll ? "Show fewer" : `Show ${suggested.length - 1} more like this`}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* THE PRICE. Suggestions fill the box; Save is the only write. */}
