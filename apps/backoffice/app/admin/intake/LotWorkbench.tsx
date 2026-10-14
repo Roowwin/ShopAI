@@ -1,6 +1,16 @@
 "use client";
 
-/* THE GRADING WORKSTATION. One search box, one table, six columns, and nothing else.
+/* THE GRADING WORKSTATION. A queue of remaining lots, a search box over it, and one table.
+
+   THIS FILE OPENS ON THE WORK, NOT ON AN EMPTY BOX. It used to be a search field over nothing, which
+   is a lookup rather than a queue: an operator arriving at the start of a shift does not know which
+   lot number to type. So the default view is `PendingLots` - every lot still holding an ungraded
+   unit, oldest first - and the search box sits above it for the times somebody does know the
+   handle. Pressing a card resolves that lot exactly as typing it would, because both paths call the
+   same `load`; a card is a shortcut, not a second way in.
+
+   THE TABLE REPLACES THE QUEUE. The two are never on screen together: the table is six columns wide
+   and would be crushed beside a column of cards. `backToQueue` is how the workbench is left.
 
    A SEARCH IS A DOOR INTO A LOT. Whichever handle the operator has - a lot number, an asset id, a
    serial - the answer is the WHOLE LOT that handle belongs to. Searching a serial and getting one
@@ -61,6 +71,7 @@ import { apiFetch } from "@/lib/api";
 import { gradeHelpId } from "@/lib/grading";
 import { kickerClass } from "@/lib/ui";
 import { GRADE_TIP_HEIGHT, GRADE_TIP_WIDTH, GradeHelp, GradeTip } from "./GradeTip";
+import PendingLots from "./PendingLots";
 
 type WorkUnit = {
   id: number;
@@ -253,6 +264,14 @@ export default function LotWorkbench() {
     if (submitted) await load(submitted);
   }
 
+  /* BACK TO THE QUEUE. The workbench is opened FROM the remaining-lots cards, so it has to be
+     closable back to them without retyping a search - and the search text is cleared with the
+     resolution, because the box is about to be filled by whichever card is pressed next, and a
+     stale lot number sitting in it reads as the search that is currently in force. */
+  function backToQueue() {
+    setList(null); setSubmitted(null); setText(""); setMsg(""); setErr("");
+  }
+
   /* Moves one row's grade chip without touching the list the server sent. Only the chip: every
      counter under the table still comes from the payload, so an optimistic row can never make the
      progress bar disagree with the database. */
@@ -409,15 +428,32 @@ export default function LotWorkbench() {
       {msg && <p className="text-brand-300 text-sm">{msg}</p>}
       {err && <p className="text-danger-600 text-sm">{err}</p>}
 
+      {/* THE QUEUE IS THE DEFAULT VIEW, and the workbench REPLACES it rather than standing beside
+          it. The brief allowed either; beside it is the one that cannot work here - the grading
+          table is six columns wide, and a card column would take a third of the page away from the
+          thing the operator is reading. Pressing a card is a mode change: the queue goes, the lot
+          arrives, and the control below brings the queue back.
+
+          It is hidden while a search is in flight (`busy`) so a card cannot be pressed twice over
+          an answer that is already on its way. */}
+      {!list && !busy && (
+        <PendingLots onOpen={(lotNumber) => { setText(lotNumber); void load(lotNumber); }} />
+      )}
+
       {list && progress && (
         <>
           <Card className="p-6">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <Heading level="h3" as="h2">Lot {list.lot.lot_number}</Heading>
-              <p className="text-sm text-ink-500">
-                {progress.awaiting_grade_units} still to grade
-                {list.lot.warehouse ? ` - ${list.lot.warehouse}` : ""}
-              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm text-ink-500">
+                  {progress.awaiting_grade_units} still to grade
+                  {list.lot.warehouse ? ` - ${list.lot.warehouse}` : ""}
+                </p>
+                {/* The way back. Named for the section it returns to, so the label and the heading
+                    of the view it opens are the same words. */}
+                <Button variant="secondary" size="sm" onClick={backToQueue}>Remaining lots</Button>
+              </div>
             </div>
 
             <p className="mt-3 text-sm font-semibold text-ink-700">

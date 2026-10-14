@@ -529,6 +529,100 @@ _GRADABLE_STATUSES = ("received", "tested", "in_repair", "graded")
 # The one place the SQL and the Python agree on which statuses those are.
 _GRADABLE_SQL = ", ".join("'" + s + "'" for s in _GRADABLE_STATUSES)
 
+# How many pending lots the queue returns at once, and how many models the card may name. The cap is
+# one over the answer the caller is told about, so "was it cut?" is settled by the data rather than
+# by `len == cap`.
+PENDING_LOTS_MAX = 60
+PENDING_MODELS_SHOWN = 3
+
+
+@router.get("/lots/pending")
+async def pending_lots(staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
+    """The grading queue: every lot still holding a unit that has no grade.
+
+    WHAT "PENDING" MEANS IS THE WORKLIST'S OWN DEFINITION, deliberately. A lot is pending when it
+    holds at least one unit that is `grade IS NULL AND status IN (_GRADABLE_SQL)` - the same
+    predicate the worklist's own "awaiting" counter and its `scope=unfinished` filter use, built
+    from the same constant. A queue that decided for itself what "not yet graded" meant would
+    disagree with the workbench it opens into: the card here says "12 of 40 graded" and the lot's
+    own progress bar has to say the same thing.
+
+    (That predicate is also why it is `grade IS NULL` rather than "status is not graded": when a
+    grade is taken back the status cannot follow it down - there is no graded -> tested edge - so
+    the unit sits in `graded` carrying no grade. A queue filtered on status alone would hide exactly
+    the units someone just sent back.)
+
+    SORTED OLDEST FIRST, by `lots.received_at`. The queue is worked from the top, and the unit that
+    has been waiting longest is the one someone has already promised a customer.
+
+    THE COUNTS ARE COMPUTED HERE, not by the caller. `graded_units` is `grade IS NOT NULL` and
+    `total_units` is every unit in the lot - the worklist's own two definitions again - so the
+    card's progress bar and the lot's progress bar are the same arithmetic done once.
+
+    THE MODEL SNIPPET IS A LIST, NOT A STRING, because a lot is not always one model: 208 of this
+    database's ~10k lots carry two or three. A card that printed only the commonest would be wrong
+    about the rest of the work, so the payload carries up to PENDING_MODELS_SHOWN (brand, model,
+    count) triples ordered by how many units wear them, plus `model_kinds` - the true number of
+    distinct models - so the card can say "+1 more" without a second read. Units with no product
+    cannot appear in that list at all; `model_kinds` is null for a lot where none of them has one,
+    which is a different fact from "no models were found".
+    """
+    # One over the cap, so the caller is told whether the queue was cut rather than left to infer it.
+    rows = (await db.execute(text("""
+        SELECT l.id, l.lot_number, l.received_at, l.warehouse, l.zone,
+               count(a.id) AS total_units,
+               count(a.id) FILTER (WHERE a.grade IS NOT NULL) AS graded_units,
+               count(a.id) FILTER (WHERE a.grade IS NULL AND a.status IN (""" + _GRADABLE_SQL + """)) AS awaiting_units
+        FROM lots l JOIN assets a ON a.lot_id = l.id
+        GROUP BY l.id
+        HAVING count(a.id) FILTER (WHERE a.grade IS NULL AND a.status IN (""" + _GRADABLE_SQL + """)) > 0
+        ORDER BY l.received_at ASC, l.id ASC
+        LIMIT :lim
+    """), {"lim": PENDING_LOTS_MAX + 1})).mappings().all()
+    truncated = len(rows) > PENDING_LOTS_MAX
+    rows = rows[:PENDING_LOTS_MAX]
+
+    ids = [r["id"] for r in rows]
+    models: dict[int, list[dict]] = {}
+    kinds: dict[int, int] = {}
+    if ids:
+        mrows = (await db.execute(text("""
+            SELECT a.lot_id, b.name AS brand, p.model, count(*) AS units
+            FROM assets a
+            JOIN products p ON p.id = a.product_id
+            JOIN brands b ON b.id = p.brand_id
+            WHERE a.lot_id = ANY(:ids)
+            GROUP BY a.lot_id, b.name, p.model
+            ORDER BY a.lot_id, count(*) DESC, p.model
+        """), {"ids": ids})).mappings().all()
+        for m in mrows:
+            models.setdefault(m["lot_id"], []).append(
+                {"brand": m["brand"], "model": m["model"], "units": int(m["units"])})
+            kinds[m["lot_id"]] = kinds.get(m["lot_id"], 0) + 1
+
+    total_pending = (await db.execute(text("""
+        SELECT count(*) FROM (
+            SELECT l.id FROM lots l JOIN assets a ON a.lot_id = l.id
+            GROUP BY l.id
+            HAVING count(a.id) FILTER (WHERE a.grade IS NULL AND a.status IN (""" + _GRADABLE_SQL + """)) > 0
+        ) q
+    """))).scalar_one()
+
+    return {
+        "lots": [{
+            "id": r["id"], "lot_number": r["lot_number"],
+            "received_at": r["received_at"].isoformat(),
+            "warehouse": r["warehouse"], "zone": r["zone"],
+            "total_units": int(r["total_units"]),
+            "graded_units": int(r["graded_units"]),
+            "awaiting_units": int(r["awaiting_units"]),
+            "models": models.get(r["id"], [])[:PENDING_MODELS_SHOWN],
+            "model_kinds": kinds[r["id"]] if r["id"] in kinds else None,
+        } for r in rows],
+        "total_pending_lots": int(total_pending),
+        "truncated": truncated,
+    }
+
 
 @router.get("/lots/worklist")
 async def lot_worklist(q: str | None = None, lot_number: str | None = None, lot_id: int | None = None,
