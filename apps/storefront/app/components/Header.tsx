@@ -94,8 +94,13 @@ export default function Header() {
             without a code change. Below md this group is hidden and the burger drawer, which
             already lists the same links, is the way in. */}
         <div className="hidden md:flex items-center gap-1 shrink-0">
+          {/* THE FIRST ROW IS "All products", NOT "Shop". It used to carry the trigger's own word,
+              so the panel opened on "Shop" directly under a button reading "Shop" - which reads as
+              the menu repeating itself rather than as the destination it is: the catalogue, whole,
+              with its filter bar. The row stays because "show me everything" is a real thing to
+              want next to a list of categories; only the label was wrong. */}
           <NavDropdown label="Shop" open={shop} onOpenChange={setShop}
-            links={[{ href: "/", label: "Shop" }, ...cats.map(catLink)]} />
+            links={[{ href: "/", label: "All products" }, ...cats.map(catLink)]} />
           <a href="/faq" className={cn("inline-flex items-center min-h-[44px] px-3 text-sm", navLinkClass)}>FAQ</a>
           <a href="/assistant" className={cn("inline-flex items-center min-h-[44px] px-3 text-sm", navLinkClass)}>Ask AI</a>
           {/* The way into the account, and the only one: it is where a shopper finds the orders they
@@ -149,7 +154,7 @@ export default function Header() {
       {/* The category nav is hidden below md, and there was no way to reach it on a phone. */}
       {menu && (
         <nav className="md:hidden bg-surface/95 backdrop-blur-md ring-1 ring-line border-t border-line px-4 py-1 flex flex-col text-sm text-ink-600">
-          <a href="/" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>Shop</a>
+          <a href="/" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>All products</a>
           {/* A category with sub-categories becomes an accordion here, because hover does not exist on
               a phone. The word still goes to the category - a shopper who wants all of Accessories has
               to be able to tap it - and the chevron opens the same shortcuts the desktop fly-out shows,
