@@ -27,7 +27,13 @@ import { Badge, Button, Card, Eyebrow, Heading, fieldClass, linkClass } from "..
    THE CONTROLS COME FROM THE SHARED SHELL. `fieldClass` is the one control shell both the Input
    primitive and a bare <select> draw from, and its focus ring is brand-300 - which is correct for
    every page now that the whole app is dark. These two constants only add the recessed fill and
-   the sizing the panel needs; they do not re-invent the shell. */
+   the sizing the panel needs; they do not re-invent the shell.
+
+   THE PANEL IS FOUR BLOCKS, in the order a shopper resolves them: identity (what is it), the price
+   well (what it costs and whether it is available, boxed together so the second is not a footnote
+   to the first), the two controls that decide the line (grade, then quantity - with the serial line
+   beside the stepper it belongs to), and the CTA with the trust row under it. Everything below stays
+   behind a divider: the trust promises, then the spec sheet in its <details>. */
 const FIELD =
   fieldClass + " w-full px-3 py-2.5 " +
   "bg-surface-sunken text-ink-900 ring-1 ring-line hover:ring-line-strong";
@@ -78,8 +84,8 @@ const TRUST: { label: string; icon: ReactNode }[] = [
   },
 ];
 
-export default function PurchasePanel({ units, title, brand, category, slug, specs }: {
-  units: Unit[]; title: string; brand: string; category: string; slug: string;
+export default function PurchasePanel({ units, title, brand, model, slug, specs }: {
+  units: Unit[]; title: string; brand: string; model: string; slug: string;
   specs: [string, string][];
 }) {
   /* Every grade A-D, with the units behind it. A grade with nothing on the shelf is still
@@ -126,15 +132,24 @@ export default function PurchasePanel({ units, title, brand, category, slug, spe
 
   return (
     <Card className="p-6 ring-1 ring-line">
-      <nav aria-label="Breadcrumb" className="text-xs text-ink-500">
-        <a href="/" className={linkClass}>Home</a> <span aria-hidden="true">/</span>{" "}
-        <a href={"/search?q=" + encodeURIComponent(category)} className={linkClass}>{category}</a>
-      </nav>
+      {/* THE IDENTITY BLOCK, and the order it sets: brand as the kicker, the catalogue's own title
+          as the heading, then the one line that names WHICH product this is.
 
-      {/* The brand is a muted line, not a link - it is a label on the title, and a link here
-          would compete with the breadcrumb directly above it. */}
-      <Eyebrow className="mt-4">{brand}</Eyebrow>
+          That line carries the model and the catalogue code, and it deliberately does NOT carry a
+          supplier SKU. `products.sku` exists, but it belongs to the importer's supplier rows rather
+          than to this retail model, and this page is never handed it - so the code printed here is
+          the slug, the identifier the shop's own URLs use, rather than a part number invented to
+          fill the slot.
+
+          THE BREADCRUMB IS GONE FROM THIS PANEL and now leads the page (see page.tsx). It used to
+          open the right-hand column, which put "Home / laptops" beside the price on a desktop and
+          under the photograph on a phone - and a page gets one breadcrumb, not one per column. */}
+      <Eyebrow>{brand}</Eyebrow>
       <Heading level="h1" className="mt-1">{title}</Heading>
+      <p className="mt-2 text-xs text-ink-500">
+        {model ? <>{model} <span aria-hidden="true">&middot;</span> </> : null}
+        <span className="text-ink-600">{slug}</span>
+      </p>
 
       {soldOut ? (
         <div className="mt-5">
@@ -146,20 +161,37 @@ export default function PurchasePanel({ units, title, brand, category, slug, spe
         </div>
       ) : (
         <>
-          {/* THE PRICE is the brass FILL colour, which is the one place in the app where a value
+          {/* THE PRICE WELL. The number sits in its own recessed container rather than floating on
+              the panel, so "what it costs" and "whether you can have it" read as one block instead
+              of a headline with a footnote somewhere below it.
+
+              THE PRICE is the brass FILL colour, which is the one place in the app where a value
               used as a button fill is also used as ink. It is allowed here because the price is
               LARGE text (32px semibold), so it clears the 3:1 large-text bar at 4.4:1 - at body
               size the same brass measures 4.40:1 on a card and would fail. Every other ink site
               uses brand-300, the ladder's light step (6.1-8.1:1). */}
-          <div className="mt-5 flex flex-wrap items-end gap-x-3 gap-y-1">
-            <p className="font-display text-display text-brand-700">{unitPrice !== undefined ? aud(unitPrice) : "-"}</p>
-            <p className="text-xs text-ink-500 pb-1.5">incl. GST</p>
-          </div>
-          {qty > 1 && (
-            <p className="mt-1 text-sm text-ink-500">
-              {qty} units &middot; <span className="font-semibold text-ink-900">{aud(total)}</span>
+          <div className="mt-5 rounded-control bg-surface-sunken p-4 ring-1 ring-line">
+            <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
+              <p className="font-display text-display text-brand-700">{unitPrice !== undefined ? aud(unitPrice) : "-"}</p>
+              <p className="text-xs text-ink-500 pb-1.5">incl. GST</p>
+            </div>
+
+            {/* The availability line counts the GRADE the dropdown is on, not the model, because
+                that is the number the shopper is buying against: a model can hold ten units while
+                the grade they have chosen holds none, and the button below is about to refuse.
+                The dot is the design's green - grade A's solid, the only positive step in this
+                palette - rather than a new "available" colour invented beside it. */}
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-500">
+              <span aria-hidden="true" className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-grade-a-solid" />
+              {stock} {stock === 1 ? "unit" : "units"} in stock at grade {grade}
             </p>
-          )}
+
+            {qty > 1 && (
+              <p className="mt-1 text-sm text-ink-500">
+                {qty} units &middot; <span className="font-semibold text-ink-900">{aud(total)}</span>
+              </p>
+            )}
+          </div>
 
           <div className="mt-6 space-y-4">
             <div>
@@ -191,8 +223,22 @@ export default function PurchasePanel({ units, title, brand, category, slug, spe
                   disabled={qty >= stock} onClick={() => setQty((n) => Math.min(stock, n + 1))}>
                   <span aria-hidden="true">+</span>
                 </button>
-                <span className="text-xs text-ink-500">{stock} in grade {grade}</span>
               </div>
+
+              {/* The serial line belongs to the stepper that decides it rather than to the button
+                  below, because it is the answer to "how many" - and it names WHICH serials rather
+                  than only how many, since the cart line the shopper gets is per-device. It stays a
+                  role="status" so the change is announced when the grade or the quantity moves.
+                  The "N in grade X" note that used to sit on this row is gone: the availability
+                  line in the price well says the same thing once, in the block where the price is,
+                  and the two rows could otherwise disagree for a render after a grade change. */}
+              <p className="mt-3 text-xs text-ink-500" role="status">
+                {already > 0 && !allInBag
+                  ? already + " of these " + (already === 1 ? "is" : "are") + " already in your bag."
+                  : picked.length > 0
+                    ? "Serial" + (picked.length === 1 ? "" : "s") + " reserved at checkout: " + picked.map((u) => "***" + u.serial_tail).join(", ")
+                    : "Nothing in this grade yet."}
+              </p>
             </div>
           </div>
 
@@ -200,16 +246,6 @@ export default function PurchasePanel({ units, title, brand, category, slug, spe
             disabled={soldOut || stock === 0 || allInBag} onClick={addToBag}>
             {allInBag ? "In your bag" : "Add to Bag"}
           </Button>
-
-          {/* The status line names the exact units, because the cart line the shopper gets is
-              per-device: it says WHICH serials, not just how many. */}
-          <p className="mt-3 text-xs text-ink-500" role="status">
-            {already > 0 && !allInBag
-              ? already + " of these " + (already === 1 ? "is" : "are") + " already in your bag."
-              : picked.length > 0
-                ? "Serial" + (picked.length === 1 ? "" : "s") + " reserved at checkout: " + picked.map((u) => "***" + u.serial_tail).join(", ")
-                : "Nothing in this grade yet."}
-          </p>
         </>
       )}
 

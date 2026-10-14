@@ -19,7 +19,13 @@ export type Grade = {
   label: string;
   tone: string;   // solid badge (grades page)
   pill: string;   // soft pill (product page grade rows)
+  ink: string;    // the grade's own text step, for an indicator that is not the pill
   battery: string;
+  /* The floor `battery` states, as a number, so a page can draw it rather than only print it.
+     It is the GUARANTEED MINIMUM, not a measurement - a Grade A unit may well be at 97% - which is
+     why every meter drawn from it sits beside the sentence that says "or better". D and C share a
+     floor because the published scale gives them the same one. */
+  batteryPct: number;
   looks: string[];
   spec: string;
   useCase: string;
@@ -31,7 +37,9 @@ export const GRADES: Grade[] = [
     label: "Like new",
     tone: "bg-grade-a-solid",
     pill: "bg-grade-a-solid/15 text-grade-a-ink ring-1 ring-grade-a-solid/30",
+    ink: "text-grade-a-ink",
     battery: "Battery health 90% or better",
+    batteryPct: 90,
     looks: [
       "No visible marks when you hold it at arm's length",
       "Screen free of scratches, chips and shadowing",
@@ -45,7 +53,9 @@ export const GRADES: Grade[] = [
     label: "Excellent",
     tone: "bg-grade-b-solid",
     pill: "bg-grade-b-solid/15 text-grade-b-ink ring-1 ring-grade-b-solid/30",
+    ink: "text-grade-b-ink",
     battery: "Battery health 85% or better",
+    batteryPct: 85,
     looks: [
       "Light micro-scratches on the frame or back cover",
       "Screen clean and unmarked when the display is on",
@@ -59,7 +69,9 @@ export const GRADES: Grade[] = [
     label: "Good",
     tone: "bg-grade-c-solid",
     pill: "bg-grade-c-solid/15 text-grade-c-ink ring-1 ring-grade-c-solid/30",
+    ink: "text-grade-c-ink",
     battery: "Battery health 80% or better",
+    batteryPct: 80,
     looks: [
       "Visible scuffs, scratches or small dents on the frame",
       "Screen may show faint marks that are not visible while it is on",
@@ -73,7 +85,9 @@ export const GRADES: Grade[] = [
     label: "Fair",
     tone: "bg-grade-d-solid",
     pill: "bg-grade-d-solid/15 text-grade-d-ink ring-1 ring-grade-d-solid/30",
+    ink: "text-grade-d-ink",
     battery: "Battery health 80% or better",
+    batteryPct: 80,
     looks: [
       "Obvious cosmetic wear: scuffed edges, deeper scratches, small dents",
       "Possible small blemish in a screen corner, or a replaced screen or battery",
