@@ -24,8 +24,11 @@ export default function DealOfMonth({ deal }: { deal?: Deal | null }) {
           </div>
           } />
         <div className="p-8 md:w-1/2 flex flex-col justify-center">
-          {/* a sale chip, not a colour - the neutral dark keeps emerald for the CTA below */}
-          <Badge colorClass="bg-surface-deep text-ink-700" className="self-start">
+          {/* a sale chip, not a colour - a NEUTRAL fill keeps the emerald for the CTA below.
+              It said `surface-deep` for that reason, and `surface-deep` used to BE the neutral dark;
+              on this ground it is a soft green, so the chip was quietly competing with the button it
+              is supposed to leave room for. `surface-sunken` is the neutral step now. */}
+          <Badge colorClass="bg-surface-sunken text-ink-700" className="self-start">
             {deal.badge || "Deal of the Month"}
           </Badge>
           <Heading level="h2" as="p" className="mt-4">{title}</Heading>

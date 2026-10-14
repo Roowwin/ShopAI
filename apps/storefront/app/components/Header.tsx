@@ -77,15 +77,18 @@ export default function Header() {
      sr-only h1 uses only the second half of this one. */
   return (
     <header className="sticky top-0 z-50">
-      {/* FLOATING, AND NOW FULLY SO. The header is not an opaque bar laid across the page: it is a
-          backdrop blur over a single hairline, so the ground shows straight through and the chrome
-          sits ON the page rather than over it. The `bg-surface/80` wash that used to sit under the
-          blur is gone, which is what lets the canvas read all the way up to the top edge instead of
-          stopping at a solid band of the panel colour.
-          `sticky` stays - a catalog is long, and the search and the cart have to be reachable from
-          the bottom of it - and so does the blur, which is what keeps the nav legible when the
-          catalogue scrolls underneath it. */}
-      <div className="backdrop-blur-md border-b border-line text-ink-900 px-4 md:px-6 py-2 flex items-center gap-2 md:gap-3">
+      {/* THE BOOKENDS. The header and the footer are the same band now - both are
+          `bg-surface-deep`, the one soft-green step, so the page opens and closes on the same colour
+          and the canvas reads as the content between them.
+          IT IS OPAQUE, AND THE BLUR IS GONE WITH THAT. A backdrop blur only does anything under a
+          translucent fill; on an opaque one it is invisible work that still makes the compositor
+          read back everything scrolled underneath. On a sticky header that is the most expensive
+          thing on the page for no pixels of benefit - and an opaque bar is the better sticky
+          header anyway, since the nav is then legible over whatever scrolls under it rather than
+          depending on a blur to be.
+          `sticky` stays: a catalog is long, and the search and the cart have to be reachable from
+          the bottom of it. */}
+      <div className="bg-surface-deep border-b border-line text-ink-900 px-4 md:px-6 py-2 flex items-center gap-2 md:gap-3">
         {/* The left and right groups both take `flex-1`, which is what actually CENTRES the search:
             two equal-grow flanks around it put the field on the page's centre line whatever the
             wordmark and the controls measure. */}
@@ -149,8 +152,16 @@ export default function Header() {
         <Button href="/cart" className="relative shrink-0">
           {/* The count badge is the one place that keeps a raw 10px: it is a single digit centred in
               a 20px circle, and the `eyebrow` step (11px + 0.1em tracking) crowds it and shifts the
-              digit off centre on one character. Deliberate, not a missed sweep. */}
-          Cart{cartN > 0 && (<span className="absolute -top-2 -right-2 bg-surface-deep text-brand-300 text-[10px] font-bold rounded-full h-5 w-5 flex items-center justify-center">{cartN}</span>)}
+              digit off centre on one character. Deliberate, not a missed sweep.
+
+              ITS FILL IS DARK, and that is a fix rather than a preference. It was `bg-surface-deep`
+              with `text-brand-300`, which on the old palette was a near-black bubble with light
+              text - high contrast against the emerald button it hangs off. `surface-deep` is a soft
+              green now, so the badge quietly became LIGHT-on-emerald, and the moment the header
+              took the same `surface-deep` fill the half of it that overhangs onto the header
+              vanished into it. It is dark again, which is what it always meant to be: the one chip
+              on the page whose job is to be noticed. */}
+          Cart{cartN > 0 && (<span className="absolute -top-2 -right-2 bg-ink-900 text-white text-[10px] font-bold rounded-full h-5 w-5 flex items-center justify-center">{cartN}</span>)}
         </Button>
         <button
           type="button"
