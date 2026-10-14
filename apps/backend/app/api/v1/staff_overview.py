@@ -190,6 +190,39 @@ async def overview(staff: dict = Depends(require_roles("admin", "manager")), db=
         WHERE status = 'intake' AND received_at < now() - interval '14 days'
     """))).scalar_one()
 
+    # Stale stock: units that have sat LISTED for over three months without selling. This is the
+    # one count on the page whose date is not on the asset row, and the reason is the same trigger
+    # the note above gives for `stuck`: rfo_touch_updated_at rewrites updated_at on every UPDATE, so
+    # the row itself can only ever say when it was last touched, never how long it has been on sale.
+    # There is no listed_at column and one could not be trusted to stay true.
+    #
+    # The one place a listing IS recorded is the audit trail's status transition, so the age is read
+    # from there: the latest transition into 'listed' for an asset still listed today.
+    #
+    # MAX, not MIN, and the difference is the whole meaning of the alert. A unit that was listed,
+    # pulled, and re-listed last week is a YOUNG listing; taking the earliest entry would mark it
+    # stale for the rest of its life and send the operator to discount a unit that has just gone up.
+    #
+    # "Without a sale" needs no predicate of its own: a sale moves the unit out of `listed`, so
+    # `status = 'listed'` IS the statement that it has not sold. A unit with no listing transition in
+    # the trail is NOT counted - the subquery returns NULL, the comparison is NULL, and the row falls
+    # out. That is deliberate: 146 of today's 4368 listed units are in that position (listed before
+    # the trail reached them), and for those the payload genuinely cannot tell. Guessing at them from
+    # updated_at would invent the exact fact the alert exists to report.
+    #
+    # Cost, measured at ~6.9k assets: 7.5 ms. The aggregate rides audit_entity_idx (entity, entity_id)
+    # and filters to ~6k status->listed rows before grouping, so it is one index scan plus a
+    # hash-join onto assets, not a correlated subquery per listed unit.
+    stale_listed = (await db.execute(text("""
+        SELECT count(*)
+        FROM assets a
+        JOIN (SELECT entity_id, max(at) AS listed_at
+              FROM audit_log
+              WHERE action = 'status' AND entity = 'asset' AND after->>'status' = 'listed'
+              GROUP BY entity_id) e ON e.entity_id = a.id
+        WHERE a.status = 'listed' AND e.listed_at < now() - interval '90 days'
+    """))).scalar_one()
+
     # grade_mix is LISTED units only - the storefront-facing mix, not every graded unit (that is
     # inventory.by_grade). The DB pins listed => grade IS NOT NULL, so the status filter is the
     # whole predicate.
@@ -266,6 +299,10 @@ async def overview(staff: dict = Depends(require_roles("admin", "manager")), db=
             "orders_last_7d": int(rev7[0]),
             "stuck_assets": {"count": int(stuck[0]), "oldest_serial_number": stuck[1]},
             "lots_stuck": {"count": int(lots_stuck)},
+            # `days` is the threshold the count was taken at, carried in the payload so the page can
+            # write "over 3 months" without hard-coding 90 next to a number it did not compute. The
+            # two must not be able to disagree.
+            "stale_listed": {"count": int(stale_listed), "days": 90},
             "grade_mix": grade_mix,
             "category_mix": category_mix,
             "team_activity": [

@@ -232,3 +232,114 @@ async def test_dashboard_counts_match_its_own_fixtures(client):
             await c.execute(text("DELETE FROM refresh_tokens WHERE identity_id IN "
                                  "(SELECT id FROM staff_users WHERE email = :e)"), {"e": admin_email})
             await c.execute(text("DELETE FROM staff_users WHERE email = :e"), {"e": admin_email})
+
+
+async def test_stale_stock_ages_from_the_audit_trail(client):
+    """`stale_listed` counts units LISTED for over 90 days, aged from the audit trail.
+
+    This is the one dashboard count whose date is not on the asset row, so this test is where the
+    claim is actually proved. `updated_at` cannot answer it (rfo_touch_updated_at rewrites it on
+    every UPDATE) and there is no listed_at column, so the endpoint reads the latest status
+    transition into `listed` out of audit_log. On the dev DB the live answer is 0 - every unit in it
+    is days old - so a test is the only place the counting can be seen to work at all.
+
+    THREE THINGS A NAIVE IMPLEMENTATION GETS WRONG, and all three are asserted here:
+
+      * a unit that is `listed` with NO recorded listing transition is NOT counted. 146 of today's
+        4368 listed units are in exactly that state, and the payload cannot tell their age - a count
+        that guessed at them (from `updated_at`, say) would invent the very fact the alert reports;
+      * a unit whose only listing transition is 100 days old COUNTS (+1 against the baseline), and
+      * the SAME unit, re-listed today, does NOT count any more. The age is the MAX of the asset's
+        listing transitions, not the MIN: a unit that was listed, pulled, and put back up is a young
+        listing, and a MIN would mark it stale for the rest of its life and send the operator to
+        discount a unit that has just gone up.
+
+    The unit is walked to `listed` in SQL rather than through `/status`, because the API layer is
+    what writes the audit row: going through the endpoint would leave a transition dated today and
+    there would be nothing left to test.
+
+    `audit_log` is INSERT-only for the app role (SELECT + INSERT, no UPDATE and no DELETE - the same
+    append-only grant `stock_movements` carries), so the aged rows are inserted with an explicit `at`
+    rather than backdated afterwards, and they cannot be cleaned up. That is what the delta
+    assertions are for. The fixture deliberately ENDS with the unit re-listed today, so what it
+    leaves behind is a young listing and never a stale one: the residue is the rows, not a stale
+    unit, and the live count on the dev DB stays 0.
+    """
+    await _cleanup()
+    eng = get_engine()
+    suffix = uuid.uuid4().hex[:8]
+    admin_email = "pytest-" + uuid.uuid4().hex + "@test.rfo"
+
+    async def _stale(h) -> int:
+        r = await client.get("/staff/overview", headers=h)
+        assert r.status_code == 200, r.text
+        return r.json()["dashboard"]["stale_listed"]["count"]
+
+    async def _log_listing(asset_id: int, age: str):
+        """One status->listed transition, aged by `age` (an SQL interval literal)."""
+        async with eng.begin() as c:
+            await c.execute(text("""
+                INSERT INTO audit_log (at, actor_type, entity, entity_id, action, before, after)
+                VALUES (now() - interval '""" + age + """', 'staff', 'asset', :i, 'status',
+                        '{"status": "graded"}'::jsonb, '{"status": "listed"}'::jsonb)
+            """), {"i": asset_id})
+
+    try:
+        _, h = await _login(client, admin_email, "admin")
+        r = await client.post("/staff/products", json={"brand_slug": "apple", "category_slug": "phones",
+                                                       "model": "Pytest Stale", "title": "Pytest Stale Phone",
+                                                       "slug": "pytest-stale-" + suffix}, headers=h)
+        assert r.status_code == 201, r.text
+        pid = r.json()["id"]
+        lot = (await client.post("/staff/lots", json={"notes": "pytest stale stock"}, headers=h)).json()
+
+        r = await client.post("/staff/assets/scan-in", json={"lot_number": lot["lot_number"],
+                                                             "serial_number": "pytest-stale-" + suffix,
+                                                             "product_id": pid}, headers=h)
+        assert r.status_code == 201, r.text
+        aid = r.json()["id"]
+
+        base = await _stale(h)
+
+        # WALK THE LADDER IN SQL, not through /status. The audit row is written by the API layer
+        # (services/audit), not by a trigger, so this produces a unit that is genuinely `listed` with
+        # NO listing transition in the trail - which is the state 146 of today's 4368 listed units are
+        # actually in, and the one case the endpoint must refuse to guess at. The trigger enforces the
+        # ladder one rung at a time, so it is walked a statement at a time, and the two CHECKs
+        # (listed => grade, listed => price) are satisfied as each rung is reached.
+        async with eng.begin() as c:
+            await c.execute(text("UPDATE assets SET status = 'tested' WHERE id = :i"), {"i": aid})
+            await c.execute(text("UPDATE assets SET status = 'graded', grade = 'B' WHERE id = :i"), {"i": aid})
+            await c.execute(text("UPDATE assets SET status = 'listed', sale_price_cents = 19900 WHERE id = :i"), {"i": aid})
+        listed_untrailed = await _stale(h)
+        assert listed_untrailed - base == 0, ("a listed unit with no recorded listing is not counted",
+                                              base, listed_untrailed)
+
+        # (1) its listing is three months old -> it counts
+        await _log_listing(aid, "100 days")
+        aged = await _stale(h)
+        assert aged - base == 1, (base, aged)
+
+        # (2) the same unit goes back up today -> it is young again, and the MAX is what makes it so
+        await _log_listing(aid, "0 days")
+        relisted = await _stale(h)
+        assert relisted - base == 0, (base, relisted)
+
+        # and the endpoint agrees with the database's own answer to the same question, which is the
+        # claim that does not depend on this fixture being the only stale unit in a shared database
+        async with eng.begin() as c:
+            db_count = (await c.execute(text("""
+                SELECT count(*)
+                FROM assets a
+                JOIN (SELECT entity_id, max(at) AS listed_at
+                      FROM audit_log
+                      WHERE action = 'status' AND entity = 'asset' AND after->>'status' = 'listed'
+                      GROUP BY entity_id) e ON e.entity_id = a.id
+                WHERE a.status = 'listed' AND e.listed_at < now() - interval '90 days'
+            """))).scalar_one()
+        assert relisted == db_count, (relisted, db_count)
+    finally:
+        async with eng.begin() as c:
+            await c.execute(text("DELETE FROM refresh_tokens WHERE identity_id IN "
+                                 "(SELECT id FROM staff_users WHERE email = :e)"), {"e": admin_email})
+            await c.execute(text("DELETE FROM staff_users WHERE email = :e"), {"e": admin_email})

@@ -43,6 +43,10 @@ export type FeedItem = {
   /** Work that is old as well as outstanding - draws the pulsing amber halo. Only ever meaning
       something when `count > 0`; a cleared row is never urgent. */
   urgent?: boolean;
+  /** Overrides the severity's own word in the badge. The default names the LEVEL ("Blocking" /
+      "Ageing"); a row whose own subject is sharper than its level says so here instead ("Stale"),
+      because "Ageing" is true of several rows and tells the operator nothing about which. */
+  badge?: string;
 };
 
 type RowState = "critical" | "warning" | "clear";
@@ -104,7 +108,7 @@ export default function AttentionFeed({ items }: { items: FeedItem[] }) {
                             className="absolute inset-0 animate-pulse rounded-full shadow-urgency motion-reduce:animate-none" />
                     )}
                     <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", BADGE[state])}>
-                      {BADGE_TEXT[state]}
+                      {item.badge ?? BADGE_TEXT[state]}
                     </span>
                   </span>
                 </span>

@@ -61,6 +61,30 @@ export default function AssetsPage() {
   }, [status, lotNumber]);
   useEffect(() => { load(); }, [load]);
 
+  /* THE QUERY IS ADDRESSABLE. The dashboard's alerts link straight at the work they are about - the
+     stale-stock row opens the listed stock - and until this effect existed that landed on the whole
+     inventory: both controls start empty and nothing read the query string, so the href was a
+     narrowing that silently did nothing, which is worse than a plain link because it reads as though
+     it worked.
+
+     Read once, on mount, through the browser's own parser rather than `useSearchParams`, which would
+     put this whole page behind a Suspense boundary for a value that cannot change after load. It is
+     an effect and not a lazy `useState` initialiser because the first render happens on the server,
+     where there is no query string: reading it there would leave the server's markup and the
+     client's disagreeing. The cost is one un-narrowed read that the narrowed read immediately
+     follows.
+
+     A status the endpoint would not accept is dropped rather than sent, so a hand-edited URL cannot
+     turn into a request the API answers with a 422 - the control falls back to "any status" and the
+     list stays readable. */
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const s = q.get("status") ?? "";
+    const l = q.get("lot_number") ?? "";
+    if (STATUSES.includes(s)) { setStatus(s); }
+    if (l) { setLotNumber(l); }
+  }, []);
+
   /* The rows a batch would write: the ticks, narrowed to what is actually on screen, so an id left
      behind by a reload or by a change to either query field cannot quietly join a run. */
   const targets = assets.filter((a) => picked.includes(a.id));

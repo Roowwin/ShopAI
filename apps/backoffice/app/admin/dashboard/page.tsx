@@ -48,6 +48,9 @@ type Overview = {
     orders_last_7d: number;
     stuck_assets: { count: number; oldest_serial_number: string | null };
     lots_stuck: { count: number };
+    /* `days` is the threshold the count was taken at, carried by the payload so the copy below
+       cannot disagree with the number beside it. */
+    stale_listed: { count: number; days: number };
     grade_mix: Record<string, number>;
     category_mix: Record<string, number>;
     team_activity: { actor_id: number | null; actor_email: string | null; actions: number }[];
@@ -64,10 +67,16 @@ type Overview = {
    blocked (a graded unit with no price can never be listed), warning = work ageing without
    blocking anything. A zero row is neither - see attention.tsx.
 
-   `urgent` is the second, narrower judgement: work that the payload DATES as old. Exactly one row
-   qualifies - the lots that have sat in intake past 14 days - and it is the only figure on this page
-   with a fortnight attached to it. The "stuck in received/tested" row above it is aged too, but at
-   7 days, and marking both would leave the halo saying nothing that the badge does not. */
+   `urgent` is the second judgement: work the payload DATES as old. Two rows qualify - units listed
+   past three months, and lots that have sat in intake past a fortnight - because both carry a
+   threshold of months or weeks rather than days. The "stuck in received/tested" row above them is
+   aged too, but at 7 days, and marking that one as well would leave the halo saying nothing the
+   badge does not already say.
+
+   The stale row's badge reads "Stale" rather than the level's own "Ageing", for the reason given on
+   the field in attention.tsx: "Ageing" is true of three rows on this page and would tell the
+   operator nothing about which one is being pointed at. Its threshold is read off the payload's own
+   `days` rather than typed as 90 here, so the sentence and the number cannot drift apart. */
 function feedFor(d: Overview["dashboard"]): FeedItem[] {
   return [
     { label: "Units graded but not priced", count: d.pricing_pending, href: "/admin/assets",
@@ -80,6 +89,14 @@ function feedFor(d: Overview["dashboard"]): FeedItem[] {
     { label: "Lots in intake over 14 days", count: d.lots_stuck.count, href: "/admin/intake",
       severity: "warning", urgent: true,
       detail: "Received but never activated." },
+    /* The link carries the narrowing the row is about, so the operator lands on the units the count
+       counted rather than on the whole inventory. The assets page reads `status` from the query
+       string - see the note there; without that, this href would be a narrowing that silently did
+       nothing, which is worse than a plain link. */
+    { label: `Assets listed over ${Math.round(d.stale_listed.days / 30)} months`,
+      count: d.stale_listed.count, href: "/admin/assets?status=listed",
+      severity: "warning", urgent: true, badge: "Stale",
+      detail: "Consider price drop or promotional bundle." },
   ];
 }
 
