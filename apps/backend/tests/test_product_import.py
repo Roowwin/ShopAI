@@ -625,6 +625,32 @@ async def test_preview_returns_up_to_the_cap(client):
         await _purge(tag)
 
 
+def test_a_singular_class_matches_the_plural_category():
+    """The spelling variants the importer tries before minting a category.
+
+    A pure function on purpose: the defect this exists to stop was a CATEGORY being created, and a
+    test that proved it through a commit would leave that category - and the committed import's
+    assets, which `rfo_app` may not delete - behind in a shared database. So the normalisation is
+    asserted directly, in the shapes the real catalogue has, and the resolver's use of it is checked
+    against the live rows by hand.
+    """
+    f = staff_imports._category_spellings
+    # The four pairs the shop actually ended up showing twice, plus the plural forms the migrations
+    # seed - which is what the sheet's singular has to land on.
+    assert "laptops" in f("Laptop")
+    assert "laptop" in f("Laptops")
+    assert "phones" in f("Phone")
+    assert "desktops" in f("Desktop")
+    assert "tablets" in f("Tablet")
+    assert "accessory" in f("Accessories") and "accessories" in f("Accessories")
+    assert "cable" in f("Cables") and "cables" in f("Cables")
+    # The name itself is always first, and nothing is duplicated.
+    assert f("Laptop")[0] == "laptop" and len(f("Laptop")) == len(set(f("Laptop")))
+    # A SYNONYM is deliberately NOT invented: this is a naming decision, not a spelling one, and
+    # guessing it would file stock under a category nobody chose.
+    assert not {"networking", "network"} & set(f("Network Equipment")) - {"network equipment"}
+
+
 async def test_preview_keeps_fractional_cents_exact(client):
     """Money is parsed to cents, not floats: 1234.565 rounds half-up, never to a float artefact."""
     tag = _tag()

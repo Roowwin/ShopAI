@@ -867,11 +867,46 @@ async def _resolve_brand(db, name: str) -> int:
         {"n": name, "s": slug})).scalar_one()
 
 
+def _category_spellings(name: str) -> list[str]:
+    """The name the sheet spelled, plus the singular and plural forms to try before minting a new one.
+
+    WHY THIS EXISTS, because it cost a real catalogue. The shop's categories are PLURAL - the
+    migrations seed "Laptops", "Phones", "Desktops", "Tablets" - and a supplier's Class column says
+    "Laptop". The lookup below is exact, so the first import carrying a singular Class minted a
+    SECOND category beside the real one, and the product identity (brand, category, model) then
+    minted a second product row for every model under it. That is precisely the near-duplicate the
+    product resolver exists to prevent, and two of them ended up standing side by side in the shop's
+    own category menu: "Laptop" next to "Laptops", "Phone" next to "Phones".
+
+    Deliberately narrow: the variants differ from the name only by a trailing s/es, or the y in
+    -ies. A SYNONYM is not guessed at - "Network Equipment" against "Networking" is a naming
+    decision, not a spelling one, and inventing it here would silently file stock under a category
+    nobody chose. That one is the owner's to map if they want it mapped.
+    """
+    n = name.strip()
+    low = n.lower()
+    forms = [n]
+    if low.endswith("ies"):
+        forms.append(n[:-3] + "y")          # "accessories" -> "accessory"
+    elif low.endswith("es"):
+        forms += [n[:-2], n[:-1]]           # "boxes" -> "box";  "cables" -> "cable"
+    elif low.endswith("s"):
+        forms.append(n[:-1])                # "laptops" -> "laptop"
+    else:
+        forms += [n + "s", n + "es"]        # "laptop" -> "laptops"
+    return list(dict.fromkeys(f.lower() for f in forms if f))
+
+
 async def _resolve_category(db, name: str) -> int:
-    """Find a category by name OR slug (case-insensitive) or create one. categories.slug is UNIQUE."""
+    """Find a category by name OR slug (case-insensitive) or create one. categories.slug is UNIQUE.
+
+    The spelling variants are tried first, so a sheet's singular Class lands on the plural category
+    that already exists instead of creating a twin beside it - see `_category_spellings`."""
     slug = _slugify(name)
-    row = (await db.execute(text("SELECT id FROM categories WHERE lower(name) = lower(:n) OR slug = :s"),
-                            {"n": name, "s": slug})).scalar_one_or_none()
+    spellings = _category_spellings(name)
+    row = (await db.execute(text(
+        "SELECT id FROM categories WHERE lower(name) = ANY(:c) OR slug = ANY(:c) ORDER BY id LIMIT 1"),
+        {"c": spellings})).scalar_one_or_none()
     if row is not None:
         return row
     taken = (await db.execute(text("SELECT 1 FROM categories WHERE slug = :s"), {"s": slug})).scalar_one_or_none()
