@@ -13,16 +13,17 @@ type Size = "sm" | "md" | "lg";
    motion tokens, and the reduced-motion pair cancels the 1px movement for anyone who has asked
    for no motion (a 0ms transition would still move it).
 
-   THE RING IS `brand-300` ON EVERY VARIANT - the same selector, but the VALUE is neutral now.
-   brand-300 was the brand's own ink step in the brass and forest passes; this pass repointed it to
-   slate-200, because a focus indicator is an affordance rather than a brand moment (see the header
-   of globals.css). It is a light neutral, so it clears the 3:1 non-text bar against the canvas, a
-   card AND the forest fill it sits on. A caller still cannot override it: `cn` does not dedupe, and
-   two `focus-visible:ring-<colour>` classes resolve by Tailwind's emission order rather than by
-   which one the caller wrote last.
+   THE RING IS `brand-300` ON EVERY VARIANT - the same selector every pass has used, but the VALUE
+   keeps moving with the ground. brand-300 is not the brand here: it is the "quiet ink/ring" step
+   (see the header of globals.css), and a focus indicator is an affordance rather than a brand
+   moment. It was slate-200 for the dark ground and is slate-600 now, because on a light page the
+   ring has to be the DARK neutral - a light one would vanish into the canvas. It clears the 3:1
+   non-text bar against the canvas, a card AND the emerald fill it sits on. A caller still cannot
+   override it: `cn` does not dedupe, and two `focus-visible:ring-<colour>` classes resolve by
+   Tailwind's emission order rather than by which one the caller wrote last.
 
-   Palette: only `primary` carries the brand hue, because the brief for this pass allows the forest
-   green in exactly one place - the primary action. Secondary is a transparent outline and ghost is
+   Palette: only `primary` carries the brand hue, because the brief allows the brand colour in
+   exactly one place - the primary action. Secondary is a transparent outline and ghost is
    a bare text action, so both step through neutral fills and the eye always knows which control is
    the action without a second colour being spent on it. */
 const BASE =
@@ -33,13 +34,17 @@ const BASE =
   "motion-reduce:transition-none motion-reduce:active:translate-y-0";
 
 const VARIANTS: Record<Variant, string> = {
-  /* THE PRIMARY BUTTON IS THE ONLY COLOUR IN THE APP. Forest green #245B45 as a fill, WHITE as its
-     label - and the label flipped back to white in this pass. It was `ink-inverse` (the dark
-     canvas) because brass is a BRIGHT fill: white on #B08D57 measured 2.9:1. Forest is a dark one,
-     so white on it measures 7.9:1 and the dark label would have been the unreadable one. The hover
-     goes DOWN the ladder (800, then 900 on press) rather than up, because there is no green above
-     700 to go to and a fill that brightens on hover reads as a warning, not a welcome. */
-  primary: "bg-brand-700 text-white hover:bg-brand-800 active:bg-brand-900 focus-visible:ring-brand-300",
+  /* THE PRIMARY BUTTON IS THE ONLY COLOUR IN THE APP, and its LABEL FLIPS WITH THE GROUND - this is
+     the third time, and it is the one line in this file that has to be re-read on every palette
+     move. The rule is not "white" or "dark", it is "whichever ink the fill can carry":
+       brass  #B08D57 (bright) -> ink-inverse, because white on it was 2.9:1
+       forest #245B45 (dark)   -> white,       7.9:1
+       emerald #34D399 (bright)-> ink-inverse, because white on it is 1.92:1
+     The sweep (scripts/check-contrast.py) catches this and nothing else: on the light palette it
+     reported exactly these two pairs, this fill and its hover, and no others across either app.
+     The hover goes DOWN the ladder (800, then 900 on press) rather than up, because there is no
+     emerald above 700 to go to and a fill that brightens on hover reads as a warning. */
+  primary: "bg-brand-700 text-ink-inverse hover:bg-brand-800 active:bg-brand-900 focus-visible:ring-brand-300",
   /* SECONDARY IS A GHOST: transparent with one thin border, per the brief. It used to be a filled
      `bg-surface` slab on the same hairline, which on a card made it a second card; transparent lets
      whatever it sits on show through, so it reads as an outline and never as a panel. The hover is

@@ -18,7 +18,10 @@ const TONES: Record<"light" | "sunken" | "deep", string> = {
 };
 
 /* The control shell, shared with a bare <select> that cannot be an <Input>. The focus ring is
-   brand-300: this app is dark on every page, and brand-700 - the fill - is 2.3:1 as a ring here.
+   brand-300, and it still is for the same reason as before even though the ground flipped: the ring
+   must be the token read as INK, not the one used as a fill. brand-700 - the fill - is 2.3:1 as a
+   ring on the old charcoal and 1.9:1 on this canvas, so it fails on both; brand-300 clears 7.0:1
+   here and cleared 11.6:1 there.
    Padding is left to the caller so a control can pick its own size without two competing
    padding utilities on one element (there is no tailwind-merge here). */
 export const fieldClass =

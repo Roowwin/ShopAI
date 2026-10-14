@@ -169,12 +169,13 @@ export default function PurchasePanel({ units, title, brand, model, slug, specs,
               the panel, so "what it costs" and "whether you can have it" read as one block instead
               of a headline with a footnote somewhere below it.
 
-              THE PRICE IS THE STRONGEST NEUTRAL INK, not the brand. It was `text-brand-700` while
-              brand-700 was brass, which read 4.4:1 on this ground and cleared the 3:1 large-text
-              bar at 32px semibold. brand-700 is forest green now (#245B45), and forest as INK on a
-              dark card measures about 2.1:1 - the price would have been the least legible thing on
-              the page. So the number is `ink-900`, the same white as every heading, and the brand
-              colour is left to the one control that is actually an action. */}
+              THE PRICE IS THE STRONGEST NEUTRAL INK, not the brand, and that conclusion has now
+              survived two palette moves for the same reason each time: `brand-700` is the FILL
+              step, so as ink it fails on whatever ground it lands on - 4.4:1 when it was brass,
+              about 2.1:1 when it was forest on a dark card, and 1.9:1 now that it is a bright
+              emerald on this canvas. The number is `ink-900`, the strongest step of the ink ladder
+              whichever direction that ladder runs, and the brand colour stays on the one control
+              that is actually an action. */}
           <div className="mt-5 rounded-control bg-surface-sunken p-4 ring-1 ring-line">
             <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
               <p className="font-display text-display text-ink-900">{unitPrice !== undefined ? aud(unitPrice) : "-"}</p>

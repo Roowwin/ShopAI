@@ -6,7 +6,7 @@ import { notFound } from "next/navigation";
 
 export const revalidate = 0;
 
-/* The retail view of a product: three columns, and a dark ground.
+/* The retail view of a product: three columns, and the shop's own ground.
 
    THE PARENT/CHILD SPLIT IS UNCHANGED, and it is the thing to keep hold of while reading this
    file. A product here is a MODEL - the title, the photo, the description, the specs - and every
@@ -155,7 +155,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
             The spark tile is NEUTRAL now as well. It was a brass-tinted square (`brand-700/15` on a
             30% brand hairline) which spent the brand colour on decoration; the brief allows the
-            forest green on the primary action and nowhere else, so the tile is a surface step with
+            brand hue on the primary action and nowhere else, so the tile is a surface step with
             a hairline and the icon is the body ink. */}
         <div className="mt-10 flex flex-wrap items-center justify-between gap-4 rounded-card bg-surface-page-alt p-8 ring-1 ring-line">
           <div className="flex items-center gap-3">

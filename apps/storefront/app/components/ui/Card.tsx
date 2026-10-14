@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { cn } from "./cn";
 
-/* QUIET PANELS. A card is an OPAQUE charcoal panel on a single neutral hairline. It used to be
+/* QUIET PANELS. A card is an OPAQUE panel - white on the light ground, charcoal before it - on a
+   single neutral hairline. It used to be
    glass - the raised surface at 80% under a `backdrop-blur-md`, so the gradient ground showed
    faintly through it - and the brief for this pass is subtraction: the blur is the most expensive
    thing on the page (every panel makes the compositor blur what is behind it) and the least

@@ -80,8 +80,8 @@ export default function Header() {
       {/* FLOATING, AND NOW FULLY SO. The header is not an opaque bar laid across the page: it is a
           backdrop blur over a single hairline, so the ground shows straight through and the chrome
           sits ON the page rather than over it. The `bg-surface/80` wash that used to sit under the
-          blur is gone, which is what lets the new green canvas read all the way up to the top edge
-          instead of stopping at a charcoal band.
+          blur is gone, which is what lets the canvas read all the way up to the top edge instead of
+          stopping at a solid band of the panel colour.
           `sticky` stays - a catalog is long, and the search and the cart have to be reachable from
           the bottom of it - and so does the blur, which is what keeps the nav legible when the
           catalogue scrolls underneath it. */}

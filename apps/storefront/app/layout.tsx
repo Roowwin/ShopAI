@@ -35,8 +35,14 @@ export const metadata: Metadata = {
 };
 
 /* The mobile browser chrome colour. A literal rather than a token because Next reads this at
-   build time, outside any stylesheet - it mirrors --brand-700 and moved with the palette. */
-export const viewport: Viewport = { themeColor: "#245B45" };
+   build time, outside any stylesheet - it has to be kept in step with the palette by hand, and it
+   moved with it.
+
+   It mirrors `--surface-page` (#F5F7FA) rather than the brand, and that is a change of answer: on
+   the dark ground this was the forest fill, so the chrome read as a bar across the top of the page.
+   The header is transparent now, so the chrome should dissolve into the canvas it sits above
+   instead of drawing a line the design deliberately does not have. */
+export const viewport: Viewport = { themeColor: "#F5F7FA" };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   return (
