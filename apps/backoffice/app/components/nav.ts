@@ -85,6 +85,10 @@ export const GROUPS: NavGroup[] = [
          every lot that will ever hold one. It sits beside Product import because that is the
          sequence an operator actually works in. */
       { href: "/admin/product-groups", label: "Product groups" },
+      /* The other half of the same job: the folder of photographs the groups are matched against.
+         A page of its own rather than a card above the worklist, so neither has to be scrolled past
+         to reach the other. */
+      { href: "/admin/product-groups/photos", label: "Photo folder" },
       /* The marketplace hubs. There are three of them (eBay, Amazon, Facebook) and the roadmap gives
          the group one entry, so the parent is the hub for the marketplace the platform is actually
          wired toward. The other two are CHILDREN rather than - as this note used to claim -
