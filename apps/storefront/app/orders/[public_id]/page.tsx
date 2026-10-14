@@ -112,12 +112,12 @@ export default function OrderPage() {
   }
 
   if (state === "loading") {
-    return <main className="max-w-2xl mx-auto px-4 pt-16 pb-20"><p className="text-ink-500">Loading your order...</p></main>;
+    return <main className="max-w-2xl mx-auto px-4 pt-20 pb-28"><p className="text-ink-500">Loading your order...</p></main>;
   }
 
   if (state === "missing" || order === null) {
     return (
-      <main className="max-w-lg mx-auto px-4 pt-16 pb-20 text-center">
+      <main className="max-w-lg mx-auto px-4 pt-20 pb-28 text-center">
         <Heading level="h1">Order not found</Heading>
         <p className="text-sm text-ink-600 mt-3">
           That order link does not match an order. Check the link you were sent, or sign in to see
@@ -136,7 +136,7 @@ export default function OrderPage() {
   const ratePct = order.tax.rate_bp === null ? null : order.tax.rate_bp / 100;
 
   return (
-    <main className="max-w-2xl mx-auto px-4 pt-12 pb-20">
+    <main className="max-w-2xl mx-auto px-4 pt-12 pb-28">
       {/* role="status" so a screen reader announces the outcome of the payment without the shopper
           having to hunt for it - this page IS the result of a button they pressed. It sits on an
           inner element because `Card` is a styled div and takes no ARIA attributes of its own. */}
@@ -163,7 +163,7 @@ export default function OrderPage() {
       <ol className="mt-6 flex items-center gap-2" aria-label="Order progress">
         {STEPS.map((s, i) => (
           <li key={s.key} className="flex-1">
-            <div className={"h-1.5 rounded-full " + (i <= at ? "bg-brand-700" : "bg-surface-sunken")} />
+            <div className={"h-1.5 rounded-full " + (i <= at ? "bg-ink-700" : "bg-surface-sunken")} />
             <p className={"mt-1.5 text-eyebrow " + (i === at ? "font-semibold text-ink-900" : "text-ink-500")}>
               {s.label}
             </p>

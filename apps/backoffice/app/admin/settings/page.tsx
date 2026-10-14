@@ -121,7 +121,7 @@ export default function SettingsPage() {
           </label>
 
           <label className="block">
-            <span className={cn(kickerClass, "block")}>ABN / Tax ID</span>
+            <span className={cn(kickerClass, "block")}>ABN or tax ID</span>
             <Input className="mt-1" value={form.tax_id} onChange={field("tax_id")}
                    disabled={!canWrite} placeholder="e.g. 12 345 678 901" inputMode="numeric" />
           </label>

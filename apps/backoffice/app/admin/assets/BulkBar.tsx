@@ -144,7 +144,7 @@ export default function BulkBar({ targets, onDone, onClear }: {
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex justify-center px-4">
-      <div className="pointer-events-auto w-full max-w-2xl overflow-hidden rounded-card bg-surface-glass/90 ring-1 ring-line shadow-glow backdrop-blur-md">
+      <div className="pointer-events-auto w-full max-w-2xl overflow-hidden rounded-card bg-surface-glass/90 ring-1 ring-line backdrop-blur-md">
         <div className="flex flex-wrap items-center gap-3 px-4 py-3">
           <p className="text-sm text-ink-900">
             <span className="font-semibold">{n}</span> {n === 1 ? "unit" : "units"} selected

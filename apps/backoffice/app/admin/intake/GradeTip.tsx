@@ -58,7 +58,7 @@ export function GradeTip({ grade, x, y, above }: Props) {
         transform: above ? "translate(-50%, -100%)" : "translate(-50%, 0)",
         width: GRADE_TIP_WIDTH,
       }}
-      className="pointer-events-none fixed z-50 rounded-card bg-surface p-3 text-left ring-1 ring-brand-500/60 shadow-glow"
+      className="pointer-events-none fixed z-50 rounded-card bg-surface p-3 text-left ring-1 ring-brand-500/60"
     >
       <p className="text-xs font-semibold text-brand-300">Grade {c.letter} &middot; {c.label}</p>
       <p className="mt-1 text-xs text-ink-500">{c.battery}</p>

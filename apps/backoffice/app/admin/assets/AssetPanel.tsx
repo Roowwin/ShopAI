@@ -179,7 +179,7 @@ export default function AssetPanel({ assetId, revision = 0, onClose }: { assetId
         onKeyDown={onKeyDown}
         className={cn(
           "fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col outline-none",
-          "bg-surface-glass/90 ring-1 ring-line shadow-glow backdrop-blur-md",
+          "bg-surface-glass/90 ring-1 ring-line backdrop-blur-md",
           "transition-transform duration-150 ease-out motion-reduce:transition-none",
           shown ? "translate-x-0" : "translate-x-full",
         )}

@@ -17,8 +17,8 @@ import { cn } from "@/app/components/ui";
    Colour is the reinforcement, not the message: each row carries its count, its label and a
    detail line, and the severity is also in that copy - so the timeline still reads with the tints
    removed. The tints themselves are `danger-600` and `accent-400` (the tokens the brief names),
-   with a restrained halo from `shadow-glow-danger` / `shadow-glow-warning`; the emerald
-   `shadow-glow-sm` would have been the wrong hue on either, which is why those two exist.
+   with a restrained halo from `-danger` / `-warning`; the emerald
+   `` would have been the wrong hue on either, which is why those two exist.
 
    The rail is one hairline per row, not one per timeline: a single absolutely positioned line
    across the whole list cannot know where the last node sits once rows differ in height, and the
@@ -35,8 +35,8 @@ export type FeedItem = {
 type RowState = "critical" | "warning" | "clear";
 
 const DOT: Record<RowState, string> = {
-  critical: "bg-danger-600 shadow-glow-danger",
-  warning: "bg-accent-400 shadow-glow-warning",
+  critical: "bg-danger-600",
+  warning: "bg-accent-400",
   clear: "bg-transparent ring-1 ring-line-strong",
 };
 

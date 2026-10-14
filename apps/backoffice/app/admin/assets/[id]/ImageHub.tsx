@@ -247,7 +247,7 @@ export default function ImageHub({ assetId, lotId, images, templates, canManage,
                               "transition duration-fast ease-out motion-reduce:transition-none",
                               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-900",
                               "disabled:opacity-40 disabled:pointer-events-none",
-                              isSet ? "bg-brand-500 text-ink-inverse ring-1 ring-brand-500 shadow-glow-sm"
+                              isSet ? "bg-brand-500 text-ink-inverse ring-1 ring-brand-500"
                                     : "bg-surface-sunken text-ink-500 ring-1 ring-line hover:bg-brand-700 hover:text-white",
                               takenByOther ? "opacity-70" : "",
                             )}

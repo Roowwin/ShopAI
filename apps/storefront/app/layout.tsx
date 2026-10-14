@@ -49,7 +49,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             under the title. Nothing else on the shop renders one. */}
         <div className="flex-1">{children}</div>
         <footer className="bg-surface-deep text-ink-500 mt-12">
-          <div className="max-w-6xl mx-auto px-6 py-8 grid gap-6 md:grid-cols-3 text-sm">
+          <div className="max-w-6xl mx-auto px-6 py-8 grid gap-8 md:grid-cols-3 text-sm">
             <div>
               <p className="font-semibold text-ink-900 flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-brand-500"></span>RFO Store</p>
               <p className="text-xs text-ink-400 mt-1">Certified refurbished electronics. Every device renewed, graded and tracked - e-waste kept out of landfill.</p>

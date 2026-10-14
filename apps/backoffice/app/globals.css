@@ -37,18 +37,26 @@
   }
 
   :root {
-    /* forest green. Same role map as the storefront's ladder, values inverted for this ground:
-       700 is the primary fill (white on it measures 7.9:1 - it was 5.48:1 when this was emerald,
-       so the note in Button.tsx about "the darker step" now has room to spare rather than none),
-       800 the hover below it, and 50/100/200 are the SOFT fills, deep tints here. 300 is the INK
-       read on the dark ground and is the app's most-used brand step. */
+    /* forest green, and THE BRAND IS ONE BUTTON IN THIS APP TOO. Same role map as the storefront's
+       ladder: 700 is the primary fill (white on it measures 7.9:1), 800 the hover below it, and
+       50/100/200 are the soft fills.
+
+       300 AND 500 ARE REPOINTED TO NEUTRAL, which is the load-bearing change of the Quiet Luxury
+       pass - see the long note in the storefront's globals.css, where it is the same edit. 300 was
+       "the app's most-used brand step" (the green ink on every link, label and quiet emphasis in
+       the backoffice); it is slate-200 now, and 500 - the ring/soft-tint step - is slate-400. The
+       reason is the brief's: the forest green appears only on a primary action, and everything a
+       page leans on for quiet emphasis is neutral.
+
+       The honest cost, stated plainly: `text-brand-300` no longer renders as the brand. It is the
+       neutral ink step. Read 300/500 as neutral from here on. */
     --brand-50: 12 42 32;
     --brand-100: 17 56 43;
     --brand-200: 23 74 57;
-    --brand-300: 135 191 160;
-    --brand-500: 62 143 108;
+    --brand-300: 226 232 240;      /* REPOINTED - neutral: the quiet ink step (slate-200) */
+    --brand-500: 148 163 184;      /* REPOINTED - neutral: rings and soft tints (slate-400) */
     --brand-600: 47 122 92;
-    --brand-700: 36 91 69;
+    --brand-700: 36 91 69;         /* THE primary fill - the only brand colour left */
     --brand-800: 27 70 52;
     --brand-900: 18 51 37;
     --brand-950: 9 27 20;

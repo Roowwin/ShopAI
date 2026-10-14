@@ -162,7 +162,7 @@ export default function LoadMore({ initial, applied, categories, brands }: {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 mt-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 mt-8">
         {items.map((i) => (
           <ProductCard key={i.slug} variant="full" href={"/products/" + i.slug} title={i.title}
             brand={i.brand} category={i.category} slug={i.slug} imageUrl={i.image_url}

@@ -70,7 +70,7 @@ export default function SignInPage() {
   }
 
   return (
-    <main className="max-w-md mx-auto px-4 pt-16 pb-20">
+    <main className="max-w-md mx-auto px-4 pt-20 pb-28">
       <Heading level="h1">{mode === "signin" ? "Sign in" : "Create your account"}</Heading>
       <p className="text-sm text-ink-500 mt-2">
         {mode === "signin"

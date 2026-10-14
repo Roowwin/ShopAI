@@ -33,7 +33,7 @@ export default function SecurityPage() {
 
   return (
     <main className="max-w-2xl mx-auto pt-10 px-4">
-      <PageHeader title={<>Security / TOTP</>} className="mb-4" />
+      <PageHeader title={<>Security</>} className="mb-4" />
       <Card className="p-6 space-y-4">
         {!enabled && !secret && (
           <Button onClick={setup} disabled={busy}>

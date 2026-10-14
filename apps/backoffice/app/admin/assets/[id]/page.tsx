@@ -431,7 +431,7 @@ function PriceModal({ assetId, serial, current, onClose, onSaved }:
             no id, and widening a shared primitive for one dialog is the wrong trade. */}
         <div ref={card} role="dialog" aria-modal="true" aria-label="Set the sale price"
              onKeyDown={onKeyDown}
-             className="w-full max-w-sm rounded-card bg-surface p-5 ring-1 ring-line shadow-glow">
+             className="w-full max-w-sm rounded-card bg-surface p-5 ring-1 ring-line">
           <Heading level="h2">Set the sale price</Heading>
           <p className="mt-1 text-xs text-ink-500">
             Unit <span className="font-mono">{serial ?? "#" + assetId}</span> &middot;{" "}

@@ -24,7 +24,7 @@ export default function TrackLookupPage() {
   }
 
   return (
-    <main className="max-w-md mx-auto px-4 pt-16 pb-20">
+    <main className="max-w-md mx-auto px-4 pt-20 pb-28">
       <Heading level="h1">Track your parcel</Heading>
       <p className="text-sm text-ink-500 mt-2">
         Enter the tracking number you were given. You do not need an account.

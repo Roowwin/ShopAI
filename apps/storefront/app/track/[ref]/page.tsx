@@ -43,7 +43,7 @@ export default async function TrackResultPage({ params }: { params: Promise<{ re
 
   if (parcel === null) {
     return (
-      <main className="max-w-lg mx-auto px-4 pt-16 pb-20 text-center">
+      <main className="max-w-lg mx-auto px-4 pt-20 pb-28 text-center">
         <Heading level="h1">Nothing to show</Heading>
         <p className="text-sm text-ink-600 mt-3" role="alert">{failure}</p>
         <p className="text-xs text-ink-400 mt-2">
@@ -64,7 +64,7 @@ export default async function TrackResultPage({ params }: { params: Promise<{ re
   ];
 
   return (
-    <main className="max-w-lg mx-auto px-4 pt-16 pb-20">
+    <main className="max-w-lg mx-auto px-4 pt-20 pb-28">
       <Card className={"p-5 md:p-6 " + (delivered ? "bg-brand-500/15 text-brand-300" : "bg-surface-sunken text-ink-700")}>
         <div role="status">
           <Heading level="h1" className="!text-current">
@@ -83,7 +83,7 @@ export default async function TrackResultPage({ params }: { params: Promise<{ re
       <ol className="mt-6 flex items-center gap-2" aria-label="Parcel progress">
         {steps.map((s) => (
           <li key={s.label} className="flex-1">
-            <div className={"h-1.5 rounded-full " + (s.done ? "bg-brand-700" : "bg-surface-sunken")} />
+            <div className={"h-1.5 rounded-full " + (s.done ? "bg-ink-700" : "bg-surface-sunken")} />
             <p className={"mt-1.5 text-eyebrow " + (s.done ? "font-semibold text-ink-900" : "text-ink-500")}>
               {s.label}
             </p>

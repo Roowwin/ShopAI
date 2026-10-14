@@ -137,14 +137,14 @@ const CELL_FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visibl
 
    ACTIVE - the brand's saturated green (`brand-500`), under the dark ink. White on that step measures
    under 4.5:1 and is not text; `ink-inverse` is the token this palette keeps for exactly this pairing
-   (Button's `accent` variant is the same shape in amber). `shadow-glow-sm` is the config's brand
+   (Button's `accent` variant is the same shape in amber). `` is the config's brand
    hairline plus bloom, the halo a dark ground needs - a grey shadow is invisible
    against slate, so the glow is drawn in light.
 
    IDLE - the page ground, muted ink, one hairline, and a lift to the primary button's emerald on
    hover. Both states carry a 1px ring so only its COLOUR changes between them: the focus ring that
    arrives on a keypress is then the one thing widening the edge. */
-const GRADE_ACTIVE = "bg-brand-500 text-ink-inverse ring-1 ring-brand-500 shadow-glow-sm";
+const GRADE_ACTIVE = "bg-brand-500 text-ink-inverse ring-1 ring-brand-500";
 const GRADE_IDLE = "bg-surface-sunken text-ink-500 ring-1 ring-line hover:bg-brand-700 hover:text-white";
 
 /* How the server says it read the term, in the operator's own words. */
@@ -380,7 +380,7 @@ export default function LotWorkbench() {
 
   return (
     <div className="space-y-6">
-      <Card className="p-6 shadow-glow-sm ring-brand-100">
+      <Card className="p-6 ring-brand-100">
         <Heading level="h3" as="h2">Find a lot, asset or serial</Heading>
         <p className="mt-1 pb-4 text-sm text-ink-500">
           Any of the three opens the lot it belongs to, so the units you are working with stay
@@ -427,7 +427,7 @@ export default function LotWorkbench() {
               aria-valuemin={0}
               aria-valuemax={total}
               aria-label={`Lot ${list.lot.lot_number} grading progress`}
-              className="mt-2 h-3 w-full overflow-hidden rounded-control bg-surface-sunken ring-1 ring-line shadow-glow-sm"
+              className="mt-2 h-3 w-full overflow-hidden rounded-control bg-surface-sunken ring-1 ring-line"
             >
               <div
                 className="h-full rounded-control bg-brand-500 transition-[width] duration-fast ease-out motion-reduce:transition-none"

@@ -89,14 +89,11 @@ const config: Config = {
         card: "1rem", // content panels
         control: "0.75rem", // tiles, buttons, inputs
       },
-      /* The glow. On a dark ground a grey shadow is invisible - the boundary has to be drawn in
-         light rather than cast in darkness - so a "shadow" here is a brand hairline plus a soft
-         bloom. Two layers on purpose: the 1px ring is the border the design asks for, the blur is
-         the glow. `glow-sm` is the resting hover on a card; `glow` is the hero button. */
-      boxShadow: {
-        glow: "0 0 0 1px rgb(var(--brand-500) / 0.45), 0 10px 40px -12px rgb(var(--brand-500) / 0.45)",
-        "glow-sm": "0 0 0 1px rgb(var(--brand-500) / 0.35), 0 4px 22px -10px rgb(var(--brand-500) / 0.40)",
-      },
+      /* NO `boxShadow` SCALE, DELIBERATELY. There was a `glow`/`glow-sm` pair here - a brand
+         hairline plus a soft bloom, because a grey shadow is invisible on a dark ground. This
+         pass removes it: a bloom under every card is exactly the "noise" the brief asks to
+         subtract, and elevation on this page is already said by the surface step and the
+         hairline. A card that wants to feel raised now steps its fill up and says nothing else. */
       fontFamily: {
         // --font-sans / --font-display are set by next/font on <html> (layout.tsx). Both are
         // self-hosted at build time by next/font/google, so neither adds a runtime request.

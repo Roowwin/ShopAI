@@ -112,7 +112,7 @@ export default function Header() {
             onKeyDown={(e) => { if (e.key === "Enter" && q.trim().length >= 2) { setOpen(false); router.push("/search?q=" + encodeURIComponent(q.trim())); } }}
             onBlur={() => setTimeout(() => setOpen(false), 150)} />
           {open && items.length > 0 && (
-            <div className="absolute left-0 right-0 mt-1 bg-surface/95 backdrop-blur-md text-ink-900 rounded-control shadow-glow-sm ring-1 ring-line overflow-hidden">
+            <div className="absolute left-0 right-0 mt-1 bg-surface/95 backdrop-blur-md text-ink-900 rounded-control ring-1 ring-line overflow-hidden">
               {items.slice(0, 5).map((s) => (
                 <button key={s.slug} className="w-full text-left px-4 py-2.5 text-sm transition-colors duration-fast ease-out hover:bg-surface-pressed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset motion-reduce:transition-none"
                   onMouseDown={() => router.push("/products/" + s.slug)}>

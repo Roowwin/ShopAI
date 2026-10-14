@@ -156,7 +156,7 @@ export default function AssistantPage() {
 
   return (
     <main className="max-w-7xl mx-auto p-4 min-h-screen">
-      <div className="rounded-2xl ring-1 ring-line bg-surface shadow-glow-sm overflow-hidden">
+      <div className="rounded-2xl ring-1 ring-line bg-surface overflow-hidden">
         <div className="bg-surface-muted px-5 py-3 flex flex-wrap items-center gap-3 text-ink-900">
           <span className={"h-2.5 w-2.5 rounded-full " + (fb ? "bg-accent-400" : "bg-brand-500")}></span>
           <b className="text-sm tracking-wide">Assistant</b>

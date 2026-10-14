@@ -65,7 +65,7 @@ function price(cents: number | null | undefined) {
 
 function Initials({ brand, large }: { brand?: string | null; large?: boolean }) {
   return (
-    <div className="aspect-[4/3] bg-gradient-to-br from-surface-sunken to-line flex items-center justify-center">
+    <div className="aspect-[4/3] bg-surface-sunken flex items-center justify-center">
       <span className={(large ? "text-xl" : "text-lg") + " font-bold text-ink-400"}>
         {(brand || "?").slice(0, 2).toUpperCase()}
       </span>
@@ -101,7 +101,7 @@ export default function ProductCard({ href, title, brand, category, slug, imageU
         <div className="relative">
           <ProductArt slug={slug} imageUrl={imageUrl} alt={name} className="w-full aspect-[4/3] object-cover"
             fallback={<Initials brand={brand} large />} />
-          {!imageUrl && <Badge colorClass="bg-brand-700 text-ink-inverse ring-1 ring-brand-500/50" className="absolute top-3 right-3">Eco choice</Badge>}
+          {!imageUrl && <Badge colorClass="bg-surface-pressed text-ink-900 ring-1 ring-line" className="absolute top-3 right-3">Eco choice</Badge>}
         </div>
         <div className="p-5">
           {eyebrowLine && <Eyebrow>{eyebrowLine}</Eyebrow>}

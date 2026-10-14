@@ -122,23 +122,18 @@ const config: Config = {
       transitionTimingFunction: {
         out: "var(--ease-out)",
       },
-      /* The glow: an emerald hairline with a soft bloom behind it, which is what replaces the
-         light-mode `shadow-sm` on a dark ground - a grey shadow is invisible against slate, so the
-         boundary has to be drawn in light rather than cast in darkness. Two layers on purpose: the
-         1px ring is the border the brief asks for, the blur is the "glowing" part.
+      /* NO `boxShadow` SCALE, DELIBERATELY. There was a `glow`/`glow-sm` pair here plus a
+         `glow-danger`/`glow-warning` pair for the attention feed - an emerald hairline with a soft
+         bloom behind it, on the theory that a grey shadow is invisible against slate so the
+         boundary has to be drawn in light.
 
-         `glow-danger` / `glow-warning` are the same two layers in the attention feed's own
-         colours. They are a separate pair rather than a parameter because the two glows above draw
-         their colour from brand by VALUE: the feed's critical node wearing `shadow-glow-sm` would
-         draw a green halo around a red dot, and a hue that contradicts its own state is worse than
-         no halo. Neither is offset - they are a tight bloom on a 10px timeline node, restrained on
-         purpose. */
-      boxShadow: {
-        glow: "0 0 0 1px rgb(var(--brand-700) / 0.45), 0 8px 32px -12px rgb(var(--brand-500) / 0.35)",
-        "glow-sm": "0 0 0 1px rgb(var(--brand-700) / 0.35), 0 4px 18px -10px rgb(var(--brand-500) / 0.30)",
-        "glow-danger": "0 0 0 1px rgb(var(--danger-600) / 0.40), 0 0 12px -2px rgb(var(--danger-600) / 0.55)",
-        "glow-warning": "0 0 0 1px rgb(var(--accent-400) / 0.40), 0 0 12px -2px rgb(var(--accent-400) / 0.55)",
-      },
+         The Quiet Luxury pass deletes all four. A bloom under every tile and every timeline node
+         was the single largest source of visual noise in this app, and it was doing the job the
+         surface step and the hairline already do: elevation here is a lighter fill plus a 1px
+         `--line`, which is quieter and costs the compositor nothing. The attention feed's critical
+         and warning states are unaffected in substance - they still carry `bg-danger-600` /
+         `bg-accent-400` and their own text steps, so the state is still told by colour; it simply
+         no longer also announces itself with a halo. */
       fontFamily: {
         // Shape-identical to the storefront's stack, and now fed by the same two faces: the root
         // layout loads Inter and Space Grotesk through next/font/google and sets --font-sans /

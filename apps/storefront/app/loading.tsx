@@ -25,7 +25,7 @@ export default function Loading() {
 
         {/* a section heading, then the grid of tiles */}
         <div className="mt-10 h-6 w-48 rounded bg-surface-sunken" />
-        <div className="mt-5 grid grid-cols-2 gap-6 md:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-8 md:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="overflow-hidden">
               <div className="aspect-[4/3] bg-surface-sunken" />

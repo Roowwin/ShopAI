@@ -47,8 +47,8 @@ type TileState = "critical" | "warning" | "clear";
 /* The edge is the boundary a reader acts on; the glow token is the bloom behind it. A cleared tile
    takes the app's own hairline and no bloom at all. */
 const EDGE: Record<TileState, string> = {
-  critical: "ring-danger-600/70 shadow-glow-danger",
-  warning: "ring-accent-400/50 shadow-glow-warning",
+  critical: "ring-danger-600/70",
+  warning: "ring-accent-400/50",
   clear: "ring-line",
 };
 

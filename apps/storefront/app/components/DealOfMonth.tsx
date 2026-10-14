@@ -14,12 +14,12 @@ export default function DealOfMonth({ deal }: { deal?: Deal | null }) {
   if (!deal || !deal.product_slug) return null;
   const title = deal.title || "Deal of the month";
   return (
-    <section className="max-w-6xl mx-auto px-4 pt-16">
+    <section className="max-w-6xl mx-auto px-4 pt-20">
       <Heading level="h2">Deal of the month</Heading>
       <Card interactive href={"/products/" + deal.product_slug} className="mt-6 flex flex-col md:flex-row overflow-hidden">
         <ProductArt slug={deal.product_slug} imageUrl={deal.image_url} alt={title} className="md:w-1/2 w-full aspect-[4/3] object-cover"
           fallback={
-          <div className="md:w-1/2 w-full aspect-[4/3] bg-gradient-to-br from-surface-sunken to-line flex items-center justify-center">
+          <div className="md:w-1/2 w-full aspect-[4/3] bg-surface-sunken flex items-center justify-center">
             <span className="text-2xl font-bold text-ink-400">{title.slice(0, 2).toUpperCase()}</span>
           </div>
           } />

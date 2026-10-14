@@ -120,7 +120,7 @@ export default function CheckoutPage() {
 
   if (ready && lines.length === 0) {
     return (
-      <main className="max-w-lg mx-auto px-4 pt-16 pb-20">
+      <main className="max-w-lg mx-auto px-4 pt-20 pb-28">
         <EmptyState>
           Your cart is empty - <a className={linkClass} href="/">browse the shop</a>.
         </EmptyState>
@@ -129,7 +129,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <main className="max-w-5xl mx-auto px-4 pt-10 pb-20">
+    <main className="max-w-5xl mx-auto px-4 pt-14 pb-28">
       <Heading level="h1">Checkout</Heading>
       <p className="text-sm text-ink-500 mt-2">
         Every unit is serialised and checked by hand, so the serial you are buying is the one we ship.

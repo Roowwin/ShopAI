@@ -19,7 +19,7 @@ import { Badge, Button, Card, EmptyState, Heading } from "../components/ui";
 const STATUS_TONE: Record<string, string> = {
   paid: "bg-brand-500/15 text-brand-300",
   shipped: "bg-brand-500/15 text-brand-300",
-  delivered: "bg-brand-700 text-ink-inverse",
+  delivered: "bg-surface-pressed text-ink-900",
   pending: "bg-surface-sunken text-ink-600",
   cancelled: "bg-surface-sunken text-ink-500",
   refunded: "bg-surface-sunken text-ink-500",
@@ -49,12 +49,12 @@ export default function AccountPage() {
   }, []);
 
   if (state === "loading") {
-    return <main className="max-w-3xl mx-auto px-4 pt-16 pb-20"><p className="text-ink-500">Loading your account...</p></main>;
+    return <main className="max-w-3xl mx-auto px-4 pt-20 pb-28"><p className="text-ink-500">Loading your account...</p></main>;
   }
 
   if (state === "anon") {
     return (
-      <main className="max-w-lg mx-auto px-4 pt-16 pb-20 text-center">
+      <main className="max-w-lg mx-auto px-4 pt-20 pb-28 text-center">
         <Heading level="h1">Your orders</Heading>
         <p className="text-sm text-ink-600 mt-3">
           Sign in to see every order you have placed and where each one has got to. You can also
@@ -69,7 +69,7 @@ export default function AccountPage() {
   }
 
   return (
-    <main className="max-w-3xl mx-auto px-4 pt-12 pb-20">
+    <main className="max-w-3xl mx-auto px-4 pt-12 pb-28">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <Heading level="h1">Your orders</Heading>

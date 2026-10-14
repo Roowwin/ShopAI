@@ -112,7 +112,7 @@ export default function CommandPalette() {
       {open && createPortal(
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-surface-muted/70 px-4 pt-24 backdrop-blur-sm">
           <div ref={box} role="dialog" aria-label="Command palette" onKeyDown={onKeyDown}
-            className="w-full max-w-xl overflow-hidden rounded-card bg-surface-glass/90 shadow-glow ring-1 ring-line backdrop-blur-md">
+            className="w-full max-w-xl overflow-hidden rounded-card bg-surface-glass/90 ring-1 ring-line backdrop-blur-md">
             <input
               ref={input}
               value={q}

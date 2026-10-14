@@ -165,14 +165,15 @@ export default function PurchasePanel({ units, title, brand, model, slug, specs 
               the panel, so "what it costs" and "whether you can have it" read as one block instead
               of a headline with a footnote somewhere below it.
 
-              THE PRICE is the brass FILL colour, which is the one place in the app where a value
-              used as a button fill is also used as ink. It is allowed here because the price is
-              LARGE text (32px semibold), so it clears the 3:1 large-text bar at 4.4:1 - at body
-              size the same brass measures 4.40:1 on a card and would fail. Every other ink site
-              uses brand-300, the ladder's light step (6.1-8.1:1). */}
+              THE PRICE IS THE STRONGEST NEUTRAL INK, not the brand. It was `text-brand-700` while
+              brand-700 was brass, which read 4.4:1 on this ground and cleared the 3:1 large-text
+              bar at 32px semibold. brand-700 is forest green now (#245B45), and forest as INK on a
+              dark card measures about 2.1:1 - the price would have been the least legible thing on
+              the page. So the number is `ink-900`, the same white as every heading, and the brand
+              colour is left to the one control that is actually an action. */}
           <div className="mt-5 rounded-control bg-surface-sunken p-4 ring-1 ring-line">
             <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
-              <p className="font-display text-display text-brand-700">{unitPrice !== undefined ? aud(unitPrice) : "-"}</p>
+              <p className="font-display text-display text-ink-900">{unitPrice !== undefined ? aud(unitPrice) : "-"}</p>
               <p className="text-xs text-ink-500 pb-1.5">incl. GST</p>
             </div>
 

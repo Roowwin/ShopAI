@@ -54,7 +54,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
           The heading stays ABOVE the bar rather than under it: the toolbar's negative margins exist
           to line its first trigger up with the heading above it (see LoadMore), so the two are a
           pair and the order inside this section is not free. */}
-      <section id="shop" className="max-w-6xl mx-auto px-4 pt-16 pb-20">
+      <section id="shop" className="max-w-6xl mx-auto px-4 pt-20 pb-28">
         <Heading level="h2">Our products</Heading>
         <LoadMore initial={catalog.items ?? []} applied={catalog.applied ?? filters}
           brands={catalog.brands ?? []} categories={cats} />
@@ -62,9 +62,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
 
       <DealOfMonth deal={hero.deal_of_month} />
 
-      <section className="max-w-6xl mx-auto px-4 pt-16">
+      <section className="max-w-6xl mx-auto px-4 pt-20">
         <div className="flex items-end justify-between"><Heading level="h2">New arrivals</Heading><a href="/" className={cn("text-xs", linkClass)}>View all</a></div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-6">
           {arrivals.map((i) => (
             <ProductCard key={i.slug} variant="compact" href={"/products/" + i.slug} title={i.title}
               brand={i.brand} slug={i.slug} imageUrl={i.image_url} priceCents={i.price_from_cents} />
@@ -72,10 +72,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
         </div>
       </section>
       {best.length > 0 && (
-      <section className="max-w-6xl mx-auto px-4 pt-14 pb-20">
+      <section className="max-w-6xl mx-auto px-4 pt-14 pb-28">
         <Heading level="h2">Best sellers</Heading>
         <p className="text-xs text-ink-400 mt-2">Most purchased by real customers (paid orders).</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-6">
           {best.map((i) => (
             <ProductCard key={i.slug} variant="compact" href={"/products/" + i.slug} title={i.title}
               brand={i.brand} slug={i.slug} priceCents={i.price_from_cents} meta={i.sold + " sold"} />

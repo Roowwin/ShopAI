@@ -36,10 +36,19 @@ const BASE =
    a real rule. */
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-brand-700 text-white hover:bg-brand-800",
+  /* `accent` (amber) and `danger` (red) stay. They are STATUS, not decoration - the same argument
+     the grade scale gets: a page that cannot say "this one is different" in colour says it in a
+     sentence, and the brief's "neutral everywhere" is about the furniture. What changed is that
+     their hover is a neutral fill rather than a coloured one, so the amber of the label is the only
+     colour the control carries. */
   accent: "bg-accent-400 text-ink-inverse hover:bg-accent-300",
-  secondary: "bg-surface text-brand-300 ring-1 ring-line hover:bg-brand-50",
-  ghost: "text-brand-300 hover:bg-brand-50",
-  danger: "bg-surface text-danger-600 ring-1 ring-danger-200 hover:bg-danger-50",
+  /* SECONDARY IS A GHOST: transparent with one thin border, per the brief - so on a card it reads
+     as an outline rather than as a second card, which the old `bg-surface` slab did. The hover
+     steps down the neutral ladder and firms the hairline; with no fill of its own there is nothing
+     for it to tint. */
+  secondary: "bg-transparent text-ink-700 ring-1 ring-line hover:bg-surface-muted hover:ring-line-strong",
+  ghost: "text-ink-700 hover:bg-surface-muted",
+  danger: "bg-transparent text-danger-600 ring-1 ring-danger-200 hover:bg-surface-muted",
   /* Backoffice-only additions - the storefront's set stops at `danger`. `onDark` is a control
      that sits ON the dark nav/banner surface, which the storefront never has (it is what the
      hand-rolled ~28px nav Sign out became); `muted` is a quiet neutral text action, for a state

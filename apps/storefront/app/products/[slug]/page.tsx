@@ -86,7 +86,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   /* The initials tile, used when the model has neither a photo nor a shipped glyph. */
   const initials = (
-    <div className="w-full aspect-[4/3] bg-gradient-to-br from-surface-sunken to-line flex flex-col items-center justify-center text-ink-500">
+    <div className="w-full aspect-[4/3] bg-surface-sunken flex flex-col items-center justify-center text-ink-500">
       <p className="font-display text-display text-ink-400">{(p.brand || "?").slice(0, 2).toUpperCase()}</p>
       <p className="text-xs mt-2">Product photo coming soon</p>
       <p className="text-xs text-ink-400 mt-0.5">{p.brand} {p.model}</p>
@@ -95,7 +95,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   return (
     <main className="text-ink-900 min-h-screen">
-      <div className="mx-auto max-w-6xl px-4 pt-10 pb-20">
+      <div className="mx-auto max-w-6xl px-4 pt-14 pb-28">
         {/* THE STRIP ABOVE THE FOLD: where you are on the left, what is running on the right.
 
             The breadcrumb used to live inside the purchase panel, which put "Home / laptops" in the
@@ -145,7 +145,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                      the current view and the ring says so. With one shot (today) that is the whole
                      rail; the ring is written by index rather than unconditionally so a second shot
                      does not arrive looking equally selected. */
-                  <div key={i} className={"shrink-0 w-20 sm:w-full rounded-control overflow-hidden " + (i === 0 ? "ring-2 ring-brand-700" : "ring-1 ring-line")}>
+                  <div key={i} className={"shrink-0 w-20 sm:w-full rounded-control overflow-hidden " + (i === 0 ? "ring-2 ring-ink-700" : "ring-1 ring-line")}>
                     <ProductArt slug={slug} imageUrl={shot} alt={shot ? p.title + " (view " + (i + 1) + ")" : p.title}
                       className="w-full aspect-[4/3] object-cover" fallback={initials} />
                   </div>
@@ -215,7 +215,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         {/* The model's own copy, full width under the fold. It is the same words for every unit,
             so it belongs to the page rather than to the panel - and it is what a shopper reads
             after the price has already told them whether they are interested. */}
-        <section className="mt-16 max-w-3xl">
+        <section className="mt-24 max-w-3xl">
           <Heading level="h2">About this model</Heading>
           <p className="text-body text-ink-600 mt-3 whitespace-pre-wrap">{p.description}</p>
           <p className="text-xs text-ink-400 mt-4">
@@ -225,16 +225,20 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           </p>
         </section>
 
-        {/* The assistant invite. It is a GRADIENT band rather than another glass card - #122922 in
-            at the left, #1A382F out at the right, which is the one place on this page where the two
-            surface steps are shown side by side rather than layered - so it reads as a distinct
-            object under the fold instead of a continuation of the copy above it. The spark sits in
-            a brass-tinted tile (`brand-700/15` fill on a 30% hairline) and the icon itself is
-            `brand-300`, the ladder's ink step: brand-700 is the button FILL and measures 2.3:1 as a
-            glyph on this ground. */}
-        <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-card bg-gradient-to-r from-surface-page-alt to-surface p-6 ring-1 ring-line">
+        {/* The assistant invite. It was a gradient band (#122922 into #1A382F, left to right) so it
+            would read as a distinct object rather than as more of the copy above it; this pass
+            takes the gradient out and gets the same separation from a plain step up the surface
+            ladder - `surface-page-alt` against the `surface-page` canvas - plus a wider gap. A
+            two-stop gradient across a full-width band is the loudest surface on the page and the
+            brief asks for the quiet ones.
+
+            The spark tile is NEUTRAL now as well. It was a brass-tinted square (`brand-700/15` on a
+            30% brand hairline) which spent the brand colour on decoration; the brief allows the
+            forest green on the primary action and nowhere else, so the tile is a surface step with
+            a hairline and the icon is the body ink. */}
+        <div className="mt-10 flex flex-wrap items-center justify-between gap-4 rounded-card bg-surface-page-alt p-8 ring-1 ring-line">
           <div className="flex items-center gap-3">
-            <span aria-hidden="true" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-brand-700/15 text-brand-300 ring-1 ring-brand-700/30">
+            <span aria-hidden="true" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-surface text-ink-600 ring-1 ring-line">
               <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M11 2 4.5 11H9l-.9 7L15 9h-4.6L11 2Z" />
               </svg>
@@ -250,7 +254,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         {/* What the grade dropdown is actually choosing between. Parent-level education: the scale
             is a fact of the shop, not of this model, so it names the same four grades on every
             product page and links to the page that explains them in full. */}
-        <section className="mt-16">
+        <section className="mt-24">
           <Heading level="h2" className="border-b border-line pb-2">What the grades mean</Heading>
           <p className="text-body text-ink-600 mt-4">
             Every unit of this model is checked and graded by hand, one at a time - so the grade is a
@@ -293,9 +297,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         </section>
 
         {others.length > 0 && (
-          <section className="mt-16">
+          <section className="mt-24">
             <Heading level="h2">You may also like</Heading>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-6">
               {others.map((o) => (
                 <ProductCard key={o.slug} variant="text" href={"/products/" + o.slug} title={o.title}
                   brand={o.brand} priceCents={o.price_from_cents} />
@@ -304,7 +308,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           </section>
         )}
 
-        <section className="mt-16 grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+        <section className="mt-24 grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
           {["Serialised units", "Graded quality", "Fast AU-NZ delivery", "Secure checkout", "GST-compliant invoices"].map((t) => (
             <div key={t} className="rounded-control bg-surface/80 backdrop-blur-md ring-1 ring-line px-3 py-4 text-xs text-ink-600">{t}</div>
           ))}

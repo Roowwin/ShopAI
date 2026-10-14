@@ -56,8 +56,8 @@ function stateOf(stage: PipelineStage): NodeState {
    `ink-*` value, because ink is a TEXT scale and a fill made of it is the defect that put a
    near-white banner under white text in J1. */
 const DOT: Record<NodeState, string> = {
-  backlog: "bg-accent-400 shadow-glow-warning",
-  stock: "bg-status-listed-solid shadow-glow-sm",
+  backlog: "bg-accent-400",
+  stock: "bg-status-listed-solid",
   empty: "bg-transparent ring-1 ring-line-strong",
   missing: "bg-transparent ring-1 ring-line",
 };

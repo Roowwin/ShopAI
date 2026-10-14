@@ -27,7 +27,7 @@ export default function CartPage() {
   const total = cartTotal();
 
   return (
-    <main className="max-w-2xl mx-auto px-4 pt-10 pb-20">
+    <main className="max-w-2xl mx-auto px-4 pt-14 pb-28">
       <Heading level="h1">Your cart</Heading>
 
       <Card className="p-5 mt-6">

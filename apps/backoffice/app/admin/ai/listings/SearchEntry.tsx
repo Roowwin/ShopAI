@@ -136,7 +136,7 @@ export default function SearchEntry({ term, onTerm, onSearch, searching, error, 
                 </p>
                 <dl className="mt-2 text-sm">
                   <div className={LINE}>
-                    <dt className="text-ink-500">Brand / model</dt>
+                    <dt className="text-ink-500">Brand and model</dt>
                     <dd className="text-ink-700">
                       {highlighted.product_model ?? "-"}
                       {highlighted.category ? " · " + highlighted.category : ""}

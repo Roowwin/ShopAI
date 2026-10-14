@@ -104,7 +104,7 @@ const SUB_TOGGLE =
 /* The page you are on carries the emerald treatment AND its bloom, from the app's own boxShadow
    tokens - the glow is a token rather than a hue chosen here, so a change to the emerald is one
    edit in globals.css and not a hunt through the chrome. */
-const ITEM_CURRENT = "bg-brand-50 font-semibold text-brand-300 shadow-glow-sm";
+const ITEM_CURRENT = "bg-brand-50 font-semibold text-brand-300";
 const ITEM_IDLE = "text-ink-600 hover:bg-surface-sunken hover:text-ink-900";
 /* A roadmap surface with no page behind it. `ink-400` rather than the idle `ink-600`: the row has to
    read as present-but-unavailable, which is a step further back than an entry nobody is hovering -
@@ -116,7 +116,7 @@ const RAIL_BASE =
   "mx-auto flex h-9 w-9 items-center justify-center rounded-control " +
   "transition-colors duration-fast ease-out motion-reduce:transition-none " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500";
-const RAIL_CURRENT = "bg-brand-50 text-brand-300 shadow-glow-sm";
+const RAIL_CURRENT = "bg-brand-50 text-brand-300";
 const RAIL_IDLE = "text-ink-500 hover:bg-surface-sunken hover:text-ink-600";
 
 const ICONS: Record<NavIcon, ReactNode> = {

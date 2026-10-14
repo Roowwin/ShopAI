@@ -2,44 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokens - "Luxury Boutique".
+/* Design tokens - "Quiet Luxury".
 
    Channel triples (not hex) so Tailwind can apply opacity modifiers - see the `token()` helper in
    tailwind.config.ts. Named by ROLE.
 
-   THIS IS A FULL INVERSION. The storefront was a warm LIGHT theme; it is now a dark one, on the
-   same side of the fence as the backoffice. The roles did not move - `ink-*` is still a TEXT scale
-   where a higher number is stronger text, `surface` is still the raised step - so what changed is
-   the direction each ladder climbs:
+   THE PALETTE IS NEUTRAL NOW, AND THE BRAND IS ONE BUTTON. The app was brass-on-warm-forest with a
+   glow on every interactive surface; the brief for this pass is subtraction. So the surfaces went
+   to charcoal and slate, the text to warm off-white, and the forest green survives in exactly one
+   place: the fill of a primary action button. Everything that used to borrow the brand hue as
+   decoration - links, focus rings, selected facets, status tints, hairline hovers - is neutral.
 
-     surface   raised  (was the lightest, now a deep forest charcoal)
-     muted     the alternate band
-     sunken    the page  (the root layout paints the body with it)
-     ink-900   the strongest text (was slate-900, now warm off-white)
+   HOW THE BRAND LADDER DOES THAT WITHOUT A THOUSAND EDITS. `brand-N` is still the same ladder, but
+   it now answers two different questions, and the ladder splits at 600:
 
-   THE TRAP THIS FILE IS WRITTEN AROUND: seven sites in the app used `bg-ink-900` as a FILL (the
-   footer, the promo band, the cart count, a badge, a numbered step, the newsletter panel, the
-   input's dark tone). On a light ground that was a deliberate dark band under white text. Invert
-   ink-900 and every one of them becomes warm-white-on-white. A token whose VALUE flips under a
-   role the page did not mean cannot be caught by reading the palette; it is caught by enumerating
-   every opaque fill+ink pair and computing. Those seven now use `surface-deep`, which is a fill by
-   name and cannot invert into an ink.
+     600 / 700 / 800   the FILL. 700 is #245B45, the primary button, and the only place the brand
+                       hue is allowed to be a colour. White on it measures 7.9:1, so the label is
+                       `text-white` - the old `ink-inverse` label existed only because brass is a
+                       BRIGHT fill that needs dark ink, and forest is a dark one.
 
-   Two values are deliberately NOT inverted, both the "one token, two jobs" split:
-   - `brand-700` is the primary button FILL (white on it measures 7.9:1) and would be 2.3:1 as ink
-     on this ground, so every ink site points at `brand-300` (8.5:1). One token, two jobs, and the
-     ground decides which value each job needs.
-   - `brand-500` stays the saturated step: it is a ring and a dot, never body text.
+     300 / 500         the AFFORDANCE. These two are repointed to NEUTRAL values, and this is the
+                       load-bearing line of the whole refactor: 112 call sites across both apps
+                       already ask for "the brand ink step" (`text-brand-300`) or "the brand ring
+                       and dot" (`bg-brand-500`, `ring-brand-500`), and every one of them means
+                       "the quiet emphasis colour" rather than "green". Repointing the value is what
+                       makes the whole app neutral in two lines instead of a 112-site sweep that
+                       would have missed some and drifted.
 
-   Every value below was checked before it was written. Body text on `surface` clears 4.5:1 with
-   room (ink-600 9.0:1, ink-500 6.6:1, ink-400 4.8:1), white on brand-700 measures 7.9:1, and each
-   grade chip's ink clears 5:1 on its own deep fill. `ink-300` is the deliberately dim step for
-   placeholders and disabled text. The hairlines are left below the 3:1 non-text bar on purpose -
-   see the note on `--line`; do not "correct" them. */
+                       This is normally the trap this file warns about in reverse - a token whose
+                       value flips under a role the page did not mean. It is deliberate here, and
+                       the honest cost is that `text-brand-300` no longer renders as the brand:
+                       read 300/500 as "neutral ink" and "neutral ring" from now on.
+
+   50/100/200/900/950 are the deep green soft fills and the dark end of the fill ladder. Nothing
+   uses them as decoration; they are kept so the CTA has a hover (800) and a press (900).
+
+   Contrast, re-measured for these values against `surface` (#1A1D21): ink-600 12.7:1, ink-500 6.6:1,
+   ink-400 5.0:1, brand-300 11.6:1. White on brand-700 (#245B45) 7.9:1. `ink-300` stays the
+   deliberately dim step for placeholders and disabled text. The hairlines sit below the 3:1
+   non-text bar on purpose - do not "correct" them. */
 @layer base {
   /* The focus ring's offset band, declared on the SAME selector Tailwind's base uses, which is the
      whole point. Tailwind sets this property on `*, ::before, ::after` - on every element - so a
-     `<button>` receives its own `#fff` and never inherits anything from `:root`: the two rules do
+     `<button>` receives its own value and never inherits anything from `:root`: the two rules do
      not compete for the same element, and specificity and layer order never enter into it. A
      `:root` override therefore does NOTHING. Same selector, later in source order than
      `@tailwind base`, so this wins. On a dark ground an unset offset paints a WHITE band behind
@@ -49,34 +54,23 @@
   }
 
   :root {
-    /* MUTED BRASS. The accent moved from forest green to brass gold, and the roles did not move
-       with it: 700 is still the primary FILL, 600 the hover, 300 the INK read on this ground.
+    /* THE BRAND. 700 is the fill, 800 the hover below it, 900 the press. 600 is kept as the step
+       between hover and fill for anything that wants a lighter green, and 300/500 are the neutral
+       affordances described above - see the header note, they are NOT green any more. */
+    --brand-50: 12 42 32;
+    --brand-100: 17 56 43;
+    --brand-200: 23 74 57;
+    --brand-300: 226 232 240;      /* REPOINTED - neutral: the quiet ink step (slate-200) */
+    --brand-500: 148 163 184;      /* REPOINTED - neutral: rings, dots, soft tints (slate-400) */
+    --brand-600: 47 122 92;
+    --brand-700: 36 91 69;         /* #245B45 - THE primary button fill, the only brand colour */
+    --brand-800: 27 70 52;         /* the CTA hover */
+    --brand-900: 18 51 37;         /* the CTA press */
+    --brand-950: 9 27 20;
 
-       TWO THINGS ABOUT THIS LADDER ARE NOT THE USUAL SHAPE, and both are deliberate:
-
-       - the hover is LIGHTER than the fill (600 above 700), where every other ladder descends.
-         Brass reads as metal, and metal catches light as you reach for it. That is why Button's
-         primary hover points at 600 and not 800.
-       - 700 carries the ink `ink-inverse`, not white. #B08D57 is a bright fill: white on it
-         measures 2.9:1, the dark canvas 5.5:1. A primary button here is dark-on-gold, and that is
-         what `ink-inverse` exists for.
-
-       300 is set by the WORST surface a link lands on, not by the average one. The design asks
-       for links in the same brass as the fill (#B08D57), but that reads 4.40:1 on a card and
-       3.20:1 on a hovered row - under AA for the 12-14px it is set in. This is that hue lifted
-       until it clears: 6.44:1 on a card, 4.69:1 on the hover fill. Same family, legible. */
-    --brand-50: 43 32 17;
-    --brand-100: 62 47 25;
-    --brand-200: 86 65 35;
-    --brand-300: 205 174 126;
-    --brand-500: 214 183 129;
-    --brand-600: 197 161 104;
-    --brand-700: 176 141 87;
-    --brand-800: 140 112 68;
-    --brand-900: 104 83 50;
-    --brand-950: 62 47 25;
-
-    /* amber: the soft fills deepen and 700 is only ever an ink, so it moves to a light amber. */
+    /* amber. Unchanged: it is a STATUS colour (the deal chip, a warning), not decoration, and the
+       brief's "neutral everywhere" is about the furniture rather than about the two or three
+       places the shop needs to say "this one is different". */
     --accent-50: 69 26 3;
     --accent-100: 120 53 15;
     --accent-300: 252 211 77;
@@ -84,73 +78,58 @@
     --accent-500: 245 158 11;
     --accent-700: 253 230 138;
 
-    /* text, inverted by step so "higher number = stronger" still holds. The scale is the design's
-       own three: WHITE for headings and titles, warm parchment for body and important copy, sage
-       for secondary labels. 700 and 400/300 are steps BETWEEN those three, for the places the app
-       needs a tone the palette does not name. */
-    --ink-300: 112 129 122;        /* the dim step: placeholders, disabled */
-    --ink-400: 141 162 154;        /* the eyebrow kicker */
-    --ink-500: 159 181 172;        /* sage - secondary labels, meta */
-    --ink-600: 239 231 218;        /* warm parchment - body and important copy */
-    --ink-700: 245 240 231;
+    /* text. White for headings, WARM off-white for body (the one warm thing left - it is what keeps
+       a neutral-grey page from reading cold), slate for the muted steps. The scale still climbs:
+       a higher number is stronger text. */
+    --ink-300: 100 116 139;        /* the dim step: placeholders, disabled (slate-500) */
+    --ink-400: 124 139 160;        /* the eyebrow kicker */
+    --ink-500: 148 163 184;        /* slate - secondary labels, meta */
+    --ink-600: 231 226 216;        /* warm off-white - body and important copy */
+    --ink-700: 244 241 234;
     --ink-900: 255 255 255;        /* headings and product titles */
-    /* The ink that stays DARK, for text on a bright fill. Every other step is light now, so a
-       bright fill would otherwise have to carry light text at ~1.4:1 - and this is the brass
-       ladder's case, where the primary button is gold with the canvas written on it. */
-    --ink-inverse: 13 31 26;
+    /* The ink that stays DARK, for text on a BRIGHT fill. Only the amber steps are bright now, so
+       this is the amber chip's label and nothing else. */
+    --ink-inverse: 14 16 18;
 
-    /* The surface ladder, in four named steps from the design's own table. Every value here is one
-       of those four (or a step BETWEEN two of them, where the app needs a fifth tone the table does
-       not name), and the whole family is one green - no slate, no blue:
-
-         #0D1F1A  main page background   the darkest base canvas
-         #122922  hero banner & headers  slightly elevated
-         #1A382F  product cards & sidebar soft contrast layer for content
-         #234A3E  hover / active rows    interactive highlight
-
-       The ladder keeps its DIRECTION: `surface` is the raised step, `muted` the alternate band,
-       `page` the canvas. `sunken` and `deep` go the other way - they are wells and full-bleed
-       bands, which sit BELOW the canvas rather than above it. */
-    --surface-page: 13 31 26;      /* #0D1F1A - the main canvas */
-    --surface-page-alt: 18 41 34;  /* #122922 - the inset tone, and a chat bubble's fill */
-    --surface: 26 56 47;           /* #1A382F - product cards & sidebar */
-    --surface-muted: 22 48 40;     /* between the canvas and a card */
-    --surface-sunken: 18 41 34;    /* #122922 - recessed fills: image wells, the search field,
+    /* The surface ladder: one neutral charcoal family, four named steps. No green, no blue.
+       The direction is unchanged - `surface` is the raised step, `muted` the alternate band,
+       `page` the canvas - and `sunken`/`deep` remain the wells and full-bleed bands that sit BELOW
+       the canvas rather than above it. */
+    --surface-page: 15 17 20;      /* #0F1114 - the main canvas, a cool charcoal */
+    --surface-page-alt: 21 24 28;  /* #15181C - the inset tone, and a chat bubble's fill */
+    --surface: 26 29 33;           /* #1A1D21 - product cards & sidebar */
+    --surface-muted: 22 25 29;     /* between the canvas and a card */
+    --surface-sunken: 18 20 24;    /* #121418 - recessed fills: image wells, the search field,
                                       the quantity stepper, a dropdown's panel */
-    --surface-pressed: 35 74 62;   /* #234A3E - hover AND active rows; the press adds the sink */
-    --surface-deep: 6 15 12;
+    --surface-pressed: 35 39 45;   /* #23272D - hover AND active rows; the press adds the sink */
+    --surface-deep: 10 11 13;
 
-    /* Hairlines. #264D40 is the design's own border colour - the one the cards, the image wells and
-       the steppers all take. `strong` is a step up, for the boundary under the cursor. */
-    --line: 38 77 64;
-    --line-strong: 56 100 84;
+    /* Hairlines, neutral. A step up for the boundary under the cursor, same as before. */
+    --line: 42 46 52;
+    --line-strong: 62 68 76;
 
     /* The user agent's own palette: scrollbars, <select> popups, number spinners, and the fill
        Chrome paints over an autofilled field. Unset, all of them stay light on a dark page. */
     color-scheme: dark;
 
-    /* The error pair, re-measured for this ground. `danger-600` is TEXT only (the four inline error
-       messages and the danger Button's label), so it has to clear 4.5:1 wherever it sits - and the
-       lightest surface it lands on is now the `#234A3E` hover fill, not a card. On that the old
-       248 113 113 measured 3.58:1. This is 253 150 150: 4.70:1 on the hover fill, 5.20:1 on a
-       glass card, 8.13:1 on the canvas.
-       `danger-200` is the danger Button's only boundary - a 1px ring, no fill - so it is held to
-       the 3:1 non-text bar against the same two surfaces (3.65:1 and 3.30:1). It reads as a
-       brighter red on this green ground than the dark one it was, which is the cost of keeping the
-       control's edge visible. */
+    /* The error pair, re-measured for this ground. `danger-600` is TEXT only (the inline error
+       messages and the danger Button's label), so it clears 4.5:1 on the lightest surface it lands
+       on, which is the `#23272D` hover fill: 5.31:1 there, 6.02:1 on a card, 8.94:1 on the canvas.
+       `danger-200` is a 1px ring and no fill, held to the 3:1 non-text bar against the same two
+       surfaces (4.02:1 and 3.56:1). */
     --danger-50: 69 10 10;
     --danger-200: 220 120 120;
     --danger-600: 253 150 150;
 
-    /* the A-D scale, in the four colours the design names for it. `solid` is the hue as written -
-       it paints the badge's 30% border and any dot; `soft` is the deep wash behind it; `ink` is
-       the text step.
+    /* the A-D scale, in the four colours the design names for it. This is the ONE colour family
+       the refactor leaves alone: a grade is a fact about a device, not decoration, and the whole
+       point of the scale is that A/B/C/D are told apart at a glance. Desaturating it to "Quiet
+       Luxury" neutrals would make the grade chips unreadable as a scale.
 
-       THREE INKS ARE LIGHTER THAN THE DESIGN'S, and the reason is the same in each case: the badge
-       is 12px, so it needs 4.5:1 on its own 15%-of-solid wash over a card, and the four hues as
-       written do not get there - A measured 3.90:1 and D 4.15:1 (B was 4.45:1, a hair under, and C
-       already cleared at 6.3:1). Each ink is the same hue lifted one step: A 34D399, B 93C5FD,
-       D FCA5A5. C is unchanged at FBBF24. The solids and the washes are exactly as specified. */
+       `solid` paints the badge's 30% border and any dot; `soft` is the deep wash behind it; `ink`
+       is the text step. THREE INKS ARE LIGHTER THAN THE DESIGN'S, because the badge is 12px and
+       needs 4.5:1 on its own 15%-of-solid wash over a card - A measured 3.90:1 and D 4.15:1 as
+       written, B 4.45:1, so those three step up to 34D399 / 93C5FD / FCA5A5. */
     --grade-a-solid: 16 185 129;
     --grade-a-soft: 16 185 129;
     --grade-a-ink: 52 211 153;
@@ -164,16 +143,10 @@
     --grade-d-soft: 239 68 68;
     --grade-d-ink: 252 165 165;
 
-    /* The ground itself: a radial wash from the elevated hero band out to the base canvas. It is
-       painted on the body (below) rather than on any element, so a page cannot accidentally cover
-       it - and `--surface-page` stays the flat colour underneath as the fallback for anything that
-       needs an opaque ground.
-
-       The two stops ARE two rows of the design table: the core is the "hero banner & headers"
-       green, so the top of every page is the elevated tone the hero sits on, and it settles to the
-       "main page background" canvas the products are laid out on. */
-    --ground-core: 18 41 34;       /* #122922 */
-    --ground-edge: 13 31 26;       /* #0D1F1A */
+    /* THE GROUND GRADIENT IS GONE, and `--ground-core`/`--ground-edge` with it. The page was a
+       radial wash from the elevated hero band out to the base canvas; the brief for this pass is
+       subtraction, and a full-page gradient is the loudest thing a quiet page can carry. The body
+       is the flat canvas now, and a token with no users left is the next person's wrong guess. */
 
     /* Motion. Two durations and one ease-out curve that starts quickly and settles, which reads
        calmer than the browser default. Tailwind maps these in tailwind.config.ts, so components
@@ -183,14 +156,10 @@
     --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  /* The ground. `fixed` so the wash does not scroll away from a long catalog page, and painted as
-     a background-IMAGE so the flat `bg-surface-page` underneath still works as a fallback and as
-     the opaque colour behind a translucent panel. */
+  /* The ground is now FLAT. `fixed` is kept off entirely: with no image there is nothing to scroll
+     away from, and `--surface-page` on the body is the whole of it. */
   body {
-    background-image: radial-gradient(120% 90% at 50% 0%,
-      rgb(var(--ground-core)) 0%, rgb(var(--ground-edge)) 68%);
-    background-attachment: fixed;
-    background-repeat: no-repeat;
+    background-color: rgb(var(--surface-page));
   }
 
   /* Reduced motion: the durations collapse to zero, so every token-driven transition in the app

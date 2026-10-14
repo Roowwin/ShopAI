@@ -45,10 +45,10 @@ export type NavGroup = { id: string; heading: string; icon: NavIcon; items: NavI
 
 export const GROUPS: NavGroup[] = [
   {
-    id: "core-operations", heading: "Dashboard & Core Operations", icon: "gauge", items: [
+    id: "core-operations", heading: "Operations", icon: "gauge", items: [
       { href: "/admin/dashboard", label: "Dashboard" },
       {
-        href: "/admin/orders", label: "Commerce / Orders",
+        href: "/admin/orders", label: "Orders",
         children: [
           { href: "/admin/customers", label: "Customers" },
         ],
@@ -59,7 +59,7 @@ export const GROUPS: NavGroup[] = [
          gated and reachable by URL, but named by nothing in this tree, so the only way to it was
          to already know its address. */
       {
-        href: "/admin/shipping", label: "Fulfillment & Shipping",
+        href: "/admin/shipping", label: "Shipping",
         children: [
           { href: "/admin/logistics", label: "Logistics" },
         ],
@@ -67,25 +67,25 @@ export const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "catalog-inventory", heading: "Product Catalog & Inventory", icon: "crate", items: [
+    id: "catalog-inventory", heading: "Inventory", icon: "crate", items: [
       {
-        /* The asset workbench: the unit-level inventory browser, which is what "Inventory
-           Management" names. Lot Process - the receiving and grading station - hangs under it, so
+        /* The asset workbench: the unit-level inventory browser, which is what "Inventory"
+           names. Intake - the receiving and grading station - hangs under it, so
            the inventory half of the platform is one entry with its two jobs inside it rather than
            two peers that look like unrelated screens. */
-        href: "/admin/assets", label: "Inventory Management",
+        href: "/admin/assets", label: "Inventory",
         children: [
-          { href: "/admin/intake", label: "Lot Process" },
+          { href: "/admin/intake", label: "Intake" },
         ],
       },
-      { href: "/admin/product-import", label: "Product Import" },
+      { href: "/admin/product-import", label: "Product import" },
       /* The marketplace hubs. There are three of them (eBay, Amazon, Facebook) and the roadmap gives
          the group one entry, so the parent is the hub for the marketplace the platform is actually
          wired toward. The other two are CHILDREN rather than - as this note used to claim -
          "reached from this one's own links": the hub links to nothing but itself, so Amazon and
          Facebook had live routes and no way to reach them from the chrome at all. */
       {
-        href: "/admin/channels/ebay", label: "Omnichannel Listings",
+        href: "/admin/channels/ebay", label: "Listings",
         children: [
           { href: "/admin/channels/amazon", label: "Amazon" },
           { href: "/admin/channels/facebook", label: "Facebook" },
@@ -94,17 +94,17 @@ export const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "post-purchase", heading: "Post-Purchase & Customer Service", icon: "receipt", items: [
+    id: "post-purchase", heading: "Customer service", icon: "receipt", items: [
       /* LIVE: the RMA Manager - the queue of customer returns, the photographs they attached, and
          the approve/deny decision that issues the return label. The customer's own side of it is the
          form on the storefront's Returns page. */
-      { href: "/admin/returns", label: "Returns & RMA" },
+      { href: "/admin/returns", label: "Returns" },
       /* The closest built surface: the storefront's signups and the list the shop mails from. */
       { href: "/admin/newsletter", label: "Notifications" },
     ],
   },
   {
-    id: "finance-analytics", heading: "Finance & Analytics", icon: "chart", items: [
+    id: "finance-analytics", heading: "Finance", icon: "chart", items: [
       /* Financials is live: the landing page carries the month's headline, and the three registers
          hang under it. The parent is a real page rather than a menu because "how are we doing" is
          the question an operator opens this section to ask. */
@@ -113,50 +113,50 @@ export const GROUPS: NavGroup[] = [
         children: [
           { href: "/admin/finance/invoices", label: "Invoices" },
           { href: "/admin/finance/expenses", label: "Expenses" },
-          { href: "/admin/finance/pnl", label: "P&L Report" },
+          { href: "/admin/finance/pnl", label: "P&L" },
         ],
       },
       /* LIVE: Reports & Business Intelligence - the sales trend, the product leaderboard, inventory
          turnover and dead stock, each exportable as a CSV or a PDF headed with the business's own
          legal identity. */
-      { href: "/admin/reports", label: "Reports & Business Intelligence" },
+      { href: "/admin/reports", label: "Reports" },
     ],
   },
   {
-    id: "storefront-ai", heading: "Storefront & AI Tools", icon: "shop", items: [
-      { href: "/admin/cms", label: "Storefront / CMS" },
+    id: "storefront-ai", heading: "Storefront", icon: "shop", items: [
+      { href: "/admin/cms", label: "CMS" },
       {
         /* The assistant is the entry point and the listing studio is what it produces listings in,
            so the studio hangs under the AI entry rather than beside it. */
-        href: "/admin/assistant", label: "AI Intelligence",
+        href: "/admin/assistant", label: "AI",
         children: [
-          { href: "/admin/ai/listings", label: "AI Listing Studio" },
+          { href: "/admin/ai/listings", label: "Listing studio" },
         ],
       },
     ],
   },
   {
-    id: "administration", heading: "Administration & Security", icon: "shield", items: [
+    id: "administration", heading: "Administration", icon: "shield", items: [
       /* Agents hangs UNDER Team & Access Control: an agent is a non-human identity holding a set of
          grants, which is the same subject as a person holding a role - and the same two ways to take
          it away. Like Logistics it was built, gated and reachable by URL but named by nothing in this
          tree. */
       {
-        href: "/admin/team", label: "Team & Access Control",
+        href: "/admin/team", label: "Team",
         children: [
           { href: "/admin/agents", label: "Agents" },
         ],
       },
-      { href: "/admin/audit", label: "Audit Logs" },
+      { href: "/admin/audit", label: "Audit logs" },
       /* "Settings & System" is a real Settings page now: the business's own legal identity - the
          name, ABN and address every tax invoice prints - plus the system configuration behind the
          documents the shop issues. The Security screen it used to open (MFA enrolment, the CSP
          posture and the session rules) hangs UNDER it rather than losing its seat in the tree: it
          is still the platform's system page, just no longer the only one. */
       {
-        href: "/admin/settings", label: "Settings & System",
+        href: "/admin/settings", label: "Settings",
         children: [
-          { href: "/admin/security", label: "Security & MFA" },
+          { href: "/admin/security", label: "Security" },
         ],
       },
     ],
@@ -247,8 +247,7 @@ export function activeGroupId(pathname: string): string | null {
   const href = activeHref(pathname);
   if (href === null) { return null; }
   for (const g of GROUPS) {
-    /* Searched at every depth: the current page can be a nested entry ("Lot Process" under
-       "Inventory Management"), and a rule that only looked at the top level would leave the
+    /* Searched at every depth: the current page can be a nested entry ("Intake" under "Inventory"), and a rule that only looked at the top level would leave the
        operator's own category closed around them. */
     if (routable(g.items).some((it) => it.href === href)) { return g.id; }
   }

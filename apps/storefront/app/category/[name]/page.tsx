@@ -9,7 +9,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ name:
   const cat = decodeURIComponent(name);
   const items: any[] = await apiInternal("/store/catalog?limit=8&category=" + encodeURIComponent(cat));
   return (
-    <main className="max-w-6xl mx-auto px-4 pt-10 pb-16">
+    <main className="max-w-6xl mx-auto px-4 pt-14 pb-16">
       <nav className="text-xs text-ink-400 mb-4"><a href="/" className={navLinkClass}>Home</a> / {cat}</nav>
       <Heading level="h1">{cat}</Heading>
       <p className="text-body text-ink-500 mt-2">Certified refurbished, serialised and graded.</p>
