@@ -503,12 +503,10 @@ function MappingPanel({ report }: { report: Preview }) {
           </p>
           <Table label="Supplier wording translated by this import">
             <THead>
-              <TR>
-                <TH>Column</TH>
-                <TH>Your value</TH>
-                <TH>Recorded as</TH>
-                <TH>Rows</TH>
-              </TR>
+              <TH>Column</TH>
+              <TH>Your value</TH>
+              <TH>Recorded as</TH>
+              <TH>Rows</TH>
             </THead>
             <TBody>
               {report.translations.map((t) => (
@@ -531,10 +529,8 @@ function MappingPanel({ report }: { report: Preview }) {
         <div className="mt-3">
           <Table label="Column mapping found in the sheet">
             <THead>
-              <TR>
-                <TH>Your column</TH>
-                <TH>Becomes</TH>
-              </TR>
+              <TH>Your column</TH>
+              <TH>Becomes</TH>
             </THead>
             <TBody>
               {columns.detected.map((c) => (
@@ -682,47 +678,45 @@ function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boole
         </p>
         <Table label="Rows as they would be imported">
           <THead>
-            {/* The sheet's OWN header row, in its own order and spelling, with the parsed value
-                underneath each name. The table used to show the nine columns the importer of the
-                day understood, which meant an operator could not check the seventeen it did not -
-                and "did it read my Model # " is not a question a preview should answer by
-                omission. The wide columns truncate with the full text on hover, because twenty-six
-                columns of prose would otherwise push the numbers off the screen. */}
-            <TR>
-              <TH>Row</TH>
-              <TH>Asset</TH>
-              <TH>Status</TH>
-              <TH>Lot</TH>
-              <TH>Class</TH>
-              <TH>Account</TH>
-              <TH>Mfg</TH>
-              <TH>Model</TH>
-              <TH>Model #</TH>
-              <TH>Upgrade Description</TH>
-              <TH>Audit Description</TH>
-              <TH>Cosmetics Description</TH>
-              <TH>Functional Description</TH>
-              <TH>Upgrade</TH>
-              <TH>FMV</TH>
-              <TH>Resale</TH>
-              <TH>Settlement</TH>
-              <TH>Grade</TH>
-              <TH>Channel</TH>
-              <TH>Serial#</TH>
-              <TH>Load ID</TH>
-              <TH>On Shelf</TH>
-              <TH>Pallet</TH>
-              <TH>Location</TH>
-              <TH>Warehouse</TH>
-              <TH>SKU #</TH>
-              <TH>Zone</TH>
-              {/* The app's own two columns, appended AFTER the sheet's twenty-six and ruled off from
-                  them. The grid above is the operator's workbook spelled back to them; these two are
-                  the app's reading of it, and keeping the divide visible is what stops a suggestion
-                  being mistaken for a column the supplier sent. */}
-              <TH className="border-l border-line">Suggested (app)</TH>
-              <TH>Margin (app)</TH>
-            </TR>
+          {/* The sheet's OWN header row, in its own order and spelling, with the parsed value
+              underneath each name. The table used to show the nine columns the importer of the
+              day understood, which meant an operator could not check the seventeen it did not -
+              and "did it read my Model # " is not a question a preview should answer by
+              omission. The wide columns truncate with the full text on hover, because twenty-six
+              columns of prose would otherwise push the numbers off the screen. */}
+            <TH>Row</TH>
+            <TH>Asset</TH>
+            <TH>Status</TH>
+            <TH>Lot</TH>
+            <TH>Class</TH>
+            <TH>Account</TH>
+            <TH>Mfg</TH>
+            <TH>Model</TH>
+            <TH>Model #</TH>
+            <TH>Upgrade Description</TH>
+            <TH>Audit Description</TH>
+            <TH>Cosmetics Description</TH>
+            <TH>Functional Description</TH>
+            <TH>Upgrade</TH>
+            <TH>FMV</TH>
+            <TH>Resale</TH>
+            <TH>Settlement</TH>
+            <TH>Grade</TH>
+            <TH>Channel</TH>
+            <TH>Serial#</TH>
+            <TH>Load ID</TH>
+            <TH>On Shelf</TH>
+            <TH>Pallet</TH>
+            <TH>Location</TH>
+            <TH>Warehouse</TH>
+            <TH>SKU #</TH>
+            <TH>Zone</TH>
+            {/* The app's own two columns, appended AFTER the sheet's twenty-six and ruled off from
+                them. The grid above is the operator's workbook spelled back to them; these two are
+                the app's reading of it, and keeping the divide visible is what stops a suggestion
+                being mistaken for a column the supplier sent. */}
+            <TH className="border-l border-line">Suggested (app)</TH>
+            <TH>Margin (app)</TH>
           </THead>
           <TBody>
             {report.sample.slice(0, drawnRows).map((r) => (
@@ -853,10 +847,8 @@ function ResultPanel({ result }: { result: Commit }) {
         <div className="mt-3">
           <Table label="Lots touched by this import">
             <THead>
-              <TR>
-                <TH>Lot</TH>
-                <TH>Units</TH>
-              </TR>
+              <TH>Lot</TH>
+              <TH>Units</TH>
             </THead>
             <TBody>
               {result.lots_created.map((l) => (
@@ -885,17 +877,15 @@ function ResultPanel({ result }: { result: Commit }) {
         <div className="mt-3">
           <Table label="Units created by this import">
             <THead>
-              <TR>
-                <TH>Serial</TH>
-                <TH>Lot</TH>
-                <TH>Grade</TH>
-                <TH>Status</TH>
-                <TH>Resale</TH>
-                {/* What the import RECORDED beside each unit's price. It is on this screen because a
-                    suggestion the operator cannot see after the fact would be a number computed for
-                    nobody; the workbench reads the same column when the unit is actually priced. */}
-                <TH className="border-l border-line">Suggested</TH>
-              </TR>
+              <TH>Serial</TH>
+              <TH>Lot</TH>
+              <TH>Grade</TH>
+              <TH>Status</TH>
+              <TH>Resale</TH>
+              {/* What the import RECORDED beside each unit's price. It is on this screen because a
+                  suggestion the operator cannot see after the fact would be a number computed for
+                  nobody; the workbench reads the same column when the unit is actually priced. */}
+              <TH className="border-l border-line">Suggested</TH>
             </THead>
             <TBody>
               {result.assets.map((a) => (

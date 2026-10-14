@@ -213,10 +213,8 @@ export default function LogisticsPage() {
           <div className="mt-3">
             <Table label="Carrier performance">
               <THead>
-                <TR>
-                  <TH>Carrier</TH><TH>Parcels</TH><TH>Delivered</TH><TH>On time</TH>
-                  <TH>Avg transit</TH><TH>Avg cost</TH><TH>Last used</TH>
-                </TR>
+                <TH>Carrier</TH><TH>Parcels</TH><TH>Delivered</TH><TH>On time</TH>
+                <TH>Avg transit</TH><TH>Avg cost</TH><TH>Last used</TH>
               </THead>
               <TBody>
                 {carriers.carriers.map((c) => (

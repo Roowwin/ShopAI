@@ -104,9 +104,14 @@ MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 MAX_ROWS = 5000
 # How many parsed rows the preview returns. The SUMMARY always counts every row - this only caps
 # the sample, and the payload says so, so the number on screen can never be read as the total.
-# Raised 50 -> 200 at the owner's request: a corporate lot runs to a few hundred lines and 50 was
-# not enough of one to check the mapping against. Still a cap, and still reported as one.
-PREVIEW_ROWS = 200
+#
+# The history here is the whole argument for the number. It was 50, then 200 when an operator wanted
+# enough of a corporate lot to check the mapping against - and at 200 the preview stopped being read
+# at all: a 1,917-row sheet opened on a wall of two hundred lines. It is 20 now, at the owner's
+# request, because the preview's job is to prove the COLUMNS and the row VERDICTS, not to show the
+# lot - the file itself is the lot. The workbench draws ten of these by default with a control up to
+# the cap, so this number bounds the payload rather than the reading.
+PREVIEW_ROWS = 20
 
 # Canonical field -> the header spellings that mean it, already normalised by _norm_header. The
 # FIRST alias is the canonical name the report prints.

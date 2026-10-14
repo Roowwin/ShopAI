@@ -15,8 +15,17 @@ import { kickerClass } from "@/lib/ui";
      exactly where it was;
    - `border-t border-line` on every row, replacing the three different row-border treatments the
      pages had (the line token, two raw slate values, and one with none at all).
-   `THead` paints the header row with the shared kicker (lib/ui.ts). Cells take standard
-   <th>/<td>/<tr> props, so colSpan and onClick pass straight through.
+   `THead` paints the header row with the shared kicker (lib/ui.ts).
+
+   *** THead ALREADY RENDERS THE ROW - PASS IT `<TH>` CHILDREN, NEVER A `<TR>` *** - and that
+   sentence is here because seven call sites had it wrong: a `<TR>` inside a `<THead>` nests a row
+   inside a row, which is not HTML, and React reports it as "In HTML, <tr> cannot be a child of <tr>"
+   with a hydration error. It is invisible until a table with a header actually renders, which is why
+   it survived on the import preview (its tables only appear after a file is dropped) and on two
+   logistics screens. Adding a row wrapper here is always wrong: if a header needs classes, put them
+   on the cells or on the TH the caller already passes.
+
+   Cells take standard <th>/<td>/<tr> props, so colSpan and onClick pass straight through.
 
    NOTE on these comments: Tailwind scans source TEXT, not code, so a bare utility word written
    in prose emits a real rule into the built CSS. These comments therefore describe things

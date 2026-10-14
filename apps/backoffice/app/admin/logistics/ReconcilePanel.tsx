@@ -163,10 +163,8 @@ export default function ReconcilePanel() {
       <div className="mt-4">
         <Table label="Bank credits">
           <THead>
-            <TR>
-              <TH>Reference</TH><TH>Landed</TH><TH>Amount</TH><TH>Explained by</TH>
-              <TH>Left to explain</TH><TH>Matches</TH>
-            </TR>
+            <TH>Reference</TH><TH>Landed</TH><TH>Amount</TH><TH>Explained by</TH>
+            <TH>Left to explain</TH><TH>Matches</TH>
           </THead>
           <TBody>
             {payouts.map((p) => (

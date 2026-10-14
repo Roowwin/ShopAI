@@ -599,19 +599,27 @@ async def test_a_listed_unassessed_row_is_still_blocked(client):
         await _purge(tag)
 
 
-async def test_preview_returns_up_to_two_hundred_rows(client):
-    """The preview cap the owner raised: 200 rows come back whole, and the cap is still reported."""
+async def test_preview_returns_up_to_the_cap(client):
+    """The preview cap, pinned on BOTH sides: the constant's value and what it does to a big file.
+
+    Named for the cap rather than for a number, because the number has moved twice - 50, then 200
+    when an operator wanted more of a lot to check the mapping against, then 20 when 200 turned the
+    preview into a wall nobody read. The literal assertion below is the point: a cap that a test
+    reads off the constant cannot catch the constant moving by accident, and this one moved twice on
+    purpose.
+    """
     tag = _tag()
     try:
         tok = await _staff(client, "admin")
-        assert staff_imports.PREVIEW_ROWS == 200
+        assert staff_imports.PREVIEW_ROWS == 20
+        # A file ten times the cap, so what is measured is the cap and not the sheet.
         rows = [_row(tag, f"{tag}-S{i:04d}") for i in range(205)]
         r = await _post(client, tok, _csv(rows))
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["summary"]["rows"] == 205
-        assert body["sample_limit"] == 200
-        assert len(body["sample"]) == 200
+        assert body["sample_limit"] == 20
+        assert len(body["sample"]) == 20
         assert body["truncated"] is True
     finally:
         await _purge(tag)
