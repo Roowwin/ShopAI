@@ -249,10 +249,25 @@ export default function NavDropdown({ label, links, open, onOpenChange }: Props)
       </button>
 
       {open && (
+        /* NO BLUR ON THIS PANEL, and the reason is not taste. `backdrop-filter` - which is what
+           `backdrop-blur` compiles to - makes an element the CONTAINING BLOCK for `position: fixed`
+           descendants, exactly as `transform` does. Both panels below are placed in VIEWPORT
+           coordinates, read from `getBoundingClientRect()`, so a blurred ancestor silently
+           re-anchors them: the fly-out was measured against the menu panel instead of the window and
+           landed about a panel's width off the right edge, which is why hovering a category appeared
+           to do nothing at all. The fill stays at 95% so the difference is not visible.
+
+           WHAT STILL ANCHORS THEM, and it is worth knowing before anyone restyles the header: the
+           header bar above IS blurred, so it is the containing block for this panel and for the
+           fly-out inside it. Viewport coordinates stay correct only because that bar is sticky, full
+           width and at the top of the window - its origin IS the window's origin. Centre it, inset
+           it, or put a transform on it and both panels go with it.
+           (A portal would also escape this, but it moves the sub-list out of the tab order, and the
+           menu's keyboard path - the arrow button, ArrowRight - already reaches it.) */
         <ul id={id + "-menu"} role="list" aria-labelledby={id + "-trigger"} onKeyDown={onKey}
           style={{ position: "fixed", width: box.w, left: box.left, maxHeight: box.maxH,
             ...(box.flip ? { bottom: box.bottom } : { top: box.top }) }}
-          className="z-40 overflow-y-auto rounded-control bg-surface/95 backdrop-blur-md text-ink-900 ring-1 ring-line py-1">
+          className="z-40 overflow-y-auto rounded-control bg-surface/95 text-ink-900 ring-1 ring-line py-1">
           {links.map((l, i) => {
             const kids = l.children ?? [];
             const subOpen = sub === l.href;
@@ -308,7 +323,7 @@ export default function NavDropdown({ label, links, open, onOpenChange }: Props)
                     aria-label={"Sub-categories of " + l.label}
                     style={{ position: "fixed", width: subBox.w, left: subBox.left, top: subBox.top,
                       maxHeight: subBox.maxH }}
-                    className="z-40 overflow-y-auto rounded-control bg-surface/95 backdrop-blur-md text-ink-900 ring-1 ring-line py-1">
+                    className="z-40 overflow-y-auto rounded-control bg-surface/95 text-ink-900 ring-1 ring-line py-1">
                     {kids.map((c, j) => (
                       <li key={c.href}>
                         <a ref={(el) => { (subItems.current[l.href] ??= [])[j] = el; }}
