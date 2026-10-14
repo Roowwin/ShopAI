@@ -8,7 +8,7 @@ import { aud } from "@/lib/format";
 import { NOTICE_TONE } from "@/app/components/dashboard/tokens";
 import { GradeBars, Sparkline, StatusDonut, type Slice } from "@/app/components/dashboard/charts";
 import AttentionFeed, { type FeedItem } from "./attention";
-import NextAssetCard from "./NextAssetCard";
+import NextGroupCard from "./NextGroupCard";
 import KpiTile from "@/app/components/dashboard/KpiTile";
 import PipelineMap, { lifecycleStages, stuckNote } from "@/app/components/dashboard/PipelineMap";
 
@@ -86,9 +86,13 @@ function feedFor(d: Overview["dashboard"]): FeedItem[] {
       severity: "warning",
       detail: d.stuck_assets.oldest_serial_number
         ? `Oldest: ${d.stuck_assets.oldest_serial_number}` : "Nothing older than 7 days." },
-    { label: "Lots in intake over 14 days", count: d.lots_stuck.count, href: "/admin/intake",
+    /* THE DESTINATION IS PRODUCT GROUPS BECAUSE THAT IS WHERE THIS IS FIXED, not because it is the
+       nearest surviving screen. The row's own detail reads "Received but never activated", and
+       activating a lot is now something the Product groups publish door does - the old grading
+       screen listed lots but had no way to activate one at all. */
+    { label: "Lots in intake over 14 days", count: d.lots_stuck.count, href: "/admin/product-groups",
       severity: "warning", urgent: true,
-      detail: "Received but never activated." },
+      detail: "Received but never activated - so nothing in them is on the shop yet." },
     /* The link carries the narrowing the row is about, so the operator lands on the units the count
        counted rather than on the whole inventory. The assets page reads `status` from the query
        string - see the note there; without that, this href would be a narrowing that silently did
@@ -192,7 +196,7 @@ export default function DashboardPage() {
 
           {/* Under the numbers, because the numbers are what the page is: this is the one card
               that tells the operator what to DO, and it makes its own reads. */}
-          <NextAssetCard />
+          <NextGroupCard />
 
           <Card className="p-6">
             <div className="mb-5 flex flex-wrap items-baseline justify-between gap-2">

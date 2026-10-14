@@ -69,16 +69,15 @@ export const GROUPS: NavGroup[] = [
   {
     id: "catalog-inventory", heading: "Inventory", icon: "crate", items: [
       {
-        /* The asset workbench: the unit-level inventory browser, which is what "Inventory"
-           names. Two jobs hang under it rather than sitting beside it as peers that look like
-           unrelated screens: Grading (the receiving-and-grading station) and Receive stock (the
-           lot and scan-in tools that used to be buried at the foot of Product import, where they
-           were the only renderer of an entry point nobody could find from the chrome). */
+        /* The asset workbench: the unit-level inventory browser, which is what "Inventory" names.
+           It was a parent with two children - Grading and Receive stock - and both are gone: stock
+           arrives already graded on a supplier sheet, the importer writes it, and the work left is
+           pricing and photographing at the model+grade level on Product groups. A screen nobody
+           opens is not a place in the chrome.
+           The SERVER behind those two screens is untouched and still there - the workbench still
+           grades and prices a single unit, and the importer still creates lots - so this entry
+           keeps its own page rather than becoming a group heading. */
         href: "/admin/assets", label: "Inventory",
-        children: [
-          { href: "/admin/intake", label: "Grading" },
-          { href: "/admin/receive", label: "Receive stock" },
-        ],
       },
       { href: "/admin/product-import", label: "Product import" },
       /* Where the work goes AFTER an import. The importer declares a group per brand+model+grade and
@@ -227,7 +226,8 @@ export function subGroupOf(pathname: string): string | null {
    other reader of this list.
 
    `=== href || startsWith(href + "/")` was the whole rule, and it is right about SIBLINGS - a raw
-   prefix test would light /admin/intake-queue together with /admin/intake. It is wrong about
+   prefix test would light a hypothetical /admin/product-groups-archive together with
+   /admin/product-groups. It is wrong about
    ANCESTORS, and the built page proved it rather than an argument: on /admin/dashboard the sidebar
    carried aria-current="page" TWICE, on Dashboard and on Overview, because /admin is a prefix of
    /admin/dashboard. The same shape lights two entries on every nested route, and with categories

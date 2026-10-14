@@ -105,7 +105,9 @@ const NO_SERIES = "No trend line: the API sends no daily series.";
 /* Where a needs_attention kind can be acted on. Every destination below was checked against the
    route tree, not chosen because it sounds right: app/admin/<route>/page.tsx exists for each.
 
-     intake_waiting        -> /admin/intake    lists lots and their status; intake is its subject
+     intake_waiting        -> /admin/product-groups   a lot is activated by PUBLISHING it, which is
+                                               what this door does; the old grading screen listed
+                                               lots and had no way to activate one
      restock               -> /admin/cms       its product table prints the listed-unit count per
                                                product, which is the number this count is made of
      in_repair_stale       -> /admin/assets    the workbench, filterable by lifecycle status
@@ -114,7 +116,7 @@ const NO_SERIES = "No trend line: the API sends no daily series.";
    no reservations route: the only reservations UI is the table inside /admin/assets/[id], and that
    needs an asset id the payload does not carry. The tile says so in words. */
 const DESTINATION: Record<string, string> = {
-  intake_waiting: "/admin/intake",
+  intake_waiting: "/admin/product-groups",
   restock: "/admin/cms",
   in_repair_stale: "/admin/assets",
 };
@@ -127,7 +129,11 @@ const DESTINATION: Record<string, string> = {
 const JUDGEMENT: Record<string, { severity: "critical" | "warning"; consequence: string }> = {
   intake_waiting: {
     severity: "warning",
-    consequence: "Stock that has arrived and has not been scanned in yet.",
+    /* IT USED TO SAY "has not been scanned in yet", which named the workflow this app no longer
+       has - stock arrives already graded on a supplier sheet and the importer writes it. What is
+       actually true of such a lot is that nothing in it is on the shop, because publishing is what
+       activates a lot. */
+    consequence: "Stock that has arrived and has not been published yet.",
   },
   restock: {
     severity: "critical",

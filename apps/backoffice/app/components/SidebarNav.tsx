@@ -165,7 +165,7 @@ export default function SidebarNav({ rail = false, onNavigate, onExpand }: Props
 
      THE NESTED GROUP BELONGS IN THIS FIRST DRAW TOO, and leaving it to the effect below was a real
      defect rather than a detail: the server rendered the category open and the group CLOSED, so a
-     cold load of /admin/intake painted a rail in which the page you were on was hidden inside a
+     cold load of /admin/product-groups painted a rail in which the page you were on was hidden inside a
      shut disclosure, and only a post-hydration effect opened it. A flash of the wrong tree is bad;
      a first paint that hides the operator's own page is worse, and both are the same bug. Both ids
      are pure functions of the pathname, so both can be decided before the first byte is sent. */
