@@ -612,3 +612,32 @@ async def test_discard_refuses_an_image_only_a_return_photograph_points_at(clien
         async with eng.begin() as c:
             await c.execute(text("DELETE FROM rma_photos WHERE media_id = :m"), {"m": mid})
             await c.execute(text("DELETE FROM rma_requests WHERE number LIKE :p"), {"p": tag + "%"})
+
+
+async def test_the_category_filter_narrows_the_list_and_carries_its_own_options(client):
+    """The category lives on the PRODUCT, so this is an EXISTS and not a join.
+
+    A join would multiply the row's unit counts whenever one group spans two product rows, which is
+    the normal state after a Category has been respelled on a later sheet.
+    """
+    tok = await _staff(client)
+    tag = _tag()
+    one = await _seed(tag + "a", model="Widget One", grade="B", category=tag + "-cat-one")
+    two = await _seed(tag + "b", model="Widget Two", grade="B", category=tag + "-cat-two")
+
+    r = await client.get(f"/staff/product-groups?limit=200&q={tag}", headers=_h(tok))
+    assert r.status_code == 200, r.text
+    assert {g["id"] for g in r.json()} >= {one["group_id"], two["group_id"]}
+    row = next(g for g in r.json() if g["id"] == one["group_id"])
+    assert row["categories"] == [tag + "-cat-one"], row
+
+    r = await client.get(f"/staff/product-groups?limit=200&q={tag}&category={tag}-cat-one",
+                         headers=_h(tok))
+    assert {g["id"] for g in r.json()} == {one["group_id"]}, r.json()
+
+    # The filter's options are the categories that actually HOLD a group, with their counts.
+    r = await client.get("/staff/product-groups/categories", headers=_h(tok))
+    assert r.status_code == 200, r.text
+    opts = {c["slug"]: c["groups"] for c in r.json()["categories"]}
+    assert opts.get(tag + "-cat-one") == 1, opts.get(tag + "-cat-one")
+    assert opts.get(tag + "-cat-two") == 1, opts.get(tag + "-cat-two")

@@ -99,12 +99,20 @@ GROUP_SELECT = """
            -- below what they cost" before anybody presses Save. COALESCE, not cost_cents alone:
            -- services/margin.py:28 defines the basis as cost when known and settlement otherwise.
            max(COALESCE(a.cost_cents, a.settlement_cents)) AS basis_max,
-           count(DISTINCT a.fmv_cents) AS fmv_variants
+           count(DISTINCT a.fmv_cents) AS fmv_variants,
+           -- THE CATEGORY, AS A LIST RATHER THAN A COLUMN. A group is keyed on brand+model+grade
+           -- and NOT on the category, deliberately (0024): `_resolve_product` keys a product on
+           -- (brand, category, model), so one model whose Category is spelled two ways becomes two
+           -- product rows and therefore one group. `btrim`-ing that to a single category would be
+           -- the app inventing a fact, so it carries every category the group's products sit in -
+           -- usually one, and the screen prints the first with a count when it is more.
+           array_agg(DISTINCT c.name ORDER BY c.name) AS categories
     FROM product_groups g
     JOIN brands b ON b.id = g.brand_id
     -- A LEFT JOIN twice over, because a group is a decision that may have been taken before any
     -- stock of it arrived: `product_groups` can legitimately have zero units today.
     LEFT JOIN products p ON p.brand_id = g.brand_id AND lower(p.model) = lower(g.model)
+    LEFT JOIN categories c ON c.id = p.category_id
     LEFT JOIN assets a ON a.product_id = p.id AND a.grade = g.grade
 """
 
@@ -134,6 +142,10 @@ def _row(r) -> dict:
         "published_at": r["published_at"].isoformat() if r["published_at"] else None,
         "units_total": int(r["units_total"]), "units_listed": int(r["units_listed"]),
         "basis_max": r["basis_max"], "fmv_variants": int(r["fmv_variants"]),
+        # Usually one. `array_agg` over a LEFT JOIN is NULL when a group has no product row at all,
+        # which is a real state - a group can be declared before any stock of it arrives - so the
+        # screen gets an empty list rather than a null it has to guard.
+        "categories": list(r["categories"] or []),
         # The warning the screen shows beside Save. It is a COUNT of units that would be hidden, not
         # a refusal: the shop's own ON_SALE predicate (services/margin.py:60) hides a unit priced
         # below its basis, and hiding is a legitimate choice - it is the silence that would not be.
@@ -145,6 +157,7 @@ def _row(r) -> dict:
 
 @router.get("/product-groups")
 async def list_product_groups(state: str | None = None, q: str | None = None,
+                              category: str | None = None,
                               limit: int = Query(50, le=200), offset: int = 0,
                               staff: dict = Depends(require_roles(*ROLES_GROUPS)), db=Depends(get_db)):
     """The group worklist: what is set up, what is priced but not published, and what is live."""
@@ -159,13 +172,48 @@ async def list_product_groups(state: str | None = None, q: str | None = None,
     if q and q.strip():
         where.append("(lower(b.name) || ' ' || lower(g.model)) LIKE :like")
         params["like"] = "%" + q.strip().lower() + "%"
-    # Fragments come from STATE_SQL (constants) and the two clauses above; no caller text is ever
-    # spliced - the search term rides as a bound parameter.
+    if category and category.strip():
+        # AN EXISTS AND NOT A JOIN, because the filter must not touch the aggregates beside it. The
+        # category lives on the PRODUCT, and a group can span more than one product row (a
+        # re-spelled Category mints a second one), so joining would multiply the unit counts this
+        # row already carries. A name OR a slug matches, the same pair the storefront's own
+        # category page accepts, so a link from either place means the same thing.
+        where.append(
+            "EXISTS (SELECT 1 FROM products pc JOIN categories cc ON cc.id = pc.category_id "
+            "        WHERE pc.brand_id = g.brand_id AND lower(pc.model) = lower(g.model) "
+            "          AND (lower(cc.name) = :cat OR lower(cc.slug) = :cat))")
+        params["cat"] = category.strip().lower()
+    # Fragments come from STATE_SQL (constants) and the clauses above; no caller text is ever
+    # spliced - the search term and the category ride as bound parameters.
     rows = (await db.execute(text(
         GROUP_SELECT + " WHERE " + " AND ".join(where) +
         " GROUP BY g.id, b.name, b.slug ORDER BY b.name, g.model, g.grade, g.id LIMIT :lim OFFSET :off"
     ), params)).mappings().all()
     return [_row(r) for r in rows]
+
+
+# DECLARED BEFORE `/product-groups/{group_id}` for the same reason the pool doors are: a literal
+# path handed to a `{group_id}: int` route comes back as "categories is not a valid integer".
+@router.get("/product-groups/categories")
+async def list_group_categories(staff: dict = Depends(require_roles(*ROLES_GROUPS)), db=Depends(get_db)):
+    """The categories the GROUPS sit in, with how many groups each holds - the filter's own options.
+
+    ONLY CATEGORIES THAT HOLD A GROUP. This is a filter for a list of groups, so offering a category
+    that would return an empty list is offering a dead end. The count is over groups and not over
+    products, because a group is what the screen lists and a category holding four product rows and
+    two groups must say two.
+    """
+    await _require_role(staff, ROLES_GROUPS, "", db)
+    rows = (await db.execute(text("""
+        SELECT c.name, c.slug, count(DISTINCT g.id) AS groups
+        FROM categories c
+        JOIN products p ON p.category_id = c.id
+        JOIN product_groups g ON g.brand_id = p.brand_id AND lower(g.model) = lower(p.model)
+        GROUP BY c.id, c.name, c.slug
+        ORDER BY c.name
+    """))).mappings().all()
+    return {"categories": [{"name": r["name"], "slug": r["slug"], "groups": int(r["groups"])}
+                           for r in rows]}
 
 
 # ---------------------------------------------------------------------------

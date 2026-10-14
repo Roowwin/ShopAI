@@ -42,6 +42,9 @@ type Group = {
   units_total: number; units_listed: number;
   basis_max: number | null; fmv_variants: number;
   below_cost_if_priced_here: boolean;
+  /* Usually one. A group is keyed on brand+model+grade and not on the category, so a model whose
+     Category was spelled two ways on two sheets sits in two categories under one group. */
+  categories: string[];
 };
 
 type Detail = Group & {
@@ -83,6 +86,9 @@ export default function GroupsPanel() {
 
   const [state, setState] = useState<string>("needs_setup");
   const [term, setTerm] = useState("");
+  /* One category, by SLUG, because that is what survives a rename and what the server matches on
+     alongside the name. `""` is "every category", which is the state the screen opens in. */
+  const [cat, setCat] = useState("");
   const [groups, setGroups] = useState<Group[]>([]);
   const [openId, setOpenId] = useState<number | null>(null);
   const [err, setErr] = useState("");
@@ -99,10 +105,11 @@ export default function GroupsPanel() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const load = useCallback(async (nextState: string, nextTerm: string) => {
+  const load = useCallback(async (nextState: string, nextTerm: string, nextCat: string) => {
     const qs = new URLSearchParams();
     if (nextState) qs.set("state", nextState);
     if (nextTerm.trim()) qs.set("q", nextTerm.trim());
+    if (nextCat) qs.set("category", nextCat);
     qs.set("limit", "200");
     const r = await apiFetch("/staff/product-groups?" + qs.toString());
     if (!r.ok) {
@@ -115,11 +122,26 @@ export default function GroupsPanel() {
     setLoaded(true);
   }, []);
 
+  /* THE FILTER'S OWN OPTIONS COME FROM THE SERVER, not from the rows on screen: the list is
+     filtered and capped at 200, so deriving them here would drop every category the current filter
+     has hidden - and the one an operator most wants to switch to is exactly the one they cannot
+     currently see. Read once; it changes only when the catalogue does. */
+  const [cats, setCats] = useState<{ name: string; slug: string; groups: number }[]>([]);
+  useEffect(() => {
+    if (!checked || !allowed) return;
+    void (async () => {
+      const r = await apiFetch("/staff/product-groups/categories");
+      if (!r.ok) return;
+      const j: any = await r.json().catch(() => ({}));
+      setCats(j.categories ?? []);
+    })();
+  }, [checked, allowed]);
+
   useEffect(() => {
     if (!checked) return;
     if (!allowed) { setErr("admin or manager role required"); setLoaded(true); return; }
-    void load(state, term);
-  }, [checked, allowed, state, load]); // eslint-disable-line react-hooks/exhaustive-deps
+    void load(state, term, cat);
+  }, [checked, allowed, state, cat, load]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const counts = useMemo(() => ({
     units: groups.reduce((n, g) => n + g.units_total, 0),
@@ -142,7 +164,7 @@ export default function GroupsPanel() {
         ? `${t.units_hidden_below_cost} of them are priced below cost, so the shop will not show them.`
         : undefined,
     });
-    await load(state, term);
+    await load(state, term, cat);
   }
 
   if (!checked || !loaded) {
@@ -172,12 +194,21 @@ export default function GroupsPanel() {
                 app has no tailwind-merge, so a caller's `w-48` would lose to it by stylesheet order -
                 see cn.ts and Select.tsx, which document the same trap. */}
             <div className="ml-auto flex items-center gap-2">
+              {/* THE CATEGORY FILTER. Options are only the categories that hold a group, and each
+                  carries its count, so the operator can see where the work is before choosing. */}
+              <Select value={cat} aria-label="Filter by category"
+                onChange={(e) => { setCat(e.target.value); setOpenId(null); }}>
+                <option value="">Every category</option>
+                {cats.map((c) => (
+                  <option key={c.slug} value={c.slug}>{c.name} ({c.groups})</option>
+                ))}
+              </Select>
               <div className="w-56">
                 <Input value={term} placeholder="brand or model" aria-label="Search groups"
                   onChange={(e) => setTerm(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { void load(state, term); } }} />
+                  onKeyDown={(e) => { if (e.key === "Enter") { void load(state, term, cat); } }} />
               </div>
-              <Button variant="secondary" size="sm" onClick={() => void load(state, term)}>Search</Button>
+              <Button variant="secondary" size="sm" onClick={() => void load(state, term, cat)}>Search</Button>
             </div>
           </div>
 
@@ -218,7 +249,18 @@ export default function GroupsPanel() {
                         "hover:bg-surface-muted motion-reduce:transition-none",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700")}>
                       <div className="min-w-0 flex-1">
-                        <p className={kickerClass}>{g.brand}</p>
+                        {/* The category rides the kicker with the brand, because that is the pair
+                            an operator is matching against a mental list of what they stock. A group
+                            spanning two categories says so with a count rather than picking one. */}
+                        <p className={kickerClass}>
+                          {g.brand}
+                          {g.categories.length > 0 && (
+                            <span className="text-ink-400">
+                              {" · "}{g.categories[0]}
+                              {g.categories.length > 1 ? ` +${g.categories.length - 1}` : ""}
+                            </span>
+                          )}
+                        </p>
                         <p className="text-sm font-medium text-ink-900 truncate">{g.model}</p>
                       </div>
                       <span className="shrink-0 text-sm font-semibold text-ink-700">Grade {g.grade}</span>
@@ -247,7 +289,7 @@ export default function GroupsPanel() {
           </Card>
         ) : (
           <GroupEditor key={openId} groupId={openId}
-            onSaved={() => void load(state, term)} onToast={setToast} />
+            onSaved={() => void load(state, term, cat)} onToast={setToast} />
         )}
       </div>
 
