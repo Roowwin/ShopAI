@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { API, aud } from "@/lib/api";
 import { cartGet } from "@/lib/cart";
 import NavDropdown, { type NavLink } from "./NavDropdown";
-import { shortcutHref, shortcutsFor } from "./navMenu";
+import { childrenOf, parentOf, shortcutHref, shortcutsFor } from "./navMenu";
 import { Button, cn, Input, navLinkClass } from "./ui";
 
 type SItem = { slug: string; title: string; units_available: number; price_from_cents: number | null };
@@ -13,13 +13,20 @@ type SItem = { slug: string; title: string; units_available: number; price_from_
 /* A category as the menu wants it: its own page, plus the curated sub-categories when there are any.
    navMenu.ts is the curated half - the categories themselves are the API's, and this only hangs a
    second level off them, so a category with no entry there stays a single link. */
+/* One category as the menu wants it: its own page, plus the second level when it has one - the
+   sub-CATEGORIES filed under it (a real page each, from navMenu's curated table) followed by its
+   search shortcuts (a filtered view of the same page). A category with neither stays a single link.
+
+   The order matters: the things that are genuinely different shops come first, and the filters on
+   this one come after them, so the fly-out reads as "here is what is inside" before "here is a slice
+   of it". */
 function catLink(c: { name: string }): NavLink {
   const href = "/category/" + encodeURIComponent(c.name);
-  const sub = shortcutsFor(c.name);
-  return sub
-    ? { href, label: c.name,
-        children: sub.map((s) => ({ href: shortcutHref(c.name, s.term), label: s.label })) }
-    : { href, label: c.name };
+  const children: { href: string; label: string }[] = [
+    ...childrenOf(c.name).map((name) => ({ href: "/category/" + encodeURIComponent(name), label: name })),
+    ...(shortcutsFor(c.name) ?? []).map((s) => ({ href: shortcutHref(c.name, s.term), label: s.label })),
+  ];
+  return children.length ? { href, label: c.name, children } : { href, label: c.name };
 }
 
 export default function Header() {
@@ -100,7 +107,11 @@ export default function Header() {
               with its filter bar. The row stays because "show me everything" is a real thing to
               want next to a list of categories; only the label was wrong. */}
           <NavDropdown label="Shop" open={shop} onOpenChange={setShop}
-            links={[{ href: "/", label: "All products" }, ...cats.map(catLink)]} />
+            links={[{ href: "/", label: "All products" },
+                    /* Only the TOP-LEVEL categories. A category filed under another is rendered
+                       inside it (see catLink), so without this filter the menu lists "RAM (Memory)"
+                       as a sibling of "Parts" and again underneath it. */
+                    ...cats.filter((c) => !parentOf(c.name)).map(catLink)]} />
           <a href="/faq" className={cn("inline-flex items-center min-h-[44px] px-3 text-sm", navLinkClass)}>FAQ</a>
           <a href="/assistant" className={cn("inline-flex items-center min-h-[44px] px-3 text-sm", navLinkClass)}>Ask AI</a>
           {/* The way into the account, and the only one: it is where a shopper finds the orders they
@@ -159,15 +170,21 @@ export default function Header() {
               a phone. The word still goes to the category - a shopper who wants all of Accessories has
               to be able to tap it - and the chevron opens the same shortcuts the desktop fly-out shows,
               so both levels of the menu lead to the same places either way. */}
-          {cats.map((c) => {
-            const sub = shortcutsFor(c.name);
+          {cats.filter((c) => !parentOf(c.name)).map((c) => {
+            /* On a phone the second level is an accordion where the desktop has a fly-out, and it
+               carries the same two kinds of child: the sub-categories filed under this one (a real
+               page each), then its search shortcuts. */
+            const kids = [
+              ...childrenOf(c.name).map((name) => ({ href: "/category/" + encodeURIComponent(name), label: name })),
+              ...(shortcutsFor(c.name) ?? []).map((s) => ({ href: shortcutHref(c.name, s.term), label: s.label })),
+            ];
             const isOpen = openCat === c.name;
             return (
               <div key={c.name}>
                 <div className="flex items-stretch">
                   <a href={"/category/" + encodeURIComponent(c.name)} className={cn("flex-1 py-3", navLinkClass)}
                     onClick={() => setMenu(false)}>{c.name}</a>
-                  {sub && (
+                  {kids.length > 0 && (
                     <button type="button" aria-expanded={isOpen}
                       aria-label={(isOpen ? "Hide " : "Show ") + c.name + " sub-categories"}
                       onClick={() => setOpenCat(isOpen ? null : c.name)}
@@ -180,12 +197,12 @@ export default function Header() {
                     </button>
                   )}
                 </div>
-                {sub && isOpen && (
+                {kids.length > 0 && isOpen && (
                   <ul className="pb-1">
-                    {sub.map((s) => (
-                      <li key={s.term}>
-                        <a href={shortcutHref(c.name, s.term)} className={cn("block py-3 pl-6", navLinkClass)}
-                          onClick={() => setMenu(false)}>{s.label}</a>
+                    {kids.map((k) => (
+                      <li key={k.href}>
+                        <a href={k.href} className={cn("block py-3 pl-6", navLinkClass)}
+                          onClick={() => setMenu(false)}>{k.label}</a>
                       </li>
                     ))}
                   </ul>
