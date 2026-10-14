@@ -54,7 +54,7 @@
 
 import { useState } from "react";
 
-import { Badge, Button, Card, Heading, Stat, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
+import { Badge, Button, Card, Heading, Select, Stat, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
 import { aud } from "@/lib/format";
 import { gradeTone, kickerClass, statusTone } from "@/lib/ui";
@@ -581,6 +581,20 @@ function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boole
   const blocked = summary.blocked > 0;
   const shown = report.issues.slice(0, ISSUE_SHOWN);
 
+  /* HOW MANY PREVIEW ROWS TO DRAW. The server sends up to `sample_limit` of them and this decides
+     how many reach the screen, starting at ten: a two-thousand-row sheet drawn two hundred rows deep
+     is a wall an operator scrolls past rather than reads, and the question this table answers ("did
+     it read my columns, and will my rows go through?") is settled by the first handful. The rest are
+     already in the payload the server sent, so changing this REDRAWS a table - it does not re-upload
+     a sheet, and it does not ask the server for anything.
+
+     The choices stop at what was actually sent, so "all" can never promise more than the cap allows. */
+  const [showRows, setShowRows] = useState(10);
+  const rowChoices = Array.from(new Set([10, 25, 50, 100, report.sample.length]))
+    .filter((n) => n <= report.sample.length)
+    .sort((a, b) => a - b);
+  const drawnRows = Math.min(showRows, report.sample.length);
+
   return (
     <Card className="p-6 space-y-6">
       <div>
@@ -640,12 +654,31 @@ function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boole
       <PricingSection report={report} />
 
       <section className="border-t border-line pt-6">
-        <Heading level="h3" as="h2" className="!text-eyebrow uppercase text-ink-500">
-          Rows
-        </Heading>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Heading level="h3" as="h2" className="!text-eyebrow uppercase text-ink-500">
+            Rows
+          </Heading>
+          {/* The control is a VIEW choice, not a request: the file was parsed once and the sample is
+              already in the payload, so changing this redraws a table instead of re-uploading a
+              sheet. The server's cap is still the ceiling - the choices stop at what was sent. */}
+          <label className="flex items-center gap-2 text-xs text-ink-500">
+            Rows to show
+            <Select
+              value={String(showRows)}
+              onChange={(e) => setShowRows(Number(e.target.value))}
+              aria-label="How many preview rows to show"
+            >
+              {rowChoices.map((n) => (
+                <option key={n} value={n}>{n === report.sample.length ? `all ${n}` : n}</option>
+              ))}
+            </Select>
+          </label>
+        </div>
         <p className="mt-2 mb-3 text-xs text-ink-500">
-          Showing {report.sample.length} of {summary.rows} rows
-          {report.truncated ? ` - the preview stops at ${report.sample_limit}` : ""}.
+          Showing {drawnRows} of {report.sample.length} previewed rows
+          {report.truncated
+            ? ` - the preview stops at ${report.sample_limit}, of ${summary.rows.toLocaleString("en-AU")} in the file`
+            : ""}.
         </p>
         <Table label="Rows as they would be imported">
           <THead>
@@ -692,7 +725,7 @@ function PreviewPanel({ report, busy, onCommit }: { report: Preview; busy: boole
             </TR>
           </THead>
           <TBody>
-            {report.sample.map((r) => (
+            {report.sample.slice(0, drawnRows).map((r) => (
               <TR key={r.row} className={r.issues.length ? "bg-danger-50" : undefined}>
                 <TD className="font-mono text-xs text-ink-500">{r.row}</TD>
                 <TD className="font-mono text-xs text-ink-600"><Cell v={r.asset_tag} /></TD>
