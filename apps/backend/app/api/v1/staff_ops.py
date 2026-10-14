@@ -481,38 +481,180 @@ async def list_lots(limit: int = Query(20, le=100), offset: int = 0,
              "asset_count": len(l.assets)} for l in rows]
 
 
+# THE INVENTORY READ, described ONCE so the list, its total and every facet are built from the same
+# clauses. This is `store_catalog._product_clauses`' rule applied one layer down: a facet computed
+# from a different description of the filters than the list is a facet that quietly disagrees with
+# it, and the disagreement surfaces as a filter count that does not match what the filter returns.
+#
+# The joins are LEFT except for `lots`, which is INNER because `assets.lot_id` is NOT NULL: a unit
+# without a product is still a unit and must not drop out, but a unit without a lot cannot exist.
+ASSET_FROM = """
+    FROM assets a
+    LEFT JOIN products p ON p.id = a.product_id
+    LEFT JOIN brands b ON b.id = p.brand_id
+    LEFT JOIN categories c ON c.id = p.category_id
+    JOIN lots l ON l.id = a.lot_id
+"""
+
+ASSET_SELECT = """
+    SELECT a.id, a.public_id::text AS public_id, a.serial_number, a.status, a.grade,
+           a.sale_price_cents, a.intake_at, a.location, a.pallet, a.sku, a.asset,
+           a.channel, a.on_shelf,
+           p.model, p.title, b.name AS brand, c.name AS category,
+           l.lot_number, l.warehouse, l.zone
+"""
+
+# The sort keys a caller may ask for, as literal ORDER BY fragments. A dict rather than a pass-through
+# string because this one IS spliced into the statement - it is the only caller-supplied text that
+# is, and a key not in here falls back to the default instead of reaching the database.
+ASSET_SORTS = {
+    "newest": "a.id DESC",
+    "oldest": "a.id ASC",
+    "price_high": "a.sale_price_cents DESC NULLS LAST, a.id DESC",
+    "price_low": "a.sale_price_cents ASC NULLS LAST, a.id DESC",
+    "serial": "a.serial_number ASC NULLS LAST, a.id DESC",
+}
+
+# Which filter each facet is built from, so a facet can exclude its OWN filter and no other. A facet
+# that filtered itself would collapse to the value already chosen and leave the operator no way to
+# switch - the rule `store_catalog` states for its brand facet. The column names are literals here
+# rather than parameters: an identifier cannot be bound, so it must never come from a caller.
+FACET_COLUMNS = {
+    "statuses": "a.status",
+    "grades": "a.grade",
+    "categories": "c.name",
+    "brands": "b.name",
+    "warehouses": "l.warehouse",
+}
+FACET_OWN_FILTER = {
+    "statuses": "status",
+    "grades": "grade",
+    "categories": "category",
+    "brands": "brand",
+    "warehouses": "warehouse",
+}
+
+
+def _asset_clauses(*, status=None, lot_number=None, product_id=None, q=None, category=None,
+                   brand=None, grade=None, warehouse=None) -> tuple[list[str], dict]:
+    """Every filter this door accepts, as WHERE fragments and their bound values.
+
+    `q` is the one that earns its place: the workbench's search has always been a filter over the
+    fifty rows already fetched, which its own comment confesses to, so a serial that exists but sits
+    on another page reads as "not in stock". This one reaches the database.
+    """
+    where: list[str] = []
+    params: dict = {}
+    if status:
+        where.append("a.status = :status")
+        params["status"] = status
+    if lot_number:
+        where.append("l.lot_number = :lot")
+        params["lot"] = lot_number
+    if product_id:
+        where.append("a.product_id = :pid")
+        params["pid"] = product_id
+    if grade and grade.strip():
+        where.append("a.grade = :grade")
+        params["grade"] = grade.strip().upper()
+    if warehouse and warehouse.strip():
+        where.append("l.warehouse = :wh")
+        params["wh"] = warehouse.strip()
+    # A name OR a slug, the same pair the storefront's category page and the product-group filter
+    # both accept, so a link from any of the three means the same thing.
+    if category and category.strip():
+        where.append("(lower(c.name) = :cat OR lower(c.slug) = :cat)")
+        params["cat"] = category.strip().lower()
+    if brand and brand.strip():
+        where.append("(lower(b.name) = :brand OR lower(b.slug) = :brand)")
+        params["brand"] = brand.strip().lower()
+    if q and q.strip():
+        like = "%" + q.strip().lower() + "%"
+        where.append(
+            "(lower(coalesce(a.serial_number, '')) LIKE :q"
+            " OR lower(coalesce(a.sku, '')) LIKE :q"
+            " OR lower(coalesce(a.asset, '')) LIKE :q"
+            " OR lower(coalesce(a.model_number, '')) LIKE :q"
+            " OR lower(coalesce(p.model, '')) LIKE :q"
+            " OR lower(coalesce(p.title, '')) LIKE :q)")
+        params["q"] = like
+    return where, params
+
+
+def _asset_row(r) -> dict:
+    """One unit as every consumer of this door already reads it, plus the two the table needs.
+
+    THE EXISTING KEYS ARE UNCHANGED, deliberately: `seed_demo`, `rehearse_day` and `test_daily_ops`
+    all index and iterate this payload, and a column renamed here is a script or a suite broken
+    there. `category` and `sale_price_cents` are ADDITIONS, which is the only kind of change that is
+    free on a response four other things read.
+    """
+    return {"id": r["id"], "public_id": r["public_id"], "serial_number": r["serial_number"],
+            "status": r["status"], "grade": r["grade"], "lot_number": r["lot_number"],
+            "location": r["location"], "pallet": r["pallet"], "sku": r["sku"], "asset": r["asset"],
+            "channel": r["channel"], "on_shelf": r["on_shelf"],
+            # `model` is the short name the queue scans ("Latitude 5420"); `title` is the catalogue's
+            # full line and is what the table falls back to when model is absent.
+            "model": r["model"], "title": r["title"], "brand": r["brand"],
+            "category": r["category"], "sale_price_cents": r["sale_price_cents"],
+            "intake_at": r["intake_at"].isoformat() if r["intake_at"] else None,
+            "warehouse": r["warehouse"], "zone": r["zone"]}
+
+
 @router.get("/assets")
 async def list_assets(status: str | None = None, lot_number: str | None = None,
-                      product_id: int | None = None, limit: int = Query(20, le=100), offset: int = 0,
+                      product_id: int | None = None, q: str | None = None,
+                      category: str | None = None, brand: str | None = None,
+                      grade: str | None = None, warehouse: str | None = None,
+                      sort: str = "newest",
+                      limit: int = Query(20, le=100), offset: int = 0, with_meta: bool = False,
                       staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
-    # The queue draws a MODEL on every row, so the product's own text rides along with it. A LEFT
-    # JOIN, because product_id is nullable: an unassigned unit is still a unit, and an inner join
-    # would drop it out of the list altogether - the same rule the worklist query follows.
-    #
-    # `brand` rides with the model because the workbench's bulk-image guard needs the SAME key the
-    # server matches on. That door matches brand+model rather than product_id (see apply-to-model:
-    # the catalogue can hold two rows for one brand and model), so a guard that compared model
-    # strings alone would let a second brand's identical model name through the button and into a
-    # refusal - the client and the server have to be asking the same question.
-    q = (select(Asset, Product.model, Product.title, Brand.name)
-         .join(Product, Product.id == Asset.product_id, isouter=True)
-         .join(Brand, Brand.id == Product.brand_id, isouter=True)
-         .options(selectinload(Asset.lot)))
-    if status:
-        q = q.where(Asset.status == status)
-    if lot_number:
-        q = q.where(Asset.lot.has(Lot.lot_number == lot_number))
-    if product_id:
-        q = q.where(Asset.product_id == product_id)
-    rows = (await db.execute(q.order_by(Asset.id.desc()).limit(limit).offset(offset))).all()
-    return [{"id": a.id, "public_id": str(a.public_id), "serial_number": a.serial_number,
-             "status": a.status, "grade": a.grade, "lot_number": a.lot.lot_number,
-             "location": a.location, "pallet": a.pallet, "sku": a.sku, "asset": a.asset,
-             "channel": a.channel, "on_shelf": a.on_shelf,
-             # `model` is the short name the queue scans ("Latitude 5420"); `title` is the
-             # catalogue's full line and is what the bench falls back to when model is absent.
-             "model": model, "title": title, "brand": brand,
-             "warehouse": a.lot.warehouse, "zone": a.lot.zone} for a, model, title, brand in rows]
+    """The stock list: every unit the shop holds, in any state, filtered and paged.
+
+    THE RESPONSE STAYS A BARE ARRAY UNLESS `with_meta=1` ASKS FOR THE ENVELOPE, which is the
+    precedent `store_catalog.catalog` set for this exact problem and is not fussiness here: four
+    other callers read this door and three of them would break on an object. `test_daily_ops` does
+    `len()` over the rows and indexes `x["serial_number"]`, `seed_demo` and `rehearse_day` declare
+    `-> list[dict]`, and `test_staff_read_walls` asserts the admin response is EXACTLY `[]` - which
+    `{}` is not. So an unfiltered, unflagged request is byte-identical to what it always was.
+
+    THE ENVELOPE CARRIES THE TOTAL, and that is the thing this door could not answer before: with
+    1,975 units the page had no way to say "showing 50 of 1,975" and no way to reach the rest. It
+    also carries the facets, each built with the other filters applied and its own excluded.
+    """
+    filters = {"status": status, "lot_number": lot_number, "product_id": product_id, "q": q,
+               "category": category, "brand": brand, "grade": grade, "warehouse": warehouse}
+    where, params = _asset_clauses(**filters)
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+    order = ASSET_SORTS.get(sort, ASSET_SORTS["newest"])
+
+    rows = (await db.execute(text(
+        ASSET_SELECT + ASSET_FROM + clause + " ORDER BY " + order + " LIMIT :lim OFFSET :off"),
+        {**params, "lim": limit, "off": offset})).mappings().all()
+    items = [_asset_row(r) for r in rows]
+    if not with_meta:
+        return items
+
+    total = (await db.execute(text("SELECT count(*)" + ASSET_FROM + clause), params)).scalar_one()
+    facets: dict[str, list[dict]] = {}
+    for name, column in FACET_COLUMNS.items():
+        # The facet's own filter is dropped from the clauses it is built from - see
+        # FACET_OWN_FILTER, and the note there on why.
+        sub = {k: v for k, v in filters.items() if k != FACET_OWN_FILTER[name]}
+        f_where, f_params = _asset_clauses(**sub)
+        f_clause = (" WHERE " + " AND ".join(f_where)) if f_where else ""
+        facet_rows = (await db.execute(text(
+            "SELECT " + column + " AS value, count(*) AS n" + ASSET_FROM + f_clause +
+            " GROUP BY " + column + " HAVING " + column + " IS NOT NULL"
+            " ORDER BY count(*) DESC, " + column), f_params)).mappings().all()
+        facets[name] = [{"value": r["value"], "count": int(r["n"])} for r in facet_rows]
+
+    return {"items": items, "total": int(total), "limit": limit, "offset": offset,
+            "applied": {"status": status, "lot_number": lot_number, "product_id": product_id,
+                        "q": q, "category": category, "brand": brand,
+                        "grade": (grade.strip().upper() if grade and grade.strip() else None),
+                        "warehouse": warehouse, "sort": sort if sort in ASSET_SORTS else "newest"},
+            "facets": facets}
 
 
 # How many awaiting-grade units the workbench returns at once. A corporate lot runs to a few
