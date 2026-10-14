@@ -135,13 +135,15 @@ const CELL_FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visibl
    colour per grade for a chip that NAMES a grade, and it paints all four of these the same, which
    is precisely the state this control could not show.
 
-   ACTIVE - the brand's saturated green (`brand-500`), under the dark ink. White on that step measures
-   under 4.5:1 and is not text; `ink-inverse` is the token this palette keeps for exactly this pairing
-   (Button's `accent` variant is the same shape in amber). `` is the config's brand
-   hairline plus bloom, the halo a dark ground needs - a grey shadow is invisible
-   against slate, so the glow is drawn in light.
+   ACTIVE - a light neutral fill under the dark ink. This was `bg-brand-500` while brand-500 was
+   the brand's saturated green; the Quiet Luxury pass repointed 500 to slate-400, because the brand
+   is allowed on the primary action and nowhere else. `ink-inverse` is still the right ink for it -
+   a light fill needs dark text - and it measures 7.87:1 on the new value, where white on the old
+   green could not clear 4.5:1 at all (3.92:1). There WAS a brand halo behind it (`shadow-glow-sm`, a hairline
+   plus bloom, drawn in light because a grey shadow is invisible against slate); it went with every
+   other glow in that pass, so the fill and its 1px ring are the whole of the active state now.
 
-   IDLE - the page ground, muted ink, one hairline, and a lift to the primary button's emerald on
+   IDLE - the page ground, muted ink, one hairline, and a lift to the primary button's green on
    hover. Both states carry a 1px ring so only its COLOUR changes between them: the focus ring that
    arrives on a keypress is then the one thing widening the edge. */
 const GRADE_ACTIVE = "bg-brand-500 text-ink-inverse ring-1 ring-brand-500";

@@ -122,18 +122,25 @@ const config: Config = {
       transitionTimingFunction: {
         out: "var(--ease-out)",
       },
-      /* NO `boxShadow` SCALE, DELIBERATELY. There was a `glow`/`glow-sm` pair here plus a
-         `glow-danger`/`glow-warning` pair for the attention feed - an emerald hairline with a soft
-         bloom behind it, on the theory that a grey shadow is invisible against slate so the
-         boundary has to be drawn in light.
+      /* TWO GLOWS, EACH WITH ONE JOB. The Quiet Luxury pass deleted this app's `glow`, `glow-sm`,
+         `glow-danger` and `glow-warning` tokens, because a bloom under every tile and every
+         timeline node was the largest single source of visual noise here. The executive dashboard
+         asks for two of them back, narrowly, so they are named for the JOB they do rather than for
+         the surface they sit on - the next person cannot casually put `shadow-flow` on a card:
 
-         The Quiet Luxury pass deletes all four. A bloom under every tile and every timeline node
-         was the single largest source of visual noise in this app, and it was doing the job the
-         surface step and the hairline already do: elevation here is a lighter fill plus a 1px
-         `--line`, which is quieter and costs the compositor nothing. The attention feed's critical
-         and warning states are unaffected in substance - they still carry `bg-danger-600` /
-         `bg-accent-400` and their own text steps, so the state is still told by colour; it simply
-         no longer also announces itself with a halo. */
+           flow    the lifecycle rail in the pipeline map. Only that one thin connecting line
+                   carries it; the stage markers keep the flat state tints they had.
+           urgency the amber halo on an ageing-work badge. Amber rather than red, and it animates,
+                   because a lot that has sat for a fortnight is the one thing on this page that
+                   should catch an eye before it is read.
+
+         Both are drawn in LIGHT rather than as a shadow - a grey shadow is invisible against slate
+         - and neither is offset. Everything else in this app stays flat: elevation is the surface
+         step plus a 1px `--line`, which costs the compositor nothing. */
+      boxShadow: {
+        flow: "0 0 10px -1px rgb(var(--brand-500) / 0.55)",
+        urgency: "0 0 0 3px rgb(var(--accent-400) / 0.14)",
+      },
       fontFamily: {
         // Shape-identical to the storefront's stack, and now fed by the same two faces: the root
         // layout loads Inter and Space Grotesk through next/font/google and sets --font-sans /

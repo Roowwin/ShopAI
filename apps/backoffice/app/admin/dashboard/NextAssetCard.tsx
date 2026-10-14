@@ -122,14 +122,14 @@ export default function NextAssetCard() {
     const unit = next.serial_number ? `Asset ${next.id} - ${next.serial_number}` : `Asset ${next.id}`;
     const what = next.product_model ?? next.product_title;
     return (
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
         <div className="min-w-0">
-          <p className="truncate text-lg font-semibold text-ink-900">{unit}</p>
-          <p className="mt-0.5 text-xs text-ink-500">
+          <p className="truncate font-display text-xl font-semibold text-ink-900">{unit}</p>
+          <p className="mt-1 text-sm text-ink-500">
             {what ? `${what} - ` : ""}
             oldest ungraded unit in lot{" "}
-            <span className="font-mono">{queue.lot.lot_number}</span>, the largest lot still waiting
-            ({stillToGrade} of {p.total_units} units to grade
+            <span className="font-mono text-ink-600">{queue.lot.lot_number}</span>, the largest lot
+            still waiting ({stillToGrade} of {p.total_units} units to grade
             {queue.lot.warehouse ? `, ${queue.lot.warehouse}` : ""}).
           </p>
         </div>
@@ -141,12 +141,22 @@ export default function NextAssetCard() {
   };
 
   return (
-    <Card className="p-4">
-      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-        <Heading level="h3" as="h2">Next asset</Heading>
-        <span className={kickerClass}>priority queue</span>
+    <Card className="p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div>
+          <span className={kickerClass}>Priority queue</span>
+          {/* An `h2` at the h2 STEP, where every other card on this page is an h2 tag at the h3
+              step. That one-step lift is the whole of what makes this the featured banner: the
+              brief wants a call to action rather than another panel, and the honest way to say
+              "this one is the action" is to let its heading outrank its neighbours' - not to spend
+              a colour on it, which the Quiet Luxury pass reserved for the primary button inside. */}
+          <Heading level="h2" as="h2" className="mt-1">Next asset</Heading>
+          <p className="mt-1 text-sm text-ink-500">
+            The one unit to pick up next, chosen from the largest lot still waiting on a grade.
+          </p>
+        </div>
       </div>
-      {body()}
+      <div className="mt-5">{body()}</div>
     </Card>
   );
 }

@@ -75,13 +75,21 @@ export function StatusDonut({ slices, total, centerLabel }: { slices: Slice[]; t
         <text x="90" y="105" textAnchor="middle" className="fill-ink-500" fontSize="10">{centerLabel}</text>
       </svg>
       {/* The legend is mandatory, not decoration: ten status hues are not separable by eye, so
-          the label and the count beside each swatch are what actually carry identity. */}
-      <ul className="min-w-[10rem] flex-1 space-y-1">
+          the label and the count beside each swatch are what actually carry identity.
+
+          A FOCUSED legend, which is not the same as a filtered one. The ring already draws only
+          the non-zero slices (`live`), so a row reading 0 is a line about something that is not in
+          the picture - and ten of those interleaved with the four that matter is how a legend
+          becomes a column of grey nobody reads. The zero rows are stepped back to 45% rather than
+          dropped: the lifecycle is a fixed ladder, and a status that is empty today still has to
+          be locatable in the list, which is the same reason the grade dropdown keeps its
+          out-of-stock rungs. */}
+      <ul className="min-w-[10rem] flex-1 space-y-1.5">
         {slices.map((s) => (
-          <li key={s.key} className="flex items-center gap-2 text-xs">
+          <li key={s.key} className={"flex items-center gap-2.5 text-xs" + (s.value === 0 ? " opacity-45" : "")}>
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: statusToken(s.key) }} />
             <span className="truncate text-ink-600">{s.label}</span>
-            <span className="ml-auto tabular-nums text-ink-900">{s.value}</span>
+            <span className="ml-auto font-medium tabular-nums text-ink-900">{s.value}</span>
           </li>
         ))}
       </ul>
