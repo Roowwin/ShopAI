@@ -176,6 +176,11 @@ class NotesIn(BaseModel):
     """A description edit. Null or blank clears the description rather than storing empty text."""
     notes: str | None = None
 
+class UpgradeDescIn(BaseModel):
+    """An upgrade-description edit. Blank clears it rather than storing empty text, exactly as
+    NotesIn does - "no description" gets one representation, not two."""
+    upgrade_desc: str | None = None
+
 class StatusIn(BaseModel):
     status: str
     note: str | None = None
@@ -366,6 +371,48 @@ async def edit_notes(asset_id: int, body: NotesIn, staff: dict = Depends(require
     return {"id": asset.id, "notes": asset.notes}
 
 
+# The unit's upgrade description: what was fitted or replaced, as the supplier's workbook recorded
+# it, and the one free-text field on the record a technician is asked to correct on the bench.
+#
+# THE ROLE SET IS MIRRORED FROM `edit_notes`, NOT INVENTED. Nowhere in this repo states who may edit
+# an upgrade description, and the closest thing is the field beside it - both are descriptive text
+# about the same unit, both are filled by the same import, and the person who may write the finding
+# ("the screen was replaced") is the person who knows what was fitted. If the owner wants a narrower
+# set, this constant is the one line to change.
+#
+# Not in GUARDED_ACTIONS / TOOL_ROLES, for edit_notes' own reason: this is an HTTP door the chat rail
+# does not dispatch into, so it passes db=None and an agent identity is refused rather than admitted
+# through a grant for an action the rail cannot run.
+ROLES_EDIT_UPGRADE = ("admin", "manager", "technician")
+ACTION_EDIT_UPGRADE = "edit_upgrade_desc"
+
+
+@router.post("/assets/{asset_id}/upgrade")
+async def edit_upgrade_desc(asset_id: int, body: UpgradeDescIn,
+                            staff: dict = Depends(require_roles(*ROLES_EDIT_UPGRADE)), db=Depends(get_db)):
+    """Correct the unit's upgrade description.
+
+    The before/after pair is the point of the door existing, exactly as on the notes door: a
+    description that can be edited without a trail is a description nobody can be held to, and it is
+    printed on the condition report a buyer reads.
+    """
+    await _require_role(staff, ROLES_EDIT_UPGRADE, ACTION_EDIT_UPGRADE, None)
+    asset = await db.get(Asset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    before = {"upgrade_desc": asset.upgrade_desc}
+    cleaned = (body.upgrade_desc or "").strip()
+    asset.upgrade_desc = cleaned or None
+    await _audit_execution(db, staff, None, entity="asset", entity_id=asset.id,
+                           action=ACTION_EDIT_UPGRADE, before=before,
+                           after={"upgrade_desc": asset.upgrade_desc})
+    try:
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+    return {"id": asset.id, "upgrade_desc": asset.upgrade_desc}
+
+
 # The chat actions this one door performs, named by the status it is asked to write. A status that
 # is not here (any hand-made call, or a transition the rail does not carry) names no action, so the
 # agent branch of `_require_role` has nothing to look a grant up against and refuses: the grantable
@@ -434,19 +481,27 @@ async def list_lots(limit: int = Query(20, le=100), offset: int = 0,
 async def list_assets(status: str | None = None, lot_number: str | None = None,
                       product_id: int | None = None, limit: int = Query(20, le=100), offset: int = 0,
                       staff: dict = Depends(require_roles("admin", "manager")), db=Depends(get_db)):
-    q = select(Asset).options(selectinload(Asset.lot))
+    # The queue draws a MODEL on every row, so the product's own text rides along with it. A LEFT
+    # JOIN, because product_id is nullable: an unassigned unit is still a unit, and an inner join
+    # would drop it out of the list altogether - the same rule the worklist query follows.
+    q = (select(Asset, Product.model, Product.title)
+         .join(Product, Product.id == Asset.product_id, isouter=True)
+         .options(selectinload(Asset.lot)))
     if status:
         q = q.where(Asset.status == status)
     if lot_number:
         q = q.where(Asset.lot.has(Lot.lot_number == lot_number))
     if product_id:
         q = q.where(Asset.product_id == product_id)
-    rows = (await db.execute(q.order_by(Asset.id.desc()).limit(limit).offset(offset))).scalars().all()
+    rows = (await db.execute(q.order_by(Asset.id.desc()).limit(limit).offset(offset))).all()
     return [{"id": a.id, "public_id": str(a.public_id), "serial_number": a.serial_number,
              "status": a.status, "grade": a.grade, "lot_number": a.lot.lot_number,
              "location": a.location, "pallet": a.pallet, "sku": a.sku, "asset": a.asset,
              "channel": a.channel, "on_shelf": a.on_shelf,
-             "warehouse": a.lot.warehouse, "zone": a.lot.zone} for a in rows]
+             # `model` is the short name the queue scans ("Latitude 5420"); `title` is the
+             # catalogue's full line and is what the bench falls back to when model is absent.
+             "model": model, "title": title,
+             "warehouse": a.lot.warehouse, "zone": a.lot.zone} for a, model, title in rows]
 
 
 # How many awaiting-grade units the workbench returns at once. A corporate lot runs to a few
