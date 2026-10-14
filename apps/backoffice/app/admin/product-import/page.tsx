@@ -18,10 +18,11 @@
 
 import { Heading } from "@/app/components/ui";
 import ProductImportPanel from "./ProductImportPanel";
+import { pageClass } from "@/lib/ui";
 
 export default function ProductImportPage() {
   return (
-    <main className="mx-auto max-w-5xl space-y-6 px-4 pt-8 pb-16">
+    <main className={pageClass.wide}>
       <div>
         <Heading level="h1">Product import</Heading>
         <p className="mt-1 text-sm text-ink-500">

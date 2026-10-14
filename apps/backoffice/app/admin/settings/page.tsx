@@ -21,7 +21,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button, Card, Input, PageHeader, cn } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
 import { requireRole, useMe } from "@/lib/session";
-import { kickerClass } from "@/lib/ui";
+import { kickerClass, pageClass } from "@/lib/ui";
 
 type Identity = { legal_name: string; tax_id: string; address: string; email: string };
 
@@ -88,18 +88,18 @@ export default function SettingsPage() {
   }
 
   if (!checked || !loaded) {
-    return <main className="mx-auto max-w-2xl px-4 pt-10"><p className="text-sm text-ink-500">Loading...</p></main>;
+    return <main className={pageClass.narrow}><p className="text-sm text-ink-500">Loading...</p></main>;
   }
   if (!allowed) {
     return (
-      <main className="mx-auto max-w-2xl px-4 pt-10">
+      <main className={pageClass.narrow}>
         <p className="text-sm text-danger-600">{err || "Settings are an administrator's screen."}</p>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-4 pt-10 pb-24">
+    <main className={pageClass.narrow}>
       <PageHeader
         title={<>Settings &amp; System</>}
         description={<>The business&apos;s own details, as they appear on the documents customers receive.</>}

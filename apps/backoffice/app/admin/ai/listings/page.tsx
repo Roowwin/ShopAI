@@ -8,6 +8,7 @@ import SourcePanel from "./SourcePanel";
 import AiWorkspace from "./AiWorkspace";
 import LivePreview from "./LivePreview";
 import type { AssetDetail, CatalogItem, Vibe, Worklist, WorklistAsset } from "./types";
+import { pageClass } from "@/lib/ui";
 
 /* The AI Listing Studio: a search-first entry into a three-panel workspace.
 
@@ -231,7 +232,7 @@ export default function ListingsPage() {
 
   if (unit === null || result === null) {
     return (
-      <main className="mx-auto max-w-5xl px-4 pt-8 pb-16">
+      <main className={pageClass.narrow}>
         <SearchEntry
           term={term}
           onTerm={setTerm}
@@ -246,7 +247,7 @@ export default function ListingsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-[1600px] space-y-6 px-4 pt-8 pb-16">
+    <main className={pageClass.narrow}>
       <div>
         <Heading level="h1">AI Listing Studio</Heading>
         <p className="mt-1 text-sm text-ink-500">

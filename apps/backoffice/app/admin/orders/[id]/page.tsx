@@ -5,7 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { Badge, Card, Heading, Stat, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
 import { aud, when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
-import { gradeTone, statusTone } from "@/lib/ui";
+import { gradeTone, pageClass, statusTone } from "@/lib/ui";
 import FulfilmentCard from "./FulfilmentCard";
 
 /* One order in full: its lines, its payments and whose it is.
@@ -57,7 +57,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const o = data?.order;
 
   return (
-    <main className="max-w-5xl mx-auto p-4 space-y-4 min-h-screen">
+    <main className={pageClass.narrow}>
       <a href="/admin/orders" className="text-sm text-brand-300 hover:underline">&larr; All orders</a>
       <Heading level="h1">
         Order <span className="font-mono text-base">{o ? o.public_id : "#" + id}</span>

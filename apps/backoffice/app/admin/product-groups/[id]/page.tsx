@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 
 import GroupDetail from "./GroupDetail";
+import { pageClass } from "@/lib/ui";
 
 /* One model+grade. A shell, like every other page here: the way back, and the detail itself.
 
@@ -14,12 +15,12 @@ export default function GroupDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params?.id);
   if (!Number.isInteger(id) || id <= 0) {
-    return <main className="mx-auto max-w-6xl px-4 pt-8 pb-16">
+    return <main className={pageClass.narrow}>
       <p className="text-sm text-ink-500">That is not a product group id.</p>
     </main>;
   }
   return (
-    <main className="mx-auto max-w-5xl px-4 pt-8 pb-16">
+    <main className={pageClass.narrow}>
       <a href="/admin/product-groups" className="text-sm text-brand-300 hover:underline">
         &larr; Product groups
       </a>

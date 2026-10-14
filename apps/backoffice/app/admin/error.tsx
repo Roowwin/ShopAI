@@ -1,10 +1,11 @@
 "use client";
 
 import { Button, Card, Heading } from "@/app/components/ui";
+import { pageClass } from "@/lib/ui";
 
 export default function AdminError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <main className="max-w-2xl mx-auto p-6">
+    <main className={pageClass.narrow}>
       <Card className="p-6">
         <Heading level="h2" as="h1">This page could not load</Heading>
         <p className="text-sm text-ink-600 mt-1">{error.message || "Unexpected error."}</p>

@@ -21,7 +21,7 @@ import { Badge, Button, Card, Heading, Input, Stat, cn } from "@/app/components/
 import { apiFetch, API } from "@/lib/api";
 import { aud } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
-import { kickerClass } from "@/lib/ui";
+import { kickerClass, pageClass } from "@/lib/ui";
 import LineChart, { type Point } from "./LineChart";
 
 /* The two series colours. Both are the reference categorical palette's DARK steps and both were run
@@ -136,10 +136,10 @@ export default function ReportsPage() {
   }
 
   if (!checked || !loaded) {
-    return <main className="mx-auto max-w-6xl px-4 pt-8"><p className="text-sm text-ink-500">Loading...</p></main>;
+    return <main className={pageClass.wide}><p className="text-sm text-ink-500">Loading...</p></main>;
   }
   if (!allowed) {
-    return <main className="mx-auto max-w-6xl px-4 pt-8">
+    return <main className={pageClass.wide}>
       <p className="text-sm text-danger-600">Reporting is an administrator&apos;s screen.</p></main>;
   }
 
@@ -149,7 +149,7 @@ export default function ReportsPage() {
   const board = (performers?.[metric] ?? []) as Product[];
 
   return (
-    <main className="mx-auto max-w-6xl px-4 pt-8 pb-24">
+    <main className={pageClass.wide}>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Heading level="h1">Reports &amp; Business Intelligence</Heading>
         {err && <span className="text-sm text-danger-600">{err}</span>}

@@ -22,7 +22,7 @@ import { Badge, Button, Card, Heading, Input, PageHeader, Stat, Table, TBody, TD
 import { apiFetch } from "@/lib/api";
 import { aud } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
-import { kickerClass } from "@/lib/ui";
+import { kickerClass, pageClass } from "@/lib/ui";
 
 type Expense = {
   id: number; category: string; vendor: string | null; description: string | null;
@@ -168,11 +168,11 @@ export default function ExpensesPage() {
   }
 
   if (!checked || !loaded) {
-    return <main className="mx-auto max-w-6xl px-4 pt-8 pb-16"><p className="text-sm text-ink-500">Loading...</p></main>;
+    return <main className={pageClass.wide}><p className="text-sm text-ink-500">Loading...</p></main>;
   }
   if (!allowed) {
     return (
-      <main className="mx-auto max-w-6xl px-4 pt-8 pb-16">
+      <main className={pageClass.wide}>
         <Card className="p-6">
           <Heading level="h3" as="h2">Expenses</Heading>
           <p className="mt-2 text-sm text-ink-500">The books are an administrator&apos;s screen.</p>
@@ -184,7 +184,7 @@ export default function ExpensesPage() {
   const pageValue = rows.reduce((s, e) => s + e.amount_cents, 0);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 px-4 pt-8 pb-16">
+    <main className={pageClass.wide}>
       <PageHeader
         title={<>Expenses</>}
         description={

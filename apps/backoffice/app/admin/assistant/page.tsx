@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { pageClass } from "@/lib/ui";
 
 type Proposal = { action: string; args: any; message: string; resolved?: any; fallback?: boolean };
 type Msg = { role: "you" | "ai"; text: string; proposal?: Proposal; executed?: boolean; dismissed?: boolean; results?: any[] };
@@ -155,7 +156,7 @@ export default function AssistantPage() {
   const fb = !!status && status.fallback;
 
   return (
-    <main className="max-w-7xl mx-auto p-4 min-h-screen">
+    <main className={pageClass.narrow}>
       <div className="rounded-2xl ring-1 ring-line bg-surface overflow-hidden">
         <div className="bg-surface-muted px-5 py-3 flex flex-wrap items-center gap-3 text-ink-900">
           <span className={"h-2.5 w-2.5 rounded-full " + (fb ? "bg-accent-400" : "bg-brand-500")}></span>

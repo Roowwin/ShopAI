@@ -6,7 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { Badge, Button, Card, Heading, Input, PageHeader, Select, Stat, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
 import { aud, when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
-import { statusTone } from "@/lib/ui";
+import { pageClass, statusTone } from "@/lib/ui";
 
 /* The orders browser: every order, its customer and what it is worth.
 
@@ -113,7 +113,7 @@ export default function OrdersPage() {
   const onPage = rows.reduce((sum, o) => sum + o.total_cents, 0);
 
   return (
-    <main className="max-w-6xl mx-auto p-4 space-y-4 min-h-screen">
+    <main className={pageClass.wide}>
       <PageHeader
         title={<>Orders</>}
         description={<>Read-only. Refund state is shown, never actioned - this API has no refund door.</>}

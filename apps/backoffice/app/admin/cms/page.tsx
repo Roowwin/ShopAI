@@ -27,10 +27,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { Button, Card, Heading, Input, Select, Switch, cn } from "@/app/components/ui";
+import { Button, Card, Heading, Input, PageHeader, Select, Switch, cn } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
 import { requireRole, useMe } from "@/lib/session";
-import { kickerClass } from "@/lib/ui";
+import { kickerClass, pageClass } from "@/lib/ui";
 import { HOME_DEFAULTS, heroAsPublished, type Hero } from "./hero";
 import MediaTray, { type GalleryItem } from "./MediaTray";
 import Photo from "./Photo";
@@ -282,22 +282,18 @@ export default function CmsPage() {
      presenting controls that cannot work. */
   if (checked && !allowed) {
     return (
-      <main className="max-w-6xl mx-auto p-4 min-h-screen">
-        <div className="bg-surface-muted text-ink-900 rounded-card px-5 py-3 mb-4 flex items-center gap-3">
-          <Heading level="h1">Website CMS</Heading>
-        </div>
+      <main className={pageClass.wide}>
+        <PageHeader title="Website CMS" />
         <div className="rounded-control bg-accent-100 text-accent-700 px-3 py-2 text-sm">admin or manager role required</div>
       </main>
     );
   }
 
   return (
-    <main className="max-w-6xl mx-auto p-4 min-h-screen">
-      <div className="bg-surface-muted text-ink-900 rounded-card px-5 py-3 mb-4 flex flex-wrap items-center gap-3">
-        <Heading level="h1">Website CMS</Heading>
-        <span className="text-xs text-ink-400">homepage &middot; offers &middot; models - changes go live immediately</span>
-        <a className="ml-auto text-xs text-brand-300 hover:underline" href={SITE}>Open the storefront</a>
-      </div>
+    <main className={pageClass.wide}>
+      <PageHeader title="Website CMS"
+        description="Homepage, offers and models - changes go live immediately."
+        actions={<a className="text-xs text-brand-300 hover:underline" href={SITE}>Open the storefront</a>} />
 
       {msg && (<div className="rounded-control bg-accent-100 text-accent-700 px-3 py-2 mb-3 text-sm">{msg}</div>)}
 

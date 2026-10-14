@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { API } from "@/lib/api";
 import { Badge, Card, Heading, cn } from "@/app/components/ui";
-import { kickerClass } from "@/lib/ui";
+import { kickerClass, pageClass } from "@/lib/ui";
 import SamplePreview from "./SamplePreview";
 import { CHANNELS, type ChannelId } from "./channels";
 
@@ -110,7 +110,7 @@ export default function ChannelDashboard({ channelId }: { channelId: ChannelId }
           + "products are live. Nothing here fills that gap in.";
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 px-4 pt-8 pb-16">
+    <main className={pageClass.wide}>
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <Heading level="h1">{channel.heading}</Heading>

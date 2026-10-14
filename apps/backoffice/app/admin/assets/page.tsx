@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { aud } from "@/lib/format";
 import { Badge, Button, Card, Input, PageHeader, Select, Stat, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
-import { gradeTone, statusTone } from "@/lib/ui";
+import { gradeTone, pageClass, statusTone } from "@/lib/ui";
 
 /* THE INVENTORY: every unit the shop holds, in any state, filtered and paged.
 
@@ -131,7 +131,7 @@ export default function InventoryPage() {
     || f.warehouse !== "" || f.q.trim() !== "";
 
   return (
-    <main className="mx-auto max-w-[100rem] px-4 pb-16 pt-8 space-y-6">
+    <main className={pageClass.wide}>
       <PageHeader
         title={<>Inventory</>}
         description={

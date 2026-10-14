@@ -22,7 +22,7 @@ import { Badge, Button, Card, Heading, Input, PageHeader, Select, Stat, Table, T
 import { apiFetch } from "@/lib/api";
 import { aud, when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
-import { kickerClass, linkClass } from "@/lib/ui";
+import { kickerClass, linkClass, pageClass } from "@/lib/ui";
 
 type Invoice = {
   id: number; public_id: string; number: string; order_id: number | null; customer_id: number | null;
@@ -109,11 +109,11 @@ export default function InvoicesPage() {
   }
 
   if (!checked || !loaded) {
-    return <main className="mx-auto max-w-6xl px-4 pt-8 pb-16"><p className="text-sm text-ink-500">Loading...</p></main>;
+    return <main className={pageClass.wide}><p className="text-sm text-ink-500">Loading...</p></main>;
   }
   if (!allowed) {
     return (
-      <main className="mx-auto max-w-6xl px-4 pt-8 pb-16">
+      <main className={pageClass.wide}>
         <Card className="p-6">
           <Heading level="h3" as="h2">Invoices</Heading>
           <p className="mt-2 text-sm text-ink-500">The books are an administrator&apos;s screen.</p>
@@ -125,7 +125,7 @@ export default function InvoicesPage() {
   const pageValue = rows.reduce((s, i) => s + i.total_cents, 0);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 px-4 pt-8 pb-16">
+    <main className={pageClass.wide}>
       <PageHeader
         title={<>Manage invoices</>}
         description={

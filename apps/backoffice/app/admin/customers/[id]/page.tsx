@@ -5,7 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { Badge, Card, Heading, Stat, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
 import { aud, when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
-import { linkClass, statusTone } from "@/lib/ui";
+import { linkClass, pageClass, statusTone } from "@/lib/ui";
 
 /* One customer: who they are and every order they have placed.
 
@@ -64,7 +64,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const cleared = checked && allowed && c != null && data != null;
 
   return (
-    <main className="max-w-5xl mx-auto p-4 space-y-4 min-h-screen">
+    <main className={pageClass.narrow}>
       <a href="/admin/customers" className={cn("text-sm", linkClass)}>&larr; All customers</a>
       <Heading level="h1">{cleared && c ? c.email : "Customer #" + id}</Heading>
 

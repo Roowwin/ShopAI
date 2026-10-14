@@ -40,7 +40,7 @@ import {
 import { apiFetch } from "@/lib/api";
 import { when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
-import { kickerClass } from "@/lib/ui";
+import { kickerClass, pageClass } from "@/lib/ui";
 
 type Member = {
   id: number;
@@ -156,11 +156,11 @@ export default function TeamPage() {
   }
 
   if (!checked) {
-    return <main className="mx-auto max-w-6xl px-4 pt-8 pb-16"><p className="text-sm text-ink-500">Loading...</p></main>;
+    return <main className={pageClass.wide}><p className="text-sm text-ink-500">Loading...</p></main>;
   }
   if (!allowed) {
     return (
-      <main className="mx-auto max-w-6xl px-4 pt-8 pb-16">
+      <main className={pageClass.wide}>
         <Card className="p-6">
           <Heading level="h3" as="h2">Team</Heading>
           <p className="mt-2 text-sm text-ink-500">
@@ -187,7 +187,7 @@ export default function TeamPage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 px-4 pt-8 pb-16">
+    <main className={pageClass.wide}>
       <PageHeader
         title={<>Team</>}
         description={

@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Card, Heading, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
+import { Card, Heading, PageHeader, TBody, TD, TH, THead, TR, Table } from "@/app/components/ui";
 import { requireRole, useMe } from "@/lib/session";
+import { pageClass } from "@/lib/ui";
 
 type Sub = { email: string; created_at: string };
 
@@ -40,11 +41,9 @@ export default function NewsletterPage() {
   }, [checked, allowed, load]);
 
   return (
-    <main className="max-w-6xl mx-auto p-4 min-h-screen">
-      <div className="bg-surface-muted text-ink-900 rounded-card px-5 py-3 mb-4 flex items-center gap-3">
-        <Heading level="h1">Newsletter</Heading>
-        <span className="text-xs text-ink-400">public signups from the storefront footer</span>
-      </div>
+    <main className={pageClass.wide}>
+      <PageHeader title="Newsletter"
+        description="Public signups from the storefront footer." />
       {msg && (<div className="rounded-control bg-accent-100 text-accent-700 px-3 py-2 mb-3 text-sm">{msg}</div>)}
 
       <Card className="p-4">

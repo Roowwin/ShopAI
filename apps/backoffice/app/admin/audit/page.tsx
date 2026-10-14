@@ -7,6 +7,7 @@ import { Badge, Button, Card, Heading, PageHeader, Select, Stat, Table, TBody, T
 import { when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
 import { MUTED_TONE } from "@/app/components/dashboard/tokens";
+import { pageClass } from "@/lib/ui";
 
 /* The audit browser: every recorded action, with the state it moved between.
 
@@ -92,7 +93,7 @@ export default function AuditPage() {
   for (const e of rows) { byEntity[e.entity] = (byEntity[e.entity] ?? 0) + 1; }
 
   return (
-    <main className="max-w-6xl mx-auto p-4 space-y-4 min-h-screen">
+    <main className={pageClass.wide}>
       <PageHeader
         title={<>Audit</>}
         description={<>Append-only history. Read-only here - nothing on this page writes.</>}

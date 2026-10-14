@@ -5,7 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { Badge, Button, Card, Heading, Input, Stat, Table, TBody, TD, TH, THead, TR, cn } from "@/app/components/ui";
 import { aud, when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
-import { gradeTone, linkClass, statusTone } from "@/lib/ui";
+import { gradeTone, linkClass, pageClass, statusTone } from "@/lib/ui";
 import AuditFeed from "@/app/components/dashboard/AuditFeed";
 import ImageHub, { type HubImage } from "./ImageHub";
 
@@ -133,7 +133,7 @@ export default function AssetDetailPage({ params }: { params: Promise<{ id: stri
   const ready = a?.status === "graded";
 
   return (
-    <main className="max-w-5xl mx-auto p-4 space-y-4 min-h-screen">
+    <main className={pageClass.narrow}>
       <a href="/admin/assets" className={cn("text-sm", linkClass)}>&larr; Assets workbench</a>
       <Heading level="h1">
         Asset <span className="font-mono text-base">{a?.serial_number ?? "#" + id}</span>

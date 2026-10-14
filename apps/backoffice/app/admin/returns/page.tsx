@@ -23,7 +23,7 @@ import { Badge, Button, Card, Heading, Input, cn } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
 import { aud, when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
-import { kickerClass } from "@/lib/ui";
+import { kickerClass, pageClass } from "@/lib/ui";
 
 type Rma = {
   id: number; public_id: string; number: string; order_id: number; customer_id: number | null;
@@ -130,17 +130,17 @@ export default function ReturnsManagerPage() {
   }
 
   if (!checked || !loaded) {
-    return <main className="mx-auto max-w-5xl px-4 pt-8"><p className="text-sm text-ink-500">Loading...</p></main>;
+    return <main className={pageClass.wide}><p className="text-sm text-ink-500">Loading...</p></main>;
   }
   if (!allowed) {
-    return <main className="mx-auto max-w-5xl px-4 pt-8">
+    return <main className={pageClass.wide}>
       <p className="text-sm text-danger-600">Returns are an operations screen.</p></main>;
   }
 
   const r = detail?.request;
 
   return (
-    <main className="mx-auto max-w-6xl px-4 pt-8 pb-24">
+    <main className={pageClass.wide}>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Heading level="h1">Returns &amp; RMA</Heading>
         <Badge colorClass="bg-surface-sunken text-ink-700">{rows.length} shown</Badge>

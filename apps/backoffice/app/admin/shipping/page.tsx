@@ -36,7 +36,7 @@ import {
 import { apiFetch } from "@/lib/api";
 import { aud, when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
-import { gradeTone, kickerClass, linkClass } from "@/lib/ui";
+import { gradeTone, kickerClass, linkClass, pageClass } from "@/lib/ui";
 
 type Line = { asset_id: number | null; sku_title: string; unit_price_cents: number;
               line_total_cents: number; grade: string | null; serial_tail: string | null };
@@ -170,11 +170,11 @@ export default function PickAndPackPage() {
   }
 
   if (!checked || !loaded) {
-    return <main className="mx-auto max-w-6xl px-4 pt-8 pb-16"><p className="text-sm text-ink-500">Loading...</p></main>;
+    return <main className={pageClass.wide}><p className="text-sm text-ink-500">Loading...</p></main>;
   }
   if (!allowed) {
     return (
-      <main className="mx-auto max-w-6xl px-4 pt-8 pb-16">
+      <main className={pageClass.wide}>
         <Card className="p-6">
           <Heading level="h3" as="h2">Pick &amp; Pack</Heading>
           <p className="mt-2 text-sm text-ink-500">
@@ -188,7 +188,7 @@ export default function PickAndPackPage() {
   const unconfigured = chosen && !chosen.configured;
 
   return (
-    <main className="mx-auto max-w-7xl space-y-6 px-4 pt-8 pb-16">
+    <main className={pageClass.wide}>
       <PageHeader
         title={<>Pick &amp; Pack</>}
         description={

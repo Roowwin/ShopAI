@@ -27,7 +27,7 @@ import { apiFetch } from "@/lib/api";
 import { aud, when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
 import { cn } from "@/app/components/ui";
-import { kickerClass } from "@/lib/ui";
+import { kickerClass, pageClass } from "@/lib/ui";
 
 type Line = { asset_id: number | null; sku_title: string; qty: number; unit_price_cents: number;
               line_total_cents: number; grade: string | null; serial_tail: string | null };
@@ -80,11 +80,11 @@ export default function InvoiceDocumentPage() {
   }, [checked, allowed, id, load]);
 
   if (!checked || !loaded) {
-    return <main className="mx-auto max-w-3xl px-4 pt-8"><p className="text-sm text-ink-500">Loading...</p></main>;
+    return <main className={pageClass.narrow}><p className="text-sm text-ink-500">Loading...</p></main>;
   }
   if (!allowed || err || !doc) {
     return (
-      <main className="mx-auto max-w-3xl px-4 pt-8">
+      <main className={pageClass.narrow}>
         {err || !allowed
           ? <p className="text-sm text-danger-600">{err || "The books are an administrator's screen."}</p>
           : null}
@@ -105,7 +105,7 @@ export default function InvoiceDocumentPage() {
   const sellerLines = seller.address.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
   return (
-    <main className="mx-auto max-w-3xl px-4 pt-8 pb-24">
+    <main className={pageClass.narrow}>
       <div className="mb-6 flex flex-wrap items-center gap-3 print:hidden">
         <Heading level="h1">Invoice</Heading>
         <Badge colorClass={STATUS_TONE[doc.status] ?? "bg-surface-sunken text-ink-600"}>{doc.status}</Badge>

@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { aud } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
 import ReconcilePanel from "./ReconcilePanel";
+import { pageClass } from "@/lib/ui";
 
 /* Logistics: what needs a human today, and which carrier to use for the next parcel.
 
@@ -109,7 +110,7 @@ export default function LogisticsPage() {
   const rec = carriers?.recommendation;
 
   return (
-    <main className="max-w-6xl mx-auto p-4 space-y-4 min-h-screen">
+    <main className={pageClass.wide}>
       <PageHeader
         title={<>Logistics</>}
         description={

@@ -1,7 +1,8 @@
 "use client";
 
-import { Heading } from "@/app/components/ui";
+import { PageHeader } from "@/app/components/ui";
 import PhotoFolder from "../PhotoFolder";
+import { pageClass } from "@/lib/ui";
 
 /* THE PHOTO FOLDER, on a page of its own.
 
@@ -15,16 +16,15 @@ import PhotoFolder from "../PhotoFolder";
 
 export default function PhotoFolderPage() {
   return (
-    <main className="mx-auto max-w-6xl px-4 pt-8 pb-16">
+    <main className={pageClass.wide}>
       <a href="/admin/product-groups" className="text-sm text-brand-300 hover:underline">
         &larr; Product groups
       </a>
-      <div className="mt-4 bg-surface-muted text-ink-900 rounded-card px-5 py-3">
-        <Heading level="h1">Photo folder</Heading>
-        <p className="mt-1 text-xs text-ink-400">
-          Put a whole folder of photographs in at once. Nothing is attached here - each product group
-          then offers the photo whose filename matches it, and you accept the ones you agree with.
-        </p>
+      <div className="mt-4">
+        <PageHeader
+          title="Photo folder"
+          description="Put a whole folder of photographs in at once. Nothing is attached here - each product group then offers the photo whose filename matches it, and you accept the ones you agree with."
+        />
       </div>
       <div className="mt-4">
         <PhotoFolder />

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { Button, Card, Input, PageHeader } from "@/app/components/ui";
+import { pageClass } from "@/lib/ui";
 
 export default function SecurityPage() {
   const [secret, setSecret] = useState("");
@@ -32,7 +33,7 @@ export default function SecurityPage() {
   }
 
   return (
-    <main className="max-w-2xl mx-auto pt-10 px-4">
+    <main className={pageClass.narrow}>
       <PageHeader title={<>Security</>} className="mb-4" />
       <Card className="p-6 space-y-4">
         {!enabled && !secret && (

@@ -12,6 +12,7 @@ import KpiTile from "@/app/components/dashboard/KpiTile";
 import PipelineMap, { lifecycleStages, stuckNote } from "@/app/components/dashboard/PipelineMap";
 import { GradeStack, Sparkline, StatusDonut, type Slice } from "@/app/components/dashboard/charts";
 import { NOTICE_TONE } from "@/app/components/dashboard/tokens";
+import { pageClass } from "@/lib/ui";
 
 /* The staff overview: /admin is the money and the operations, in one read of GET /staff/overview.
 
@@ -216,7 +217,7 @@ export default function AdminHome() {
   const tiles = data ? tilesFor(data.needs_attention, data.reservations) : [];
 
   return (
-    <main className="max-w-6xl mx-auto p-4 space-y-4 min-h-screen">
+    <main className={pageClass.wide}>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Heading level="h1">Overview</Heading>

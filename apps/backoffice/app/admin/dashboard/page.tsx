@@ -11,6 +11,7 @@ import AttentionFeed, { type FeedItem } from "./attention";
 import NextGroupCard from "./NextGroupCard";
 import KpiTile from "@/app/components/dashboard/KpiTile";
 import PipelineMap, { lifecycleStages, stuckNote } from "@/app/components/dashboard/PipelineMap";
+import { pageClass } from "@/lib/ui";
 
 /* /admin/dashboard - the operations view: the pipeline as a process flow, a hero revenue card
    with three supporting figures, a featured "next asset" banner, two hand-rolled SVG charts, the
@@ -151,7 +152,7 @@ export default function DashboardPage() {
   const categories = d ? Object.entries(d.category_mix) : [];
 
   return (
-    <main className="max-w-6xl mx-auto p-4 space-y-6 min-h-screen">
+    <main className={pageClass.wide}>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Heading level="h1">Dashboard</Heading>

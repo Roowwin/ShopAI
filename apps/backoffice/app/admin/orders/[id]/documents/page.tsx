@@ -28,6 +28,7 @@ import { Button, Card, Heading } from "@/app/components/ui";
 import { apiFetch } from "@/lib/api";
 import { aud, when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
+import { pageClass } from "@/lib/ui";
 
 type Line = { asset_id: number | null; sku_title: string; unit_price_cents: number;
               line_total_cents: number; grade: string | null; serial_tail: string | null };
@@ -74,11 +75,11 @@ export default function OrderDocumentsPage() {
   }, [checked, allowed, id, load]);
 
   if (!checked || !loaded) {
-    return <main className="mx-auto max-w-3xl px-4 pt-8"><p className="text-sm text-ink-500">Loading...</p></main>;
+    return <main className={pageClass.narrow}><p className="text-sm text-ink-500">Loading...</p></main>;
   }
   if (!allowed) {
     return (
-      <main className="mx-auto max-w-3xl px-4 pt-8">
+      <main className={pageClass.narrow}>
         <Card className="p-6">
           <Heading level="h3" as="h2">Documents</Heading>
           <p className="mt-2 text-sm text-ink-500">Packing is a warehouse screen.</p>
@@ -88,7 +89,7 @@ export default function OrderDocumentsPage() {
   }
   if (err || !doc) {
     return (
-      <main className="mx-auto max-w-3xl px-4 pt-8">
+      <main className={pageClass.narrow}>
         <p className="text-sm text-danger-600">{err || "Order not found."}</p>
       </main>
     );
@@ -99,7 +100,7 @@ export default function OrderDocumentsPage() {
     .filter(Boolean).join(" "), recipient.country].filter(Boolean);
 
   return (
-    <main className="mx-auto max-w-3xl px-4 pt-8 pb-24">
+    <main className={pageClass.narrow}>
       {/* Screen-only controls. Every one of them is `print:hidden`, so paper carries the documents
           and nothing else. */}
       <div className="mb-6 flex flex-wrap items-center gap-3 print:hidden">

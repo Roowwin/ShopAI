@@ -80,3 +80,31 @@ export const kickerClass = "text-eyebrow uppercase text-ink-500";
    Written verbatim rather than composed, exactly as the tones above are: Tailwind scans source
    TEXT, so a built-up string would emit no rule at all. */
 export const linkClass = "text-brand-300 hover:underline";
+
+/* THE PAGE CONTAINER, in one place at last.
+
+   `PageHeader`'s own note says the container was left out of it deliberately - "several pages still
+   disagree about the container width; folding that in would silently re-lay-out every page in the
+   app under cover of a header change, so it stays a separate decision". That was right then. This is
+   the decision, and it lives here rather than inside the header so a page can still see it and
+   choose.
+
+   TWO TIERS, because one width cannot be right for both kinds of page. A list of records wants the
+   room: Inventory's nine columns at 1600px is what made the wide view worth having, and every other
+   table here holds the same shape of thing. A form does not want it at all - a password field or a
+   two-field settings page stretched across a 1600px line is harder to fill in, not easier - so the
+   detail and settings screens share a 1024px column instead.
+
+   THE PADDING, THE TOP AND BOTTOM SPACE AND THE STACK GAP ARE THE SAME IN BOTH, and that is what
+   makes the app read as one app when you move from a list to the record it opened. `min-h-screen`
+   is deliberately absent: the admin layout's own root already carries it, so a second one on the
+   page was doing nothing.
+
+   These are literals and must stay literals - Tailwind scans source text, so a class assembled from
+   pieces emits nothing and the page silently loses its container. */
+export const pageClass = {
+  /** Lists, tables and workspaces. The Inventory view, everywhere a table lives. */
+  wide: "mx-auto max-w-[100rem] px-4 pt-8 pb-16 space-y-6",
+  /** One record, or a form. Narrow enough to read and to fill in. */
+  narrow: "mx-auto max-w-5xl px-4 pt-8 pb-16 space-y-6",
+} as const;

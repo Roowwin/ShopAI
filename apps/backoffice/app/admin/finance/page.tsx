@@ -18,7 +18,7 @@ import { apiFetch } from "@/lib/api";
 import { aud } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
 import { cn } from "@/app/components/ui";
-import { kickerClass } from "@/lib/ui";
+import { kickerClass, pageClass } from "@/lib/ui";
 
 type Pnl = {
   from: string; to: string; revenue_cents: number; cogs_cents: number;
@@ -62,11 +62,11 @@ export default function FinancialsPage() {
   }, [checked, allowed, load]);
 
   if (!checked || !loaded) {
-    return <main className="mx-auto max-w-5xl px-4 pt-8 pb-16"><p className="text-sm text-ink-500">Loading...</p></main>;
+    return <main className={pageClass.wide}><p className="text-sm text-ink-500">Loading...</p></main>;
   }
   if (!allowed) {
     return (
-      <main className="mx-auto max-w-5xl px-4 pt-8 pb-16">
+      <main className={pageClass.wide}>
         <Card className="p-6">
           <Heading level="h3" as="h2">Financials</Heading>
           <p className="mt-2 text-sm text-ink-500">
@@ -79,7 +79,7 @@ export default function FinancialsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 px-4 pt-8 pb-16">
+    <main className={pageClass.wide}>
       <div>
         <Heading level="h1">Financials</Heading>
         <p className="mt-1 text-sm text-ink-500">

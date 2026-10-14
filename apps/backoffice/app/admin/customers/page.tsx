@@ -5,7 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { Badge, Button, Card, Input, PageHeader, Stat, Table, TBody, TD, TH, THead, TR } from "@/app/components/ui";
 import { aud, when } from "@/lib/format";
 import { requireRole, useMe } from "@/lib/session";
-import { statusTone } from "@/lib/ui";
+import { pageClass, statusTone } from "@/lib/ui";
 
 /* The customer list: email, display name, how many orders they place and what they have spent.
 
@@ -55,7 +55,7 @@ export default function CustomersPage() {
   const lifetime = rows.reduce((sum, c) => sum + c.lifetime_cents, 0);
 
   return (
-    <main className="max-w-6xl mx-auto p-4 space-y-4 min-h-screen">
+    <main className={pageClass.wide}>
       <PageHeader
         title={<>Customers</>}
         description={<>Names and addresses from the storefront. Admin and manager only, on every request.</>}
