@@ -47,7 +47,10 @@ import BulkBar from "./BulkBar";
    THE ROW IS THE ONE WAY IN. A press anywhere on it selects that unit for the bench. The serial
    keeps its own link to the full record and stops the press from reaching the row underneath it. */
 type Asset = { id: number; public_id: string; serial_number: string | null; status: string;
-               grade: string | null; lot_number: string; model: string | null; title: string | null };
+               grade: string | null; lot_number: string; model: string | null; title: string | null;
+               /* `brand` rides with the model because the bulk-image guard compares the same pair the
+                  door behind it matches on - see the note on the endpoint's query. */
+               brand: string | null };
 
 const STATUSES = ["received", "tested", "in_repair", "graded", "listed", "reserved", "sold", "shipped", "returned", "scrapped"];
 

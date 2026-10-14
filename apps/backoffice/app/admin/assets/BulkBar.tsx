@@ -20,20 +20,25 @@ import { Button, Input, cn } from "@/app/components/ui";
    kept when anything failed, so the remainder can be retried; it is cleared only when every
    unit in the run was written. */
 
-export type BulkTarget = { id: number; serial_number: string | null };
+export type BulkTarget = { id: number; serial_number: string | null;
+                           /* The two fields the image guard compares. They ride on the queue's own
+                              rows, so the guard needs no extra read - see the page's Asset type. */
+                           model?: string | null; brand?: string | null };
 
-type Action = "grade" | "price" | "store";
+type Action = "grade" | "price" | "store" | "image";
 
 const BUTTON: Record<Action, string> = {
   grade: "Bulk grade A",
   price: "Set price",
   store: "Push to store",
+  image: "Upload image",
 };
 
 const QUESTION: Record<Action, string> = {
   grade: "Grade every selected unit A?",
   price: "Set one sale price on every selected unit?",
   store: "List every selected unit for sale?",
+  image: "Apply one image to every selected unit?",
 };
 
 /* What the API actually does, said before the press rather than after it. Each of these was read
@@ -49,6 +54,7 @@ const QUESTION: Record<Action, string> = {
 function caveat(action: Action): string {
   if (action === "grade") { return "Grading also moves each unit to the graded state."; }
   if (action === "price") { return "This writes the price only; it does not change any status."; }
+  if (action === "image") { return "One file, attached to each selected unit. Nothing is re-uploaded per unit - the bytes are stored once and assigned many times."; }
   return "A listed unit reaches the storefront only once its lot is active; in a draft lot it stays hidden.";
 }
 
@@ -69,7 +75,31 @@ export default function BulkBar({ targets, onDone, onClear }: {
   const [guard, setGuard] = useState("");
   const [run, setRun] = useState<Run | null>(null);
 
+  const [file, setFile] = useState<File | null>(null);
+
   const n = targets.length;
+
+  /* THE MODEL GUARD, and the only action it applies to. Grading, pricing and listing are facts
+     about a unit, so any group of units can take them; a photograph is a fact about a MODEL, so
+     applying one across a mixed selection would file the wrong picture against a unit nobody
+     looked at. The button is disabled unless every selected unit shares the same brand AND model.
+
+     BRAND AND MODEL, not the model string alone, because that is the pair the door behind this
+     button matches on (the catalogue can hold two rows for one brand and model). Comparing model
+     names alone would let a second brand's identically-named model through the button and into a
+     refusal, and a button that looks available is a promise.
+
+     A unit with NO model can never satisfy this - there would be no model to attach the image to -
+     so an empty model fails the guard rather than matching the other empties.
+
+     THE REASON IS VISIBLE TEXT, NOT A HOVER TOOLTIP, and that is deliberate: this app's disabled
+     controls carry `disabled:pointer-events-none`, so a `title` on the button would never fire. The
+     sentence is tied to the button with `aria-describedby` instead, so it is announced with the
+     control rather than left as a visual hint. */
+  const first = targets[0];
+  const imageReady = n > 0 && !!first?.model
+    && targets.every((t) => t.brand === first.brand && t.model === first.model);
+  const IMAGE_GUARD_ID = "bulk-image-model-guard";
 
   function ask(a: Action) {
     setRun(null); setGuard(""); setPending(a);
@@ -104,6 +134,10 @@ export default function BulkBar({ targets, onDone, onClear }: {
         return;
       }
     }
+    if (action === "image" && !file) {
+      setGuard("Choose an image file to apply.");
+      return;
+    }
     setGuard(""); setBusy(true);
 
     /* The list is snapshotted here, so a checkbox moved while the loop is in flight cannot change
@@ -111,6 +145,53 @@ export default function BulkBar({ targets, onDone, onClear }: {
     const batch = targets.slice();
     const failed: Failure[] = [];
     let done = 0;
+
+    /* THE IMAGE ACTION IS ONE UPLOAD AND ONE APPLY, not a per-unit loop. The file is posted once,
+       onto the first selected unit - simply the unit the new assignment hangs off - and the apply
+       door then attaches the same STORED bytes to every other selected unit. Running the loop below
+       instead would upload one photograph N times and keep N copies of it in the database, which is
+       exactly what keeping `media_objects` and `asset_images` apart exists to avoid. */
+    if (action === "image") {
+      let split = "";
+      const src = batch[0];
+      try {
+        const fd = new FormData();
+        fd.append("file", file as File);
+        const up = await apiFetch("/staff/assets/" + src.id + "/images", { method: "POST", body: fd });
+        if (up.status !== 200 && up.status !== 201) {
+          const j: any = await up.json().catch(() => ({}));
+          failed.push({ label: "upload", detail: typeof j?.detail === "string" ? j.detail : "upload refused (" + up.status + ")" });
+        } else {
+          const { image_id } = await up.json();
+          const r = await apiFetch("/staff/assets/" + src.id + "/images/" + image_id + "/apply-to-selection", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ asset_ids: batch.map((t) => t.id) }),
+          });
+          if (r.status !== 200 && r.status !== 201) {
+            const j: any = await r.json().catch(() => ({}));
+            failed.push({ label: "apply to the selection",
+                          detail: typeof j?.detail === "string" ? j.detail : "apply refused (" + r.status + ")" });
+          } else {
+            const j: any = await r.json();
+            /* Every selected unit carries the image once this returns - the ones that already had
+               it still do - so `done` is the whole selection. The API's own split is carried into the
+               caveat below rather than being rounded away. */
+            done = j.selected;
+            split = j.applied + " newly assigned, " + j.already_had_it + " already had it.";
+          }
+        }
+      } catch {
+        failed.push({ label: "upload", detail: "the request could not be sent" });
+      }
+      setBusy(false);
+      setPending(null);
+      setFile(null);
+      setRun({ label: BUTTON[action], done, total: batch.length, failed,
+               caveat: (split ? split + " " : "") + caveat(action) });
+      await onDone();
+      if (failed.length === 0) { onClear(); }
+      return;
+    }
 
     for (const t of batch) {
       const label = t.serial_number ?? "#" + t.id;
@@ -153,6 +234,9 @@ export default function BulkBar({ targets, onDone, onClear }: {
             <Button variant="secondary" size="sm" disabled={busy} onClick={() => ask("grade")}>Bulk grade A</Button>
             <Button variant="secondary" size="sm" disabled={busy} onClick={() => ask("price")}>Set price</Button>
             <Button variant="secondary" size="sm" disabled={busy} onClick={() => ask("store")}>Push to store</Button>
+            <Button variant="secondary" size="sm" disabled={busy || !imageReady}
+                    describedBy={!imageReady ? IMAGE_GUARD_ID : undefined}
+                    onClick={() => ask("image")}>Upload image</Button>
             <Button variant="muted" size="sm" disabled={busy} onClick={onClear}>Clear</Button>
           </div>
         </div>
@@ -160,6 +244,16 @@ export default function BulkBar({ targets, onDone, onClear }: {
         {/* The foot of the bar: the confirmation, the guard, or what the last run actually did.
             It carries its own ground so it reads as the bar's floor rather than as another row. */}
         <div className="border-t border-line bg-surface-muted px-4 py-3">
+          {/* WHY THE IMAGE BUTTON IS UNAVAILABLE, said in words rather than left to a greyed-out
+              control the operator will read as a bug. It is rendered FIRST and unconditionally while
+              the guard blocks, so the id the button points at always exists - a described-by that
+              resolves only in some states is a reference that dangles in the others. */}
+          {n > 0 && !imageReady && (
+            <p id={IMAGE_GUARD_ID} className="pb-1 text-xs text-ink-500">
+              All selected assets must be the same model to apply a bulk image.
+            </p>
+          )}
+
           {pending && (
             <div className="flex flex-wrap items-end gap-3">
               <div className="min-w-[16rem] flex-1">
@@ -177,6 +271,21 @@ export default function BulkBar({ targets, onDone, onClear }: {
                     value={price}
                     onChange={(e) => setPrice(e.target.value)}
                     aria-label="Sale price in cents"
+                  />
+                </div>
+              )}
+              {pending === "image" && (
+                /* The accept list is the server's own whitelist, minus SVG - which the upload door
+                   refuses on purpose, because it serves the bytes back to a browser and an SVG can
+                   carry script. Offering a format the endpoint would reject is a worse experience
+                   than not offering it. */
+                <div className="w-64">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                    aria-label="The image to apply to every selected unit"
+                    className="w-full text-xs text-ink-600 file:mr-2 file:cursor-pointer file:rounded-control file:bg-surface-sunken file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-ink-700 file:ring-1 file:ring-line"
                   />
                 </div>
               )}

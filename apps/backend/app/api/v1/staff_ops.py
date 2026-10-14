@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.api.v1.deps import require_roles
 from app.core.db import get_db
 from app.models import Asset, Lot, StockMovement
-from app.models.catalog import Product
+from app.models.catalog import Brand, Product
 from app.services.audit import audit
 from app.services.margin import margin_refusal
 
@@ -484,8 +484,15 @@ async def list_assets(status: str | None = None, lot_number: str | None = None,
     # The queue draws a MODEL on every row, so the product's own text rides along with it. A LEFT
     # JOIN, because product_id is nullable: an unassigned unit is still a unit, and an inner join
     # would drop it out of the list altogether - the same rule the worklist query follows.
-    q = (select(Asset, Product.model, Product.title)
+    #
+    # `brand` rides with the model because the workbench's bulk-image guard needs the SAME key the
+    # server matches on. That door matches brand+model rather than product_id (see apply-to-model:
+    # the catalogue can hold two rows for one brand and model), so a guard that compared model
+    # strings alone would let a second brand's identical model name through the button and into a
+    # refusal - the client and the server have to be asking the same question.
+    q = (select(Asset, Product.model, Product.title, Brand.name)
          .join(Product, Product.id == Asset.product_id, isouter=True)
+         .join(Brand, Brand.id == Product.brand_id, isouter=True)
          .options(selectinload(Asset.lot)))
     if status:
         q = q.where(Asset.status == status)
@@ -500,8 +507,8 @@ async def list_assets(status: str | None = None, lot_number: str | None = None,
              "channel": a.channel, "on_shelf": a.on_shelf,
              # `model` is the short name the queue scans ("Latitude 5420"); `title` is the
              # catalogue's full line and is what the bench falls back to when model is absent.
-             "model": model, "title": title,
-             "warehouse": a.lot.warehouse, "zone": a.lot.zone} for a, model, title in rows]
+             "model": model, "title": title, "brand": brand,
+             "warehouse": a.lot.warehouse, "zone": a.lot.zone} for a, model, title, brand in rows]
 
 
 # How many awaiting-grade units the workbench returns at once. A corporate lot runs to a few
@@ -1170,6 +1177,7 @@ async def create_product(body: ProductIn, staff: dict = Depends(require_roles(*R
 ROLES_ASSET_MEDIA = ("admin", "manager")
 ACTION_UPLOAD_IMAGE = "upload_image"
 ACTION_APPLY_IMAGE_TO_MODEL = "apply_image_to_model"
+ACTION_APPLY_IMAGE_TO_SELECTION = "apply_image_to_selection"
 ACTION_SET_GRADE_TEMPLATE = "set_grade_template"
 
 # What may be stored, and how much. The migration carries the same two rules as CHECKs; these are
@@ -1328,6 +1336,90 @@ async def apply_image_to_model(asset_id: int, image_id: int,
     others = int(matched) - 1
     return {"media_id": img["media_id"], "applied": len(targets), "already_had_it": others - len(targets),
             "matched_other_units": others}
+
+
+class ApplyImageSelectionIn(BaseModel):
+    """The units an image is applied to. Bounded at both ends, because this is one request rather
+    than a sweep: a selection is a page of the workbench queue, not the estate."""
+    asset_ids: list[int] = Field(min_length=1, max_length=200)
+
+
+@router.post("/assets/{asset_id}/images/{image_id}/apply-to-selection")
+async def apply_image_to_selection(asset_id: int, image_id: int, body: ApplyImageSelectionIn,
+                                   staff: dict = Depends(require_roles(*ROLES_ASSET_MEDIA)),
+                                   db=Depends(get_db)):
+    """Apply one unit's image to an EXPLICIT LIST of units - the workbench's bulk-image action.
+
+    HOW THIS DIFFERS FROM apply-to-model ABOVE, because the two look alike and are not. That door
+    takes no list at all: it fans out to every unit of the source's brand and model IN THE SOURCE'S
+    LOT, which is what a photographer wants after shooting one unit of a box. This one applies to
+    exactly the units the operator selected, wherever they sit, and applies the model rule to the
+    selection that that door applies to the lot.
+
+    THE MODEL GUARD IS ENFORCED HERE, NOT ONLY IN THE BUTTON. The workbench disables its control
+    when the selection is mixed, which is a courtesy that saves the operator a wasted upload; THIS is
+    the refusal that holds, because a client is not a guard and the door is reachable by hand. Every
+    requested unit must share the source's brand and model - matched as brand+model for the reason
+    the door above gives (the catalogue can hold two rows for one brand and model, and a photograph
+    belongs to the model, not to the row). A unit with no product can never match, so it is refused
+    rather than quietly skipped.
+    """
+    await _require_role(staff, ROLES_ASSET_MEDIA, ACTION_APPLY_IMAGE_TO_SELECTION, None)
+    img = await _image_row(db, asset_id=asset_id, image_id=image_id)
+    if img is None:
+        raise HTTPException(status_code=404, detail="image not found on that asset")
+
+    src = (await db.execute(text("""
+        SELECT a.id, a.product_id, p.brand_id, p.model
+        FROM assets a LEFT JOIN products p ON p.id = a.product_id
+        WHERE a.id = :i
+    """), {"i": asset_id})).mappings().first()
+    if src is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    if src["product_id"] is None:
+        raise HTTPException(status_code=409,
+                            detail="this unit has no product, so there is no model to match")
+
+    wanted = sorted(set(body.asset_ids))
+    rows = (await db.execute(text("""
+        SELECT a.id, a.serial_number::text AS serial_number, a.product_id, p.brand_id, p.model
+        FROM assets a LEFT JOIN products p ON p.id = a.product_id
+        WHERE a.id = ANY(:ids)
+    """), {"ids": wanted})).mappings().all()
+    found = {r["id"] for r in rows}
+    missing = [i for i in wanted if i not in found]
+    if missing:
+        raise HTTPException(status_code=404,
+                            detail="no unit with id " + ", ".join(str(i) for i in missing[:5]))
+
+    off = [r for r in rows
+           if r["product_id"] is None or r["brand_id"] != src["brand_id"] or r["model"] != src["model"]]
+    if off:
+        names = ", ".join((r["serial_number"] or "#" + str(r["id"])) for r in off[:5])
+        raise HTTPException(
+            status_code=422,
+            detail="every selected unit must be the same brand and model as the source unit; "
+                   "these are not: " + names)
+
+    applied = (await db.execute(text("""
+        INSERT INTO asset_images (asset_id, media_id, applied_by, applied_by_bulk)
+        SELECT a.id, :m, :u, true FROM assets a WHERE a.id = ANY(:ids)
+        ON CONFLICT (asset_id, media_id) DO NOTHING
+        RETURNING asset_id
+    """), {"m": img["media_id"], "u": staff["id"], "ids": wanted})).scalars().all()
+
+    for target_id in applied:
+        await _audit_execution(db, staff, None, entity="asset", entity_id=target_id,
+                               action="image_apply",
+                               after={"media_id": img["media_id"], "from_asset_id": asset_id,
+                                      "bulk": True, "via": "selection"})
+    try:
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback(); _409(e)
+
+    return {"media_id": img["media_id"], "selected": len(wanted),
+            "applied": len(applied), "already_had_it": len(wanted) - len(applied)}
 
 
 class GradeTemplateIn(BaseModel):

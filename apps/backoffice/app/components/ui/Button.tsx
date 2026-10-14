@@ -77,16 +77,22 @@ type Props = {
   type?: "button" | "submit";
   disabled?: boolean;
   onClick?: () => void;
+  /** The id of an element that explains this control when it cannot be used. A disabled control in
+      this app carries `disabled:pointer-events-none`, so a `title` attribute never fires on it - the
+      explanation has to be a real element in the page, and this is how it is announced WITH the
+      control instead of being left as a visual hint beside it. */
+  describedBy?: string;
 };
 
-export default function Button({ children, variant = "primary", size = "md", className, href, as, type = "button", disabled, onClick }: Props) {
+export default function Button({ children, variant = "primary", size = "md", className, href, as, type = "button", disabled, onClick, describedBy }: Props) {
   const cls = cn(BASE, VARIANTS[variant], SIZES[size], className);
   const Tag = (as ?? (href ? "a" : "button")) as "button" | "a" | "span";
   if (Tag === "a") {
-    return <a href={href} className={cls} onClick={onClick}>{children}</a>;
+    return <a href={href} className={cls} onClick={onClick} aria-describedby={describedBy}>{children}</a>;
   }
   if (Tag === "span") {
     return <span className={cls}>{children}</span>;
   }
-  return <button type={type} className={cls} disabled={disabled} onClick={onClick}>{children}</button>;
+  return <button type={type} className={cls} disabled={disabled} onClick={onClick}
+                 aria-describedby={describedBy}>{children}</button>;
 }
