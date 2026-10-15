@@ -284,6 +284,54 @@ async def test_publish_counts_the_units_the_shop_will_hide(client):
                       i=seeded["asset_ids"]) == 3
 
 
+async def test_the_groups_units_are_the_set_the_inventory_door_filters_to(client):
+    """TWO JOINS, ONE SET. The group page prints a total from `staff_groups.UNITS_OF_GROUP` above
+    rows that come from `staff_ops`'s `group_id` filter, so if the two spelled the join differently
+    the screen would show "7 units" over a table that cannot be paged past 5 - a contradiction
+    neither door can see on its own, because each of them is only answering about itself.
+    """
+    tok = await _staff(client)
+    tag = _tag()
+    seeded = await _seed(tag, model="Widget One", grade="B", n=3)
+    # TWO UNITS THAT MUST STAY OUT, one per half of the key: the same brand and model at another
+    # GRADE, and the same brand and grade under another MODEL.
+    eng = get_engine()
+    async with eng.begin() as c:
+        other_model = (await c.execute(text(
+            "INSERT INTO products (brand_id, category_id, model, title, slug, status)"
+            " VALUES (:b, :c, 'Widget Two', 'Widget Two', :s, 'active') RETURNING id"),
+            {"b": seeded["brand_id"], "c": seeded["category_id"], "s": tag + "-w2"})).scalar_one()
+        for grade, product in (("A", seeded["product_id"]), ("B", other_model)):
+            await c.execute(text("""
+                INSERT INTO assets (serial_number, status, grade, sale_price_cents, lot_id, product_id)
+                VALUES (:ser, 'received', :g, 19999, :lot, :prod)
+            """), {"ser": f"{tag}-OUT-{grade}", "g": grade, "lot": seeded["lot_id"], "prod": product})
+
+    r = await client.get("/staff/assets", headers=_h(tok),
+                         params={"group_id": seeded["group_id"], "with_meta": 1, "limit": 100})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert {i["id"] for i in body["items"]} == set(seeded["asset_ids"]), body["items"]
+    # The group's own aggregates count the same three - which is what lets the page's tiles and its
+    # table footer be read together.
+    detail = (await client.get(f"/staff/product-groups/{seeded['group_id']}", headers=_h(tok))).json()
+    assert body["total"] == detail["aggregates"]["units_total"] == 3
+
+    # A group nobody holds stock of lists nothing rather than the warehouse: a group is declared by
+    # the import, so this is a real state and not an error.
+    empty = await _seed(_tag(), model="Widget Three", grade="D", n=0)
+    r = await client.get("/staff/assets", headers=_h(tok),
+                         params={"group_id": empty["group_id"], "with_meta": 1})
+    assert r.status_code == 200, r.text
+    assert r.json()["items"] == []
+    assert (await client.get(f"/staff/product-groups/{empty['group_id']}",
+                             headers=_h(tok))).json()["aggregates"]["units_total"] == 0
+
+    # The filter is REPORTED, not just applied - the envelope's `applied` is how a caller confirms
+    # what it was answered about.
+    assert body["applied"]["group_id"] == seeded["group_id"]
+
+
 async def test_patch_sets_and_clears_the_price_with_its_source(client):
     """A source that outlives the number it described would be a claim about nothing."""
     tok = await _staff(client)

@@ -535,8 +535,8 @@ FACET_OWN_FILTER = {
 }
 
 
-def _asset_clauses(*, status=None, lot_number=None, product_id=None, q=None, category=None,
-                   brand=None, grade=None, warehouse=None) -> tuple[list[str], dict]:
+def _asset_clauses(*, status=None, lot_number=None, product_id=None, group_id=None, q=None,
+                   category=None, brand=None, grade=None, warehouse=None) -> tuple[list[str], dict]:
     """Every filter this door accepts, as WHERE fragments and their bound values.
 
     `q` is the one that earns its place: the workbench's search has always been a filter over the
@@ -554,6 +554,18 @@ def _asset_clauses(*, status=None, lot_number=None, product_id=None, q=None, cat
     if product_id:
         where.append("a.product_id = :pid")
         params["pid"] = product_id
+    if group_id:
+        # THE UNITS OF ONE PRODUCT GROUP, and it is a join rather than `product_id` because a group
+        # is keyed on brand + model + grade and NOT on a product row (0024): one model whose Category
+        # was spelled two ways is two product rows and therefore ONE group, so `a.product_id = :pid`
+        # would list half the group's units and read as missing stock. This spells out the same set
+        # `staff_groups.UNITS_OF_GROUP` counts - which is what lets the group page print a total from
+        # its own aggregates above rows that come from here, and have the two agree.
+        where.append(
+            "EXISTS (SELECT 1 FROM product_groups g JOIN products pg"
+            "        ON pg.brand_id = g.brand_id AND lower(pg.model) = lower(g.model)"
+            "        WHERE g.id = :gid AND pg.id = a.product_id AND a.grade = g.grade)")
+        params["gid"] = group_id
     if grade and grade.strip():
         where.append("a.grade = :grade")
         params["grade"] = grade.strip().upper()
@@ -603,7 +615,7 @@ def _asset_row(r) -> dict:
 
 @router.get("/assets")
 async def list_assets(status: str | None = None, lot_number: str | None = None,
-                      product_id: int | None = None, q: str | None = None,
+                      product_id: int | None = None, group_id: int | None = None, q: str | None = None,
                       category: str | None = None, brand: str | None = None,
                       grade: str | None = None, warehouse: str | None = None,
                       sort: str = "newest",
@@ -621,8 +633,14 @@ async def list_assets(status: str | None = None, lot_number: str | None = None,
     THE ENVELOPE CARRIES THE TOTAL, and that is the thing this door could not answer before: with
     1,975 units the page had no way to say "showing 50 of 1,975" and no way to reach the rest. It
     also carries the facets, each built with the other filters applied and its own excluded.
+
+    `group_id` is the one filter the Inventory screen does not offer and the product-group page
+    does: the units of one brand + model + grade, which is what that page lists under its
+    photograph. It takes the envelope's job too - the group page reads its total from the group's
+    own aggregates, so a caller listing a group's units can use the bare array.
     """
-    filters = {"status": status, "lot_number": lot_number, "product_id": product_id, "q": q,
+    filters = {"status": status, "lot_number": lot_number, "product_id": product_id,
+               "group_id": group_id, "q": q,
                "category": category, "brand": brand, "grade": grade, "warehouse": warehouse}
     where, params = _asset_clauses(**filters)
     clause = (" WHERE " + " AND ".join(where)) if where else ""
@@ -651,6 +669,7 @@ async def list_assets(status: str | None = None, lot_number: str | None = None,
 
     return {"items": items, "total": int(total), "limit": limit, "offset": offset,
             "applied": {"status": status, "lot_number": lot_number, "product_id": product_id,
+                        "group_id": group_id,
                         "q": q, "category": category, "brand": brand,
                         "grade": (grade.strip().upper() if grade and grade.strip() else None),
                         "warehouse": warehouse, "sort": sort if sort in ASSET_SORTS else "newest"},
