@@ -75,11 +75,11 @@ export default function OrderDocumentsPage() {
   }, [checked, allowed, id, load]);
 
   if (!checked || !loaded) {
-    return <main className={pageClass.narrow}><p className="text-sm text-ink-500">Loading...</p></main>;
+    return <main className={pageClass.wide}><p className="text-sm text-ink-500">Loading...</p></main>;
   }
   if (!allowed) {
     return (
-      <main className={pageClass.narrow}>
+      <main className={pageClass.wide}>
         <Card className="p-6">
           <Heading level="h3" as="h2">Documents</Heading>
           <p className="mt-2 text-sm text-ink-500">Packing is a warehouse screen.</p>
@@ -89,7 +89,7 @@ export default function OrderDocumentsPage() {
   }
   if (err || !doc) {
     return (
-      <main className={pageClass.narrow}>
+      <main className={pageClass.wide}>
         <p className="text-sm text-danger-600">{err || "Order not found."}</p>
       </main>
     );
@@ -100,7 +100,12 @@ export default function OrderDocumentsPage() {
     .filter(Boolean).join(" "), recipient.country].filter(Boolean);
 
   return (
-    <main className={pageClass.narrow}>
+    /* WIDE FRAME, A4 SHEETS. Two of these are printed on A4 (`@page` below) and drawn as white paper
+       on screen too, so they keep the width a sheet is read at and are centred inside the frame -
+       a dispatch label stretched across 1600px stops being a label. What widens is the frame: the
+       title, the way back to Pick & Pack and Print now sit where the page before them put its own.
+       `print:max-w-none` keeps the screen width off the paper. See lib/ui.ts. */
+    <main className={pageClass.wide}>
       {/* Screen-only controls. Every one of them is `print:hidden`, so paper carries the documents
           and nothing else. */}
       <div className="mb-6 flex flex-wrap items-center gap-3 print:hidden">
@@ -113,7 +118,7 @@ export default function OrderDocumentsPage() {
       </div>
 
       {/* ---------------------------------------------------------------- packing slip */}
-      <section className="print-page print-doc rounded-card bg-white p-8 text-ink-900 ring-1 ring-line print:ring-0">
+      <section className="print-page print-doc mx-auto w-full max-w-5xl rounded-card bg-white p-8 text-ink-900 ring-1 ring-line print:max-w-none print:ring-0">
         <header className="flex items-baseline justify-between border-b border-ink-900 pb-2">
           <h2 className="text-xl font-semibold tracking-tight">Packing slip</h2>
           <span className="text-sm">Order #{order.id}</span>
@@ -174,7 +179,7 @@ export default function OrderDocumentsPage() {
       </section>
 
       {/* ---------------------------------------------------------------- dispatch label */}
-      <section className="print-page print-doc mt-8 rounded-card bg-white p-8 text-ink-900 ring-1 ring-line print:mt-0 print:ring-0">
+      <section className="print-page print-doc mx-auto mt-8 w-full max-w-5xl rounded-card bg-white p-8 text-ink-900 ring-1 ring-line print:mt-0 print:max-w-none print:ring-0">
         <header className="flex items-baseline justify-between border-b-2 border-ink-900 pb-2">
           <h2 className="text-xl font-semibold tracking-tight">Dispatch label</h2>
           <span className="text-sm">{shipment ? (shipment.carrier || "").toUpperCase() : "NOT DISPATCHED"}</span>

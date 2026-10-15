@@ -64,7 +64,9 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const cleared = checked && allowed && c != null && data != null;
 
   return (
-    <main className={pageClass.narrow}>
+    /* WIDE, like the register this customer is opened from - a row press must not re-lay-out the
+       page around copy that has not changed. See the correction in lib/ui.ts. */
+    <main className={pageClass.wide}>
       <a href="/admin/customers" className={cn("text-sm", linkClass)}>&larr; All customers</a>
       <Heading level="h1">{cleared && c ? c.email : "Customer #" + id}</Heading>
 

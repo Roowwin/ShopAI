@@ -57,7 +57,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const o = data?.order;
 
   return (
-    <main className={pageClass.narrow}>
+    /* WIDE, like the order list this page is opened from - a row press must not re-lay-out the page
+       around copy that has not changed. See the correction in lib/ui.ts. */
+    <main className={pageClass.wide}>
       <a href="/admin/orders" className="text-sm text-brand-300 hover:underline">&larr; All orders</a>
       <Heading level="h1">
         Order <span className="font-mono text-base">{o ? o.public_id : "#" + id}</span>

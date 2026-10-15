@@ -80,11 +80,11 @@ export default function InvoiceDocumentPage() {
   }, [checked, allowed, id, load]);
 
   if (!checked || !loaded) {
-    return <main className={pageClass.narrow}><p className="text-sm text-ink-500">Loading...</p></main>;
+    return <main className={pageClass.wide}><p className="text-sm text-ink-500">Loading...</p></main>;
   }
   if (!allowed || err || !doc) {
     return (
-      <main className={pageClass.narrow}>
+      <main className={pageClass.wide}>
         {err || !allowed
           ? <p className="text-sm text-danger-600">{err || "The books are an administrator's screen."}</p>
           : null}
@@ -105,7 +105,11 @@ export default function InvoiceDocumentPage() {
   const sellerLines = seller.address.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
   return (
-    <main className={pageClass.narrow}>
+    /* WIDE FRAME, DOCUMENT-SIZED SHEET. The frame is the register's width so opening an invoice from
+       it cannot re-lay-out the page; the invoice itself is a tax invoice - A4 on paper, behind a
+       Print button - so it stays at the width it is read at, centred, and `print:max-w-none` keeps
+       even that off the paper. See the correction in lib/ui.ts. */
+    <main className={pageClass.wide}>
       <div className="mb-6 flex flex-wrap items-center gap-3 print:hidden">
         <Heading level="h1">Invoice</Heading>
         <Badge colorClass={STATUS_TONE[doc.status] ?? "bg-surface-sunken text-ink-600"}>{doc.status}</Badge>
@@ -115,7 +119,7 @@ export default function InvoiceDocumentPage() {
         </div>
       </div>
 
-      <Card className="print-doc-paper p-8 print:ring-0">
+      <Card className="print-doc-paper mx-auto w-full max-w-5xl p-8 print:max-w-none print:ring-0">
         <header className="flex flex-wrap items-start justify-between gap-4 border-b border-ink-900 pb-4">
           <div>
             {/* THE SELLER BLOCK, in the order a tax invoice needs it: legal name, ABN, registered
