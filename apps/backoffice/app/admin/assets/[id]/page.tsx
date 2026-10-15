@@ -133,7 +133,10 @@ export default function AssetDetailPage({ params }: { params: Promise<{ id: stri
   const ready = a?.status === "graded";
 
   return (
-    <main className={pageClass.narrow}>
+    /* WIDE, like the Inventory table this page is opened from. `narrow` here was the two-tier rule
+       read too literally - "a record, not a list" - and the operator met it as the whole page
+       re-laying-out around copy that had not changed, the moment they pressed a row. See lib/ui.ts. */
+    <main className={pageClass.wide}>
       <a href="/admin/assets" className={cn("text-sm", linkClass)}>&larr; Assets workbench</a>
       <Heading level="h1">
         Asset <span className="font-mono text-base">{a?.serial_number ?? "#" + id}</span>

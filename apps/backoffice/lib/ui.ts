@@ -93,7 +93,16 @@ export const linkClass = "text-brand-300 hover:underline";
    room: Inventory's nine columns at 1600px is what made the wide view worth having, and every other
    table here holds the same shape of thing. A form does not want it at all - a password field or a
    two-field settings page stretched across a 1600px line is harder to fill in, not easier - so the
-   detail and settings screens share a 1024px column instead.
+   form screens share a 1024px column instead.
+
+   A RECORD OPENED FROM A TABLE KEEPS THE TABLE'S WIDTH, and this is a correction, not the original
+   rule. `narrow` was applied to "one record" as a category, so pressing a row on Inventory or
+   Product groups re-laid-out the whole page - the container jumped from 1600px to 1024px around
+   copy that had not changed, which the owner reported as the page shrinking under them. A record
+   reached BY a row press is the continuation of that table, so the unit's record and the product
+   group's record are `wide` now. Narrow is what it always actually was for: the form pages and the
+   workspaces with no table above them - Settings, Security, the Assistant, the listing studio - and
+   the error screen.
 
    THE PADDING, THE TOP AND BOTTOM SPACE AND THE STACK GAP ARE THE SAME IN BOTH, and that is what
    makes the app read as one app when you move from a list to the record it opened. `min-h-screen`
@@ -103,8 +112,9 @@ export const linkClass = "text-brand-300 hover:underline";
    These are literals and must stay literals - Tailwind scans source text, so a class assembled from
    pieces emits nothing and the page silently loses its container. */
 export const pageClass = {
-  /** Lists, tables and workspaces. The Inventory view, everywhere a table lives. */
+  /** Lists, tables and workspaces - and the record a row of one opens, so the press cannot
+      re-lay-out the page. The Inventory view, everywhere a table lives. */
   wide: "mx-auto max-w-[100rem] px-4 pt-8 pb-16 space-y-6",
-  /** One record, or a form. Narrow enough to read and to fill in. */
+  /** A form, or a workspace with no table above it. Narrow enough to fill in. */
   narrow: "mx-auto max-w-5xl px-4 pt-8 pb-16 space-y-6",
 } as const;
