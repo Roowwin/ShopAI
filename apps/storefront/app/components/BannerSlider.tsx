@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { mediaUrl } from "@/lib/api";
 import { cn } from "./ui/cn";
 
 /* THE BANNERS, AS A SLIDER THAT MOVES BY ITSELF AND STOPS WHEN YOU TOUCH IT.
@@ -86,7 +87,7 @@ export default function BannerSlider({ banners }: { banners: Banner[] }) {
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-700",
             )}>
             {/* eslint-disable-next-line @next/next/no-img-element -- the shop's own origin, not a remote asset */}
-            <img src={b.url} alt={b.alt} width={2048} height={768}
+            <img src={mediaUrl(b.url)} alt={b.alt} width={2048} height={768}
               loading={n === 0 ? "eager" : "lazy"} fetchPriority={n === 0 ? "high" : "auto"}
               decoding="async" className="aspect-[8/3] w-full object-cover" />
           </a>

@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { mediaUrl } from "@/lib/api";
 import { iconFor } from "@/lib/productIcons";
 
 type Props = {
@@ -25,7 +26,7 @@ type Props = {
    largest paint for no benefit, since it is visible before anything scrolls. */
 export default function ProductArt({ slug, imageUrl, alt, className, fallback, priority, style }: Props) {
   const loading = priority ? "eager" : "lazy";
-  if (imageUrl) return <img src={imageUrl} alt={alt} className={className} style={style} loading={loading} fetchPriority={priority ? "high" : "auto"} decoding="async" />;
+  if (imageUrl) return <img src={mediaUrl(imageUrl)} alt={alt} className={className} style={style} loading={loading} fetchPriority={priority ? "high" : "auto"} decoding="async" />;
   const icon = iconFor(slug);
   if (!icon) return <>{fallback}</>;
   return <img src={icon} alt="" className={className} style={style} loading={loading} decoding="async" />;   // decorative: the product title sits beside it
