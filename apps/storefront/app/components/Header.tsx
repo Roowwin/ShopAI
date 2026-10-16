@@ -104,7 +104,22 @@ export default function Header() {
           `sticky` stays - a catalog is long, and the search and the cart have to be reachable from
           the bottom of it - and the blur is what keeps the nav legible when the catalogue scrolls
           underneath it. */}
-      <div className="backdrop-blur-md border-b border-line text-ink-900 px-4 md:px-6 py-2 flex items-center gap-2 md:gap-3">
+      <div className="backdrop-blur-md border-b border-line text-ink-900 px-4 md:px-6 py-2 flex flex-wrap md:flex-nowrap items-center gap-2 md:gap-3">
+        {/* TWO ROWS ON A PHONE, ONE FROM md UP - which is the one thing about this row that is not
+            a matter of taste.
+
+            It was a single line at every width, and below md that line did not work at all: the
+            field is `w-full`, so on a phone it measured the whole row. The wordmark and the
+            cart/burger sit in the two `flex-1` flanks around it, and with no space left to grow
+            into they collapsed to nothing - and because the field's wrapper is `relative` it then
+            painted OVER them. A phone showed a search box, and no logo, no cart and no way into
+            the menu.
+
+            So the phone reads this row in a different ORDER than it is written: `order-*` puts the
+            wordmark and the controls on the first line and the search below them, whole. From md
+            up `order-none` restores DOM order - wordmark, field, controls - and `md:flex-nowrap`
+            is what stops the field wrapping once it grows to a third of the line instead of all
+            of it. */}
         {/* The left and right groups both take `flex-1`, which is what actually CENTRES the search:
             two equal-grow flanks around it put the field on the page's centre line whatever the
             wordmark and the controls measure. */}
@@ -126,9 +141,17 @@ export default function Header() {
             that no category could be hidden. The menu is a deliberate replacement rather than a fix
             - and what it keeps of that rule is reach: every live category is one click away, read
             from the API rather than hardcoded, so a category added to the catalog turns up here
-            without a code change. Below md this group is hidden and the burger drawer, which
-            already lists the same links, is the way in. */}
-        <div className="hidden md:flex items-center gap-1 shrink-0">
+            without a code change. Below xl this group is hidden and the burger drawer, which
+            already lists the same links, is the way in.
+
+            IT WAS `md` AND THAT WAS A LIE, not a preference. These three links and the wordmark
+            measure about 316px together; between md and xl the field took a fixed 576 of the row
+            and left the flanks 188 each, so the tail of this group - FAQ and, past it, Account -
+            was painted under the field while the burger that could have replaced it was
+            `md:hidden`. On a 1024px window the shop had no way into the account at all. At xl the
+            row is long enough for all three to fit beside the field with room to spare, and
+            everything narrower gets the drawer, which lists the same links plus every category. */}
+        <div className="hidden xl:flex items-center gap-1 shrink-0">
           {/* THE FIRST ROW IS "All products", NOT "Shop". It used to carry the trigger's own word,
               so the panel opened on "Shop" directly under a button reading "Shop" - which reads as
               the menu repeating itself rather than as the destination it is: the catalogue, whole,
@@ -143,7 +166,17 @@ export default function Header() {
           <a href="/account" className={cn("inline-flex items-center min-h-[44px] px-3 text-sm", navLinkClass)}>Account</a>
         </div>
         </div>
-        <div className="relative w-full max-w-xl shrink-0">
+        {/* A THIRD OF THE ROW FROM md UP, NOT ALL OF IT. `w-full` is what wraps it onto its own
+            line on a phone - 100% of the row cannot fit beside anything else - and from md the
+            three parts share the line instead.
+
+            THE FIELD USED TO BE `shrink-0` AT A FIXED `max-w-xl`, which is what took the row apart
+            on both sides of this breakpoint: a 576px field that cannot shrink leaves the flanks
+            whatever is left over, and at 1024 that was 188px each for a wordmark and a nav that
+            need 316. Growing to a third (still capped at the same max-w-xl, so above ~1800 it is
+            576px again) means the three always fit, the field keeps the centre line - equal flanks
+            around it are still what holds it there - and nothing is ever painted under it. */}
+        <div className="relative order-3 w-full md:order-none md:max-w-xl md:flex-1 md:min-w-0">
           <Input tone="sunken"
             aria-label="Search devices"
             placeholder="Search devices - e.g. galaxy s21"
@@ -164,7 +197,7 @@ export default function Header() {
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2 flex-1 justify-end">
+        <div className="flex items-center gap-2 flex-1 justify-end order-2 md:order-none">
         <Button href="/cart" className="relative shrink-0">
           {/* The count badge is the one place that keeps a raw 10px: it is a single digit centred in
               a 20px circle, and the `eyebrow` step (11px + 0.1em tracking) crowds it and shifts the
@@ -184,7 +217,7 @@ export default function Header() {
           onClick={() => setMenu((v) => !v)}
           aria-label={menu ? "Close menu" : "Open menu"}
           aria-expanded={menu}
-          className="md:hidden shrink-0 h-11 w-11 flex items-center justify-center rounded-control text-ink-600 transition-colors duration-fast ease-out hover:bg-surface-pressed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 motion-reduce:transition-none">
+          className="xl:hidden shrink-0 h-11 w-11 flex items-center justify-center rounded-control text-ink-600 transition-colors duration-fast ease-out hover:bg-surface-pressed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 motion-reduce:transition-none">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             {menu
               ? (<><path d="M5 5l10 10" /><path d="M15 5L5 15" /></>)
@@ -193,9 +226,10 @@ export default function Header() {
         </button>
         </div>
       </div>
-      {/* The category nav is hidden below md, and there was no way to reach it on a phone. */}
+      {/* The category nav is hidden below xl, and there was no way to reach it without it - on a
+          phone, and until this pass on any window narrower than xl as well. */}
       {menu && (
-        <nav className="md:hidden bg-surface/95 backdrop-blur-md ring-1 ring-line border-t border-line px-4 py-1 flex flex-col text-sm text-ink-600">
+        <nav className="xl:hidden bg-surface/95 backdrop-blur-md ring-1 ring-line border-t border-line px-4 py-1 flex flex-col text-sm text-ink-600">
           <a href="/" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>All products</a>
           {/* A category with sub-categories becomes an accordion here, because hover does not exist on
               a phone. The word still goes to the category - a shopper who wants all of Accessories has
