@@ -327,3 +327,27 @@ services:
       timeout: 5s
       retries: 6
     <<: *logging
+
+  # A PUBLIC ADDRESS FOR THE API, FOR SHOWING THE SHOP TO SOMEONE - NOT FOR RUNNING ONE.
+  #
+  # The API is deliberately unpublished (`api` has no `ports:`, nginx fronts it), so a tunnel to
+  # http://localhost:8000 is not possible from the host: this container sits ON the compose network and
+  # reaches `api:8000` directly. `--url` mints a QUICK tunnel, which needs no Cloudflare account and
+  # prints its address in `docker compose logs cloudflared` - and which CHANGES ADDRESS EVERY TIME IT
+  # STARTS, so the Vercel variables that point at it go stale on every restart. `restart: "no"` for that
+  # reason: an automatic restart would silently break the deployment instead of telling you.
+  #
+  # BEHIND A PROFILE ON PURPOSE - it exposes the API to the internet and must never come up because
+  # somebody ran `docker compose up`:
+  #     docker compose --profile tunnel up -d cloudflared
+  #     docker compose logs cloudflared | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com'
+  # The origins that may call it are `CORS_ORIGINS_STORE` / `CORS_ORIGINS_STAFF` in .env.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    restart: "no"
+    command: ["tunnel", "--no-autoupdate", "--url", "http://api:8000"]
+    networks: [core]
+    depends_on:
+      api: { condition: service_healthy }
+    <<: *logging
