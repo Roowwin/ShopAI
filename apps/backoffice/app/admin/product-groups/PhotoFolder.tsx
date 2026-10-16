@@ -14,10 +14,18 @@ import { kickerClass, linkClass } from "@/lib/ui";
    `app/services/group_image_match.py` for why this app does not guess about a shopper's product
    photo.
 
-   THE BROWSER'S OWN CONTROLS, as `product-import/SheetDrop.tsx` puts it: a real `<input>` inside the
-   zone, so keyboard focus and the native picker keep working, and a drop simply hands the same
-   Files to the same handler. `webkitdirectory` is what turns that picker into a folder picker; it
-   is non-standard, so it is spread rather than written as a JSX attribute React has no type for.
+   TWO WAYS IN, EACH NAMED FOR THE PICKER IT OPENS. `webkitdirectory` is what makes the bulk route
+   work, but the browser labels that control's button "Choose files" like any other file input
+   while opening a dialog that lists folders and lets nothing in them be chosen - so the one control
+   this zone had read as a file chooser and delivered nothing. The inputs are therefore hidden and
+   driven by two buttons that say which dialog they open; keyboard focus lives on the buttons, and
+   both inputs call the same handler. `webkitdirectory` is non-standard, so it is spread rather than
+   written as a JSX attribute React has no type for.
+
+   A DROPPED FOLDER IS READ, NOT LISTED. `dataTransfer.files` hands a dropped directory over as one
+   entry carrying no bytes, so "drop a folder of photographs here" uploaded nothing and said
+   nothing. The drop asks `dataTransfer.items` for its entries and walks the tree instead, which is
+   what turns a folder into the same Files the picker hands over.
 
    THE FOLDER IS SENT IN CHUNKS, and the sizes below are not arbitrary. nginx caps a request at
    25 MB on both vhosts, so a 300 MB folder posted in one go comes back as a 413 from the proxy
@@ -26,8 +34,45 @@ import { kickerClass, linkClass } from "@/lib/ui";
    show how far along it is. */
 
 const IMAGE = /\.(jpe?g|png|webp|gif|bmp|heic|tiff?)$/i;
+const ACCEPT_IMAGE = "image/png,image/jpeg,image/webp,image/gif";
 const MAX_BATCH_BYTES = 15 * 1024 * 1024;
 const MAX_BATCH_FILES = 40;
+
+/* One directory's contents, in full. `readEntries` delivers at most a hundred entries per call and
+   answers with an EMPTY batch at the end of the directory - so a single call is the first hundred
+   files of a folder and not the folder, and stopping there is how a drop of three hundred
+   photographs arrives as a hundred. */
+function readDir(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+  return new Promise((resolve, reject) => {
+    const all: FileSystemEntry[] = [];
+    const next = () => reader.readEntries((batch) => {
+      if (batch.length === 0) { resolve(all); return; }
+      all.push(...batch);
+      next();
+    }, reject);
+    next();
+  });
+}
+
+/* A dropped entry that cannot be read costs that entry and nothing else. Both failures are real -
+   a file the browser will not hand over, a directory it will not list - and the walk is depth-first
+   and sequential, so a throw here would take every entry after it and the whole drop with it. */
+async function descend(entry: FileSystemEntry, into: File[]): Promise<void> {
+  if (entry.isFile) {
+    const file = await new Promise<File | null>((resolve) =>
+      (entry as FileSystemFileEntry).file(resolve, () => resolve(null)));
+    if (file) into.push(file);
+    return;
+  }
+  if (!entry.isDirectory) return;
+  let children: FileSystemEntry[];
+  try {
+    children = await readDir((entry as FileSystemDirectoryEntry).createReader());
+  } catch {
+    return;
+  }
+  for (const child of children) await descend(child, into);
+}
 
 type PoolItem = {
   media_id: number; public_id: string; filename: string;
@@ -61,12 +106,15 @@ function PoolThumb({ mediaId }: { mediaId: number }) {
 export default function PhotoFolder({ onPoolChanged }: { onPoolChanged?: () => void }) {
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [reading, setReading] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [refused, setRefused] = useState<{ name: string; reason: string }[]>([]);
   const [pool, setPool] = useState<PoolItem[]>([]);
   const [total, setTotal] = useState(0);
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
+  const filesRef = useRef<HTMLInputElement | null>(null);
   const folderRef = useRef<HTMLInputElement | null>(null);
 
   const loadPool = useCallback(async () => {
@@ -80,8 +128,12 @@ export default function PhotoFolder({ onPoolChanged }: { onPoolChanged?: () => v
   useEffect(() => { void loadPool(); }, [loadPool]);
 
   async function send(files: File[]) {
-    if (busy || files.length === 0) return;
-    setErr(""); setRefused([]); setBusy(true);
+    if (busy || reading) return;
+    setErr(""); setNote(""); setRefused([]);
+    // An empty folder is a real answer to the operator's press and used to be an unanswered one:
+    // the zone said nothing at all, which reads as a control that does not work.
+    if (files.length === 0) { setNote("Nothing arrived in that selection - no files in it."); return; }
+    setBusy(true);
     // Screened here as well as on the server, so the operator learns which file was skipped without
     // a round trip that ends in "an image was refused" and no name.
     const images = files.filter((f) => IMAGE.test(f.name));
@@ -127,8 +179,30 @@ export default function PhotoFolder({ onPoolChanged }: { onPoolChanged?: () => v
   }
 
   function take(list: FileList | null | undefined) {
-    const files = list ? Array.from(list) : [];
-    void send(files);
+    void send(list ? Array.from(list) : []);
+  }
+
+  /* Entries are read HERE, while the drop is still being handled - the item list is emptied as soon
+     as this returns, so an entry kept for later is an entry that reads as nothing. Where the entry
+     API is missing (or the drop is not from the file system at all) the flat list is all there is,
+     and that path can only ever deliver files. */
+  function drop(dt: DataTransfer | null) {
+    if (!dt || busy || reading) return;
+    const entries = Array.from(dt.items ?? [])
+      .filter((it) => it.kind === "file")
+      .map((it) => (typeof it.webkitGetAsEntry === "function" ? it.webkitGetAsEntry() : null))
+      .filter((e): e is FileSystemEntry => e !== null);
+    if (entries.length === 0) { take(dt.files); return; }
+    setReading(true);
+    void (async () => {
+      const files: File[] = [];
+      try {
+        for (const e of entries) await descend(e, files);
+      } finally {
+        setReading(false);
+      }
+      await send(files);
+    })();
   }
 
   async function discard(mediaId: number) {
@@ -152,9 +226,9 @@ export default function PhotoFolder({ onPoolChanged }: { onPoolChanged?: () => v
       </div>
 
       <div
-        onDragOver={(e) => { e.preventDefault(); if (!busy && !over) setOver(true); }}
+        onDragOver={(e) => { e.preventDefault(); if (!busy && !reading && !over) setOver(true); }}
         onDragLeave={(e) => { e.preventDefault(); setOver(false); }}
-        onDrop={(e) => { e.preventDefault(); setOver(false); if (!busy) take(e.dataTransfer?.files); }}
+        onDrop={(e) => { e.preventDefault(); setOver(false); drop(e.dataTransfer); }}
         className={cn(
           "mt-3 rounded-card px-4 py-5 text-center border border-dashed",
           "transition-colors duration-fast ease-out motion-reduce:transition-none",
@@ -162,35 +236,50 @@ export default function PhotoFolder({ onPoolChanged }: { onPoolChanged?: () => v
         )}
       >
         <p className="text-sm font-semibold text-ink-900">
-          {busy
-            ? `Uploading ${progress?.done ?? 0} of ${progress?.total ?? 0}…`
-            : over ? "Release to upload these photographs" : "Drop a folder of photographs here"}
+          {reading
+            ? "Reading that folder…"
+            : busy
+              ? `Uploading ${progress?.done ?? 0} of ${progress?.total ?? 0}…`
+              : over ? "Release to upload these photographs" : "Drop a folder of photographs here"}
         </p>
         <p className="mx-auto mt-1 max-w-md text-xs text-ink-500">
           JPEG, PNG, WebP or GIF, up to 5 MB each. Nothing is attached to a product yet - each group
           offers the photo whose filename matches it.
         </p>
 
+        {/* Both inputs are `hidden` rather than styled, and both are driven by a button that names
+            the dialog it opens: the browser calls a folder picker's button "Choose files" too, so a
+            bare `webkitdirectory` input is a control that offers files and shows folders. */}
+        <input
+          ref={filesRef}
+          type="file"
+          multiple
+          accept={ACCEPT_IMAGE}
+          onChange={(e) => { take(e.target.files); e.target.value = ""; }}
+          className="hidden"
+        />
         <input
           ref={folderRef}
           type="file"
           multiple
-          disabled={busy}
-          accept="image/png,image/jpeg,image/webp,image/gif"
+          accept={ACCEPT_IMAGE}
           // Non-standard, and the only thing that makes this a FOLDER picker. React has no type for
           // it, so it is spread rather than written as a JSX attribute.
           {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
           onChange={(e) => { take(e.target.files); e.target.value = ""; }}
-          aria-label="Choose a folder of product photographs"
-          className={cn(
-            "mx-auto mt-4 block w-full max-w-sm text-xs text-ink-500",
-            "file:mr-3 file:rounded-control file:border-0 file:bg-brand-700 file:px-3 file:py-2",
-            "file:text-xs file:font-semibold file:text-ink-900",
-            "disabled:opacity-50 disabled:pointer-events-none",
-            "outline-none focus-visible:ring-2 focus-visible:ring-brand-700 focus-visible:ring-offset-2",
-          )}
+          className="hidden"
         />
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+          <Button onClick={() => filesRef.current?.click()} disabled={busy || reading}>
+            Choose photographs
+          </Button>
+          <Button variant="secondary" onClick={() => folderRef.current?.click()} disabled={busy || reading}>
+            Choose a whole folder
+          </Button>
+        </div>
       </div>
+
+      {note && <p className="mt-3 text-sm text-ink-500">{note}</p>}
 
       {refused.length > 0 && (
         <ul className="mt-3 space-y-1">

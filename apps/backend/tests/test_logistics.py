@@ -589,8 +589,18 @@ async def test_the_matching_door_offers_the_exact_payment_then_settles_the_credi
             "bank_ref": ref, "amount_cents": order["amount_cents"],
             "received_on": date.today().isoformat()})
         payout_id = created.json()["payout_id"]
-        # The bank's reference names the order, which is the strongest signal there is.
-        await _set_payout_ref(payout_id, f"{tag} ORDER {order['order_id']}")
+        # THE BANK'S REFERENCE NAMES THE PAYMENT, and WHICH name it uses is load-bearing.
+        # `_reference_hit` tries the payment's own provider reference and then the order id, and
+        # refuses a digits-only candidate shorter than three characters - a two-digit number hides
+        # inside anything. On a long-lived database order ids are three or four digits and `ORDER 716`
+        # earns the bonus; on a young one they are two digits, the reference earns NOTHING, this
+        # payment ties with every other payment of the same amount, the tie is broken by order id, and
+        # the test fails for a reason that is a fact about the database rather than about the matcher.
+        # So the reference names the provider's own transaction - which is what a bank statement
+        # actually quotes, and is unique by construction wherever the ids happen to start.
+        pref = (await _one("SELECT provider_ref FROM payments WHERE id = :i",
+                           i=order["payment_id"]))["provider_ref"]
+        await _set_payout_ref(payout_id, f"{tag} {pref}")
 
         r = await client.get(f"/staff/logistics/payouts/{payout_id}/matches", headers=_h(tok))
         assert r.status_code == 200, r.text
@@ -631,6 +641,15 @@ async def _set_payout_ref(payout_id: int, bank_ref: str):
     async with eng.begin() as c:
         await c.execute(text("UPDATE payouts SET bank_ref = :r WHERE id = :i"),
                         {"r": bank_ref, "i": payout_id})
+
+
+async def _one(sql: str, **params):
+    """One row, read straight from the database - for the things the API does not expose: the
+    provider's own transaction reference is written by the payment provider and no staff door
+    returns it."""
+    eng = get_engine()
+    async with eng.begin() as c:
+        return (await c.execute(text(sql), params)).mappings().first()
 
 
 async def test_a_reconciliation_that_does_not_balance_is_refused(client):

@@ -10,36 +10,144 @@ def _h(tok: str) -> dict:
     return {"Authorization": "Bearer " + tok}
 
 
-async def test_catalog_from_seed_stock(client):
-    # The whole catalog, not the default page of 24: catalog v2 seeded ~50 more products, and this
-    # assertion is about the seeded stock being LISTED ("galaxy-s21 is buyable, iphone-13 is not"),
-    # not about where a title happens to fall in the first page of the order.
-    r = await client.get("/store/catalog", params={"limit": 100})
+async def _pytest_admin(client) -> tuple[str, dict]:
+    """A throwaway admin and its bearer header. The caller removes the identity in its `finally`."""
+    email = "pytest-" + uuid.uuid4().hex + "@test.rfo"
+    _, pw = await bootstrap(email, "admin")
+    r = await client.post("/staff/auth/login", json={"email": email, "password": pw})
     assert r.status_code == 200, r.text
-    items = {i["slug"]: i for i in r.json()}
-    assert "galaxy-s21" in items
-    g = items["galaxy-s21"]
-    assert g["units_available"] >= 10 and g["price_from_cents"] == 27900
-    assert "iphone-13" not in items
+    return email, _h(r.json()["access_token"])
 
-    r = await client.get("/store/catalog/galaxy-s21")
-    assert r.status_code == 200, r.text
-    u = r.json()["units"]
-    assert len(u) >= 10 and u[0]["sale_price_cents"] == 27900
-    assert all(len(x["serial_tail"] or "") <= 4 for x in u), "serials must be masked"
 
-    r = await client.get("/store/catalog/iphone-13")
+async def _drop_admin(email: str) -> None:
+    eng = get_engine()
+    async with eng.begin() as c:
+        await c.execute(text("DELETE FROM refresh_tokens WHERE identity_id IN "
+                             "(SELECT id FROM staff_users WHERE email = :e)"), {"e": email})
+        await c.execute(text("DELETE FROM staff_users WHERE email = :e"), {"e": email})
+
+
+async def _product(*, token: str, status: str = "active") -> int:
+    """One product row, on whatever brand and category the database already has.
+
+    Straight SQL for the row itself, and deliberately: it is the only way to make a product that is
+    NOT buyable, which is half of what the catalogue's contract is about."""
+    eng = get_engine()
+    async with eng.begin() as c:
+        return (await c.execute(text("""
+            INSERT INTO products (brand_id, category_id, model, title, slug, status)
+            SELECT (SELECT id FROM brands ORDER BY id LIMIT 1),
+                   (SELECT id FROM categories ORDER BY id LIMIT 1), :m, :t, :s, :st
+            RETURNING id"""),
+            {"m": "Pytest " + token, "t": "Pytest fixture " + token,
+             "s": "pytest-" + token, "st": status})).scalar_one()
+
+
+async def _listed_units(client, h: dict, pid: int, *, n: int = 2, price: int = 27900) -> None:
+    """`n` units of that product, walked to `listed` through the real doors, in a lot left active.
+
+    Every step is a door a person uses - scan-in, tested, grade, price, listed - so the fixture
+    cannot produce a state the application could not."""
+    r = await client.post("/staff/lots", json={"notes": "pytest storefront"}, headers=h)
+    assert r.status_code == 201, r.text
+    lot = r.json()
+    for _ in range(n):
+        r = await client.post("/staff/assets/scan-in",
+                              json={"lot_number": lot["lot_number"], "product_id": pid,
+                                    "serial_number": "pytest-" + uuid.uuid4().hex}, headers=h)
+        assert r.status_code == 201, r.text
+        aid = r.json()["id"]
+        for step, body in (("status", {"status": "tested"}), ("grade", {"grade": "A"}),
+                           ("price", {"sale_price_cents": price}), ("status", {"status": "listed"})):
+            r = await client.post(f"/staff/assets/{aid}/{step}", json=body, headers=h)
+            assert r.status_code == 200, r.text
+    r = await client.post(f"/staff/lots/{lot['id']}/activate", headers=h)
     assert r.status_code == 200, r.text
-    assert r.json()["units"] == [], "zero-stock product page: live but empty"
+
+
+async def test_catalog_lists_listed_stock_only(client):
+    """The catalogue's contract with the shop floor: listed stock is buyable, unlisted stock is
+    invisible - and a product with nothing on the shelf still has a LIVE page that says so.
+
+    HERMETIC, and it had to be. This read `galaxy-s21` and the ten units migration 0002 seeds, which
+    made it true only on a database whose seed had been published by hand (0002 leaves its products at
+    the column default, `draft`, where the shop requires `active`) and false again the moment a real
+    order bought one of those units - which is why it sat in the gate's deselect list. Nothing in the
+    contract needs somebody else's stock.
+
+    WINDOWED BY THE QUERY, NOT BY LUCK. The catalogue read is filtered to this fixture's own token
+    rather than asking for the first hundred products and hoping: the rows this test leaves behind
+    cannot be deleted (an asset is pinned by its append-only stock_movements), so an unfiltered
+    window would drift out from under the fixture after enough runs - which is precisely how the
+    old version of this test broke."""
+    email, h = await _pytest_admin(client)
+    on_token, off_token = uuid.uuid4().hex[:12], uuid.uuid4().hex[:12]
+    try:
+        pid = await _product(token=on_token)
+        # The other one is ACTIVE and simply has nothing on the shelf - which is the state the
+        # catalogue must hide but the product page must still serve. (A `draft` product would be a
+        # different thing: its page is not meant to exist at all.)
+        await _product(token=off_token)
+        await _listed_units(client, h, pid, n=2)
+
+        # the listed one is in the catalogue, at its own price, with its own count
+        r = await client.get("/store/catalog", params={"q": on_token, "limit": 100})
+        assert r.status_code == 200, r.text
+        items = {i["slug"]: i for i in r.json()}
+        assert "pytest-" + on_token in items, r.text
+        mine = items["pytest-" + on_token]
+        assert mine["units_available"] == 2, mine
+        assert mine["price_from_cents"] == 27900, mine
+        # ... and it carries the two fields a card is drawn from. This is what went missing once:
+        # the search endpoint returned neither, and every result rendered as the same placeholder.
+        assert "image_url" in mine and "category" in mine, mine
+
+        # the unlisted one is not, and is not even matched
+        r = await client.get("/store/catalog", params={"q": off_token, "limit": 100})
+        assert r.status_code == 200, r.text
+        assert r.json() == [], "a product with no listed unit must not appear in the catalogue"
+
+        # its page is live anyway, and empty - a link to a sold-out model must not 404
+        r = await client.get("/store/catalog/pytest-" + off_token)
+        assert r.status_code == 200, r.text
+        assert r.json()["units"] == [], "zero-stock product page: live but empty"
+
+        # the listed one's page lists its units and never the whole serial
+        r = await client.get("/store/catalog/pytest-" + on_token)
+        assert r.status_code == 200, r.text
+        u = r.json()["units"]
+        assert len(u) == 2 and u[0]["sale_price_cents"] == 27900, u
+        assert all(0 < len(x["serial_tail"] or "") <= 4 for x in u), "serials must be masked"
+    finally:
+        await _drop_admin(email)
 
 
 async def test_search(client):
-    r = await client.get("/store/search", params={"q": "galaxy"})
-    items = r.json()
-    hit = [x for x in items if x["slug"] == "galaxy-s21"]
-    assert len(hit) == 1 and hit[0]["units_available"] >= 10
-    r = await client.get("/store/search", params={"q": "zzz-not-a-thing"})
-    assert r.json() == []
+    """Search finds the shop's own stock, reports what a result card needs, and a term that matches
+    nothing returns nothing.
+
+    HERMETIC: it searches for a token only its own fixture contains, instead of for "galaxy" and
+    the migration's seeded phone."""
+    email, h = await _pytest_admin(client)
+    token = uuid.uuid4().hex[:12]
+    try:
+        pid = await _product(token=token)
+        await _listed_units(client, h, pid, n=2)
+
+        r = await client.get("/store/search", params={"q": token})
+        assert r.status_code == 200, r.text
+        hits = [x for x in r.json() if x["slug"] == "pytest-" + token]
+        assert len(hits) == 1, r.text
+        assert hits[0]["units_available"] == 2, hits[0]
+        # THE FIELDS A RESULT TILE IS DRAWN FROM. Both were missing once, and a search results page
+        # of twenty identical grey placeholders is what that looked like.
+        assert "image_url" in hits[0] and "category" in hits[0], hits[0]
+
+        r = await client.get("/store/search", params={"q": "zzz-not-a-thing"})
+        assert r.status_code == 200, r.text
+        assert r.json() == []
+    finally:
+        await _drop_admin(email)
 
 
 async def test_home_content_deal_publish_gate(client):

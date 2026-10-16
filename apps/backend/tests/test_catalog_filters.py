@@ -355,7 +355,12 @@ def test_the_unfiltered_query_is_the_one_this_endpoint_has_always_run():
     # runs, by design, so a column probe would read the shop's own invariant as a leaked filter. The
     # assertion just above (`sql == CATALOG_SELECT ...`) is what pins the statement; these probes pin
     # the FILTERS, which is what the leak was ever about.
-    for leak in ("a.grade", ":min_cents", ":max_cents", "b.slug =", "c.slug ="):
+    # `a.grade =` rather than `a.grade`, for the reason the paragraph above already gives about
+    # column probes: the statement now carries an UNCONDITIONAL aggregate over the same column
+    # (`array_agg(DISTINCT a.grade ...)`, which tells the shop which grades a product has), so the bare
+    # column name is no longer a proxy for the filter. The filter's own fragment is the `=` form - the
+    # same shape the brand and category probes beside it use.
+    for leak in ("a.grade =", ":min_cents", ":max_cents", "b.slug =", "c.slug ="):
         assert leak not in sql, "an unset filter leaked into the statement: " + leak
 
     # Each filter adds its own clause, and only its own.

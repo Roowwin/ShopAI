@@ -36,6 +36,10 @@ services:
       - wal_archive_pg:/wal_archive
       - ./infra/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
       - ./infra/postgres/init/01-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
+      # 02 CREATES THE TEST DATABASE AND THE AI WALL - see its header. It is a second file rather
+      # than more of 01 because it also has to be RE-RUNNABLE by hand on a cluster that is already
+      # up (that is how a machine which already had a database gets `rfo_test`).
+      - ./infra/postgres/init/02-databases.sh:/docker-entrypoint-initdb.d/02-databases.sh:ro
     networks: [db]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]

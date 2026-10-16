@@ -46,7 +46,13 @@ async def test_ttl_release_and_idempotence(client):
                         {"i": aid})
 
     n = await release_expired_reservations({})
-    assert n == 1, f"expected 1 release, got {n}"
+    # THE SWEEP IS TABLE-WIDE, so the count is not this test's to pin. It releases EVERY expired
+    # active hold, and the other suites leave theirs behind - sixteen were sitting in the test
+    # database, all expired, the day after the checkout suites created them - so `n == 1` passed only
+    # against a database with nothing else in it, and failed on every later run. What this test owns
+    # is that ITS hold was released, and that a second sweep finds nothing left: the assertions below
+    # are row-level and stay exact.
+    assert n >= 1, f"expected at least this test's release, got {n}"
     async with eng.begin() as c:
         st = (await c.execute(text("SELECT status FROM assets WHERE id = :i"), {"i": aid})).scalar_one()
         rs = (await c.execute(text("SELECT status FROM reservations WHERE asset_id = :i"), {"i": aid})).scalar_one()

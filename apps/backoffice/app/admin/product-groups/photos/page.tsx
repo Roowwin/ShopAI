@@ -23,7 +23,7 @@ export default function PhotoFolderPage() {
       <div className="mt-4">
         <PageHeader
           title="Photo folder"
-          description="Put a whole folder of photographs in at once. Nothing is attached here - each product group then offers the photo whose filename matches it, and you accept the ones you agree with."
+          description="Put a whole folder of photographs in at once, or pick individual files, or drop either one on the box. Nothing is attached here - each product group then offers the photo whose filename matches it, and you accept the ones you agree with."
         />
       </div>
       <div className="mt-4">

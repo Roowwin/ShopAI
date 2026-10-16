@@ -90,6 +90,15 @@ async def _one(sql: str, **params):
         return (await c.execute(text(sql), params)).mappings().first()
 
 
+async def _exec(sql: str, **params) -> None:
+    """A statement that returns no rows. `_one` ends in `.mappings()`, which raises
+    ResourceClosedError on an UPDATE - the failure reads as a broken fixture rather than as the
+    wrong helper, so the two live side by side."""
+    eng = get_engine()
+    async with eng.begin() as c:
+        await c.execute(text(sql), params)
+
+
 async def _purge_order(order_public_id: str) -> None:
     eng = get_engine()
     async with eng.begin() as c:
@@ -252,9 +261,13 @@ async def test_inventory_reports_days_in_warehouse_and_flags_dead_stock_by_the_l
             "brand_slug": "mission-bi-brand", "category_slug": "mission-bi-cat",
             "model": "M", "title": tag + " stock", "slug": tag.lower() + "-stock"})
         pid = r.json()["id"]
-        # THE OWNER'S REAL STOCK IS 12,000 UNITS, and the report is ordered WORST FIRST - a unit that
-        # arrived seconds ago sorts last and can never be on the page. So the fixture is proved by
-        # the SUMMARY's delta and the flag is proved by its own semantics on real rows.
+        # THE FIXTURE UNIT HAS BEEN IN THE BUILDING FOR NINETY DAYS, and that is a fixture decision
+        # rather than a detail of the stock. The report is ordered WORST FIRST and its page holds 2000
+        # rows, so a unit that arrived seconds ago sorts last and is never on the page - which made the
+        # row-level assertions below assertions about whatever ELSE the database happened to hold.
+        # That is exactly how this test passed against the operator's catalogued stock and failed
+        # against an empty database. Backdating the intake puts this unit on the first page of any
+        # database, so "the dead rows" is a claim about a row this test made.
         before = (await client.get("/staff/reports/inventory?limit=2000", headers=admin)).json()
         r = await client.post("/staff/lots", headers=admin, json={"lot_number": tag + "-LOT"})
         lot_id, lot_number = r.json()["id"], r.json()["lot_number"]
@@ -267,16 +280,22 @@ async def test_inventory_reports_days_in_warehouse_and_flags_dead_stock_by_the_l
         await client.post(f"/staff/lots/{lot_id}/activate", headers=admin)
         assert (await client.post(f"/staff/assets/{aid}/status", headers=admin,
                                   json={"status": "listed"})).status_code == 200
+        await _exec("UPDATE assets SET intake_at = now() - interval '90 days' WHERE id = :i", i=aid)
 
         data = (await client.get("/staff/reports/inventory?limit=2000", headers=admin)).json()
         assert data["summary"]["units_in_stock"] - before["summary"]["units_in_stock"] == 1
         assert data["summary"]["stock_value_cents"] - before["summary"]["stock_value_cents"] == 9000
         assert (data["summary"]["by_status"]["listed"]
                 - before["summary"]["by_status"]["listed"]) == 1
+        # LONG IN THE BUILDING, AND NOT DEAD: the flag reads the LISTING event, not the age of the
+        # stock, so the unit this test just listed on the shipped 60-day threshold is on the page and
+        # unflagged. That is the "computed rather than constant" half of the pair.
+        mine = [u for u in data["units"] if u["asset_id"] == aid]
+        assert mine and mine[0]["dead"] is False, mine
 
         # EVERY ROW CARRIES WHAT THE SCREEN RENDERS, and the flag is computed rather than constant:
-        # at the shipped 60 days this unit - listed moments ago - is not dead (it is not on the page
-        # at all), and at a threshold of zero the SAME report flags the stock that has been listed.
+        # at a threshold of zero the SAME report flags the stock that has been listed - the same unit,
+        # now that its listing event is older than the cutoff.
         tight = (await client.get("/staff/reports/inventory?dead_days=0&limit=2000",
                                   headers=admin)).json()
         assert tight["summary"]["dead_units"] >= 1, tight["summary"]

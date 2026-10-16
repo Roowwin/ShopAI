@@ -1,0 +1,57 @@
+# THE GATE'S OWN DATABASE - used by nobody but pytest.
+#
+# WHY THIS FILE EXISTS. Every test run used to write into `rfo`, the database the backoffice and the
+# shop read. The suites cannot clean up after themselves there: the units they scan in get a
+# `stock_movements` row, `rfo_app` holds only SELECT+INSERT on that table, and the FK from the
+# movement pins the asset - so the asset, its product and its brand outlive the run. What was left
+# was a catalogue slowly filling with `mission-*` / `pytest*` rows that no run would ever remove, and
+# a gate whose result depended on how much of the operator's real stock happened to be present.
+#
+# The suites are delta-based and seed their own fixtures, so pointing them at an empty database is a
+# change of address, not a rewrite. This file is that address.
+#
+# USE IT BY OVERRIDING, never by folding it into docker-compose.yml: the default stack must keep
+# starting exactly as it does today, and `api-test` stays out of it behind a profile.
+#
+#   docker compose exec postgres sh /docker-entrypoint-initdb.d/02-databases.sh   # once, creates rfo_test
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm api-test alembic upgrade head
+#   docker compose build api
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm api-test pytest -q --deselect ...
+#
+# WHAT IS DELIBERATELY *NOT* SET HERE. `image:` names the SAME tag `api` builds, so the gate still
+# tests the image the gate built - a private tag here would let `docker compose build api` and the
+# suite that runs drift apart, which is the failure this repo has already paid for once. The three
+# DSNs are the only difference from the live service, and they go straight at `postgres` over the
+# `db` network instead of through pgbouncer, which pools exactly one database by design.
+services:
+  api-test:
+    extends:
+      file: docker-compose.yml
+      service: api
+    image: rfo-api
+    profiles: ["test"]
+    # `db` for postgres, `core` for redis (quota + rate-limit state the assistant tests assert on).
+    # `edge` is not needed: nothing here is reached from a browser.
+    networks: !override [core, db]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rfo_app:${DB_APP_PASSWORD:?missing in .env}@postgres:5432/${RFO_TEST_DB:-rfo_test}
+      DATABASE_AI_STAFF_URL: postgresql+asyncpg://rfo_ai_staff:${DB_AI_STAFF_PASSWORD:?missing in .env}@postgres:5432/${RFO_TEST_DB:-rfo_test}
+      DATABASE_AI_PUBLIC_URL: postgresql+asyncpg://rfo_ai_public:${DB_AI_PUBLIC_PASSWORD:?missing in .env}@postgres:5432/${RFO_TEST_DB:-rfo_test}
+    # Straight to the database, so pgbouncer is not a dependency of a test run. `!override` rather
+    # than a bare block: `extends` MERGES these two keys, and a merged `depends_on` would quietly
+    # keep waiting on the pooler the comment above says we do not use.
+    depends_on: !override
+      postgres: { condition: service_healthy }
+
+  # THE SAME `migrate` SERVICE, POINTED AT THE TEST DATABASE - not a second service, so there is one
+  # alembic invocation to keep working. It needs the `db` network for the same reason `api-test`
+  # does (the pooler is configured for `rfo` alone), and the migrator's plain `postgresql://` DSN,
+  # never the app's `+asyncpg` one: alembic builds a SYNC engine (alembic/env.py:10) and an async
+  # driver there dies with MissingGreenlet, which reads like a broken migration rather than a
+  # broken URL.
+  migrate:
+    networks: !override [db]
+    environment:
+      DATABASE_URL: postgresql://rfo_migrator:${DB_MIGRATOR_PASSWORD:?missing in .env}@postgres:5432/${RFO_TEST_DB:-rfo_test}
+    depends_on: !override
+      postgres: { condition: service_healthy }

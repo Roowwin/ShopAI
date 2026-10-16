@@ -1069,6 +1069,34 @@ async def cms_put_home(body: dict, staff: dict = Depends(require_roles(*ROLES_CM
     deal = _clean_deal_of_month(body.get("deal_of_month"))
     if deal is not None:
         val["deal_of_month"] = deal
+    # BANNERS RIDE THROUGH THIS DOOR, AND A BODY THAT DOES NOT MENTION THEM KEEPS THEM. This door
+    # rewrites the whole `home` value, and the backoffice's CMS form has no field for banners yet -
+    # so treating "absent" as "clear" would delete the shop's banners the first time somebody
+    # corrected the hero line. Only a body that names `banners` changes them, and every id in it must
+    # be a media row that exists: a banner pointing at nothing is a hole on the home page.
+    if "banners" in body:
+        raw = body.get("banners")
+        kept: list[dict] = []
+        if isinstance(raw, list):
+            for b in raw[:6]:
+                if not isinstance(b, dict):
+                    continue
+                mid = str(b.get("media_id", ""))
+                if not mid.isdigit():
+                    continue
+                exists = (await db.execute(text("SELECT 1 FROM media_objects WHERE id = :i"),
+                                           {"i": int(mid)})).first()
+                if exists is None:
+                    continue
+                kept.append({"media_id": int(mid),
+                             "href": str(b.get("href") or "/")[:200] or "/",
+                             "alt": str(b.get("alt") or "")[:160]})
+        val["banners"] = kept
+    else:
+        prev = (await db.execute(text(
+            "SELECT value -> 'banners' FROM site_settings WHERE key = 'home'"))).scalar()
+        if prev:
+            val["banners"] = prev
     await db.execute(text("INSERT INTO site_settings (key, value) VALUES ('home', CAST(:v AS jsonb)) ON CONFLICT (key) DO UPDATE SET value = CAST(:v AS jsonb), updated_at = now()"), {"v": json.dumps(val)})
     await db.commit()
     await audit(db, "staff", entity="cms", action="home_updated", actor_id=staff["id"], after=val)
