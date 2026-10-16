@@ -4,7 +4,24 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import Header from "./components/Header";
 import FooterNewsletter from "./components/FooterNewsletter";
+import PaymentMarks from "./components/PaymentMarks";
 import { navLinkClass } from "./components/ui";
+
+/* The links that are about an ORDER rather than about stock, in the order a person reaches for them.
+   Static, because a footer is an index and not a feed: every one of these is a page that exists. The
+   catalogue is NOT indexed here - the header's Shop menu does that on every page, and a second copy
+   in the footer is one more thing to keep in step. */
+const HELP: [string, string][] = [
+  ["FAQ", "/faq"],
+  /* A PLAIN "&" HERE, not `&amp;`: this is a JavaScript string, and an entity is only decoded when
+     it is written as JSX text. `["Shipping &amp; delivery", ...]` renders the four characters
+     "&amp;" to the shopper, which is how the first version of this footer shipped. */
+  ["Shipping & delivery", "/faq"],
+  ["Returns & warranty", "/returns"],
+  ["Our grades A-D", "/grades"],
+  ["Track an order", "/track"],
+  ["Contact us", "/contact"],
+];
 
 /* Both faces are self-hosted at build time by next/font/google (no runtime third-party request,
    no layout shift) and exposed as CSS variables that tailwind.config.ts maps to `sans`/`display`.
@@ -44,7 +61,7 @@ export const metadata: Metadata = {
    instead of drawing a line the design deliberately does not have. */
 export const viewport: Viewport = { themeColor: "#F5F7FA" };
 
-export default async function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en-AU" className={inter.variable + " " + grotesk.variable}>
       <body className="bg-surface-page text-ink-900 min-h-screen flex flex-col">
@@ -65,32 +82,40 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               `ink-400`, which measures 4.44:1 on this soft-green band - just under the 4.5:1 bar,
               and the one place in the footer where the muted step landed on the tinted fill rather
               than on the page. */}
+          {/* A SMALL FOOTER, ON THREE SHORT ROWS.
+
+              It was four columns - the brand and its blurb, an index of every category, and two
+              link lists - which is a directory rather than a footer: it stood taller than the cart
+              page it sat under, and the catalogue index inside it duplicated the Shop menu in the
+              header. What is left is what a shopper at the bottom of a page actually reaches for:
+              the ways to get help, and a way to hear about new stock.
+
+                1. the help links, with the signup beside them
+                2. the payment marks, one line
+                3. the legal line
+
+              The categories are NOT repeated here any more. The header's Shop menu owns that index
+              and is on every page; a second copy in the footer is one more thing to keep in step. */}
           <div className="max-w-6xl mx-auto px-6 py-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-semibold text-ink-900 flex items-center gap-1.5 text-sm">
-                  <span className="h-2 w-2 rounded-full bg-brand-500"></span>RFO Store
-                </p>
-                <p className="text-xs mt-0.5">Certified refurbished electronics - renewed, graded and tracked.</p>
-              </div>
-              <nav aria-label="Footer" className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-                <a href="/" className={navLinkClass}>Shop</a>
-                <a href="/search" className={navLinkClass}>Search</a>
-                <a href="/assistant" className={navLinkClass}>Ask the AI</a>
-                <a href="/faq" className={navLinkClass}>FAQ</a>
-                <a href="/contact" className={navLinkClass}>Contact</a>
-                <a href="/grades" className={navLinkClass}>Our grades A-D</a>
-                <a href="/returns" className={navLinkClass}>Returns &amp; warranty</a>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <nav aria-label="Help" className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
+                {HELP.map(([label, href]) => (
+                  <a key={label} href={href} className={navLinkClass}>{label}</a>
+                ))}
               </nav>
-            </div>
-            <div className="mt-5">
-              <FooterNewsletter />
+              {/* Beside the links on a wide screen, under them on a narrow one, and small either
+                  way: a field and a button, no label and no sentence. */}
+              <FooterNewsletter compact />
             </div>
           </div>
           <div className="border-t border-line">
-            <p className="max-w-6xl mx-auto px-6 py-3 text-[11px]">
-              Prices in AUD incl. applicable GST (AU 10% / NZ 15%). Serials are shown masked for buyer confidence.
-            </p>
+            <div className="max-w-6xl mx-auto px-6 py-4">
+              <PaymentMarks />
+              <p className="mt-3 text-[11px]">
+                &copy; {new Date().getFullYear()} RFO Store. Prices in AUD incl. applicable GST
+                (AU 10% / NZ 15%). Serials are shown masked for buyer confidence.
+              </p>
+            </div>
           </div>
         </footer>
       </body>

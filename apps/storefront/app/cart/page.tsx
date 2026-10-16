@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { aud } from "@/lib/api";
 import { cartGet, cartRemove, cartTotal, type CartLine } from "@/lib/cart";
-import { Button, Card, EmptyState, Heading, linkClass } from "../components/ui";
+import { Button, Card, EmptyState, Heading } from "../components/ui";
 
 /* THE CART.
  *
@@ -32,8 +32,16 @@ export default function CartPage() {
 
       <Card className="p-5 mt-6">
         {ready && lines.length === 0 && (
-          <EmptyState>
-            Your cart is empty - <a className={linkClass} href="/">browse the shop</a>.
+          <EmptyState
+            action={<>
+              <Button href="/">Browse the shop</Button>
+            </>}>
+            <span className="font-medium text-ink-600">Your cart is empty.</span>{" "}
+            Every unit is one specific serialised device, so nothing here can be re-ordered later -
+            add the grade you want while it is in stock.
+            <span className="mt-2 block text-xs text-ink-400">
+              Free tracked shipping Australia-wide &middot; 30-day returns
+            </span>
           </EmptyState>
         )}
         {lines.map((l) => (

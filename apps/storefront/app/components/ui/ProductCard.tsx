@@ -1,4 +1,6 @@
 import { aud } from "@/lib/api";
+import { conditionFor } from "@/lib/condition";
+import CategoryGlyph from "../CategoryGlyph";
 import ProductArt from "../ProductArt";
 import Badge from "./Badge";
 import Button from "./Button";
@@ -38,6 +40,9 @@ type Props = {
   imageUrl?: string | null;
   priceCents?: number | null;
   stock?: Stock | null;
+  /** The grades this model has LISTED, e.g. ["A","B","C"]. Empty for a product with nothing on the
+      shelf, and unused where the card shows a condition instead of a grade. */
+  grades?: string[] | null;
   meta?: string | null;
   variant?: "full" | "compact" | "text";
 };
@@ -58,34 +63,85 @@ function eyebrowFor(title: string, brand?: string | null, category?: string | nu
 }
 
 /* The one place a price is formatted. null/undefined means "no listed units", shown as "-" -
-   never "$0.00". */
+   never "$0.00".
+
+   "FROM", because that is what the number IS: the catalogue sends the cheapest listed unit of the
+   model (`price_from_cents`), and every product here is sold in four grades at four prices, so a bare
+   "$89.64" on a tile claims a price the shopper will not necessarily be offered. Paired with the
+   grade the panel beside the page then asks for, "From" is the honest word. */
 function price(cents: number | null | undefined) {
-  return cents !== null && cents !== undefined ? aud(cents) : "-";
+  return cents !== null && cents !== undefined ? "From " + aud(cents) : "-";
 }
 
-function Initials({ brand, large }: { brand?: string | null; large?: boolean }) {
+/* The tile a product without a photograph shows: the glyph for its category, drawn in the quiet ink
+   step on the same sunken well the photographs sit on. One third of this catalogue has no photograph
+   yet - no battery, cable, backpack or memory stick has been shot - so this is a common tile and not
+   an edge case, and it has to read as deliberate. It used to be the brand's first two letters at
+   20px, which named the one thing the eyebrow above the title already says and left the shopper no
+   idea what the object was. See components/CategoryGlyph.tsx for why a glyph and not a file. */
+function CategoryTile({ category, large }: { category?: string | null; large?: boolean }) {
   return (
     <div className="aspect-[4/3] bg-surface-sunken flex items-center justify-center">
-      <span className={(large ? "text-xl" : "text-lg") + " font-bold text-ink-400"}>
-        {(brand || "?").slice(0, 2).toUpperCase()}
-      </span>
+      <CategoryGlyph category={category} className={(large ? "h-16 w-16" : "h-14 w-14") + " text-brand-500"} />
     </div>
   );
 }
 
 /* Small and quiet: the count is information, not the card's action, and the card already has the
    one control that competes for the eye. A live count and a zero one share the tint and are told
-   apart by their own wording. */
+   apart by their own wording.
+
+   THE LAST FEW GO AMBER, AND SAY SO. "26 in stock" and "2 in stock" were the same grey pill, so the
+   one number a shopper acts on - the one that says this will not be here next week - looked like
+   every other number on the page. `accent` is the design's status colour and this is status: not a
+   sale, not a warning, just a fact the shop would be silly to whisper. The threshold is THREE and it
+   is a count of real listed units, never an invented scarcity. */
 function StockPill({ stock }: { stock: Stock }) {
+  const low = stock.n > 0 && stock.n <= 3;
   return (
-    <Badge colorClass="bg-surface-sunken text-ink-500">
-      {stock.n} {stock.label ?? "in stock"}
+    <Badge colorClass={low
+      ? "bg-accent-50 text-accent-700 ring-1 ring-accent-400"
+      : "bg-surface-sunken text-ink-500"}>
+      {low ? "Only " + stock.n + " left" : stock.n + " " + (stock.label ?? "in stock")}
     </Badge>
   );
 }
 
-export default function ProductCard({ href, title, brand, category, slug, imageUrl, priceCents, stock, meta, variant = "text" }: Props) {
+/* WHICH GRADES THIS MODEL HAS ON THE SHELF, as four letters.
+
+   The shop's whole promise is that units are graded one at a time, and the card said nothing about
+   grades at all - a shopper had to open the product page to learn whether an A was available at all.
+   The letters the model has are drawn in their grade's own colour (the same tokens the grade cards
+   and the product page use) and the ones it does not have are dimmed, so the row reads as a range at
+   a glance: "A B C D" for a model with all four, "A B" for one with two.
+
+   SHOWN ONLY WHEN THE PRODUCT HAS NO CONDITION. A new accessory carries four grade rows in the
+   database with one price across them (see lib/condition.ts) and its meaning is "New", not "Grade
+   B" - so where the card has a condition chip, this row stays off. */
+const GRADE_ORDER = ["A", "B", "C", "D"];
+
+function GradeRow({ grades }: { grades: string[] }) {
+  const has = new Set(grades);
+  return (
+    <span className="inline-flex items-center gap-1" aria-hidden="true">
+      {GRADE_ORDER.map((g) => (
+        <span key={g}
+          className={cn(
+            "inline-flex h-5 w-5 items-center justify-center rounded-[4px] text-[10px] font-bold",
+            has.has(g)
+              ? "bg-grade-" + g.toLowerCase() + "-soft text-grade-" + g.toLowerCase() + "-ink ring-1 ring-grade-" + g.toLowerCase() + "-solid/30"
+              : "bg-surface-sunken text-ink-300 ring-1 ring-line",
+          )}>
+          {g}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+export default function ProductCard({ href, title, brand, category, slug, imageUrl, priceCents, stock, meta, grades, variant = "text" }: Props) {
   const name = cardTitle(title);
+  const condition = conditionFor(category);
   // Two lines, not one: the catalog tile's eyebrow names the category, the text tile's never has -
   // it is a brand line alone, and the shared rule only decides whether the brand is worth saying.
   const brandLine = eyebrowFor(title, brand);
@@ -100,8 +156,26 @@ export default function ProductCard({ href, title, brand, category, slug, imageU
       <Card interactive className="relative overflow-hidden">
         <div className="relative">
           <ProductArt slug={slug} imageUrl={imageUrl} alt={name} className="w-full aspect-[4/3] object-cover"
-            fallback={<Initials brand={brand} large />} />
-          {!imageUrl && <Badge colorClass="bg-surface-pressed text-ink-900 ring-1 ring-line" className="absolute top-3 right-3">Eco choice</Badge>}
+            fallback={<CategoryTile category={category} large />} />
+          {/* WHAT KIND OF GOODS THIS IS, said on the tile rather than only on the product page. Most
+              of this catalogue is a graded refurbished machine and says so by carrying a grade; a new
+              cable or a tested system board carries none, and without this chip the grid gives a
+              shopper no way to tell a $15 new mouse from a $15 graded one. It replaces an "Eco
+              choice" badge that was here purely because the tile had no photograph - see below. */}
+          {condition && (
+            <Badge colorClass="bg-surface text-ink-700 ring-1 ring-line" className="absolute top-3 left-3">
+              {condition.label}
+            </Badge>
+          )}
+          {/* THE GRADES, over the photograph the same way the condition chip is - a graded device has
+              no condition chip, so the two never fight for the corner. `sr-only` text carries what the
+              letters mean; the row itself is decoration. */}
+          {!condition && grades && grades.length > 0 && (
+            <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-control bg-surface/90 px-1.5 py-1 ring-1 ring-line backdrop-blur-md">
+              <span className="sr-only">Grades in stock: {grades.join(", ")}</span>
+              <GradeRow grades={grades} />
+            </span>
+          )}
         </div>
         <div className="p-5">
           {eyebrowLine && <Eyebrow>{eyebrowLine}</Eyebrow>}
@@ -114,7 +188,7 @@ export default function ProductCard({ href, title, brand, category, slug, imageU
               being squared off by them. */}
           <a href={href}
             className={cn(
-              "font-medium mt-2 block truncate rounded-control",
+              "font-medium mt-2 block line-clamp-2 min-h-[3rem] rounded-control",
               "after:absolute after:inset-0 after:rounded-2xl after:content-['']",
               "focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-brand-300 focus-visible:after:ring-inset",
             )}>
@@ -124,15 +198,14 @@ export default function ProductCard({ href, title, brand, category, slug, imageU
             <span className="font-semibold text-sm">{price(priceCents)}</span>
             {stock && <StockPill stock={stock} />}
           </div>
-          {/* THE card's action, and it names the number: a tile that says only "View product" makes
-              the shopper open the page to learn the one thing the grid could have told them. With
-              no listed units there is no number to name, so it falls back to the neutral label
-              rather than advertising "Buy at -".
-              `relative z-10` keeps it a control of its own: the tile-wide link above is what would
-              otherwise swallow the click. */}
+          {/* THE card's action. It used to read "Buy at $129.00", which was wrong twice over: it
+              named one number for a model whose four grades are four prices, and it did not buy -
+              it navigates to the page where the grade is chosen and the unit is reserved. "View
+              options" is what a shop says when the tile cannot complete the purchase, and it leaves
+              the price to the line above, where it is already printed. */}
           <Button variant={priceCents !== null && priceCents !== undefined ? "primary" : "secondary"}
             href={href} className="relative z-10 mt-3 w-full">
-            {priceCents !== null && priceCents !== undefined ? "Buy at " + price(priceCents) : "View product"}
+            {priceCents !== null && priceCents !== undefined ? "View options" : "View product"}
           </Button>
         </div>
       </Card>
@@ -143,9 +216,9 @@ export default function ProductCard({ href, title, brand, category, slug, imageU
     return (
       <Card interactive href={href} className="overflow-hidden">
         <ProductArt slug={slug} imageUrl={imageUrl} alt={name} className="w-full aspect-[4/3] object-cover"
-          fallback={<Initials brand={brand} />} />
+          fallback={<CategoryTile category={category} />} />
         <div className="p-5">
-          <p className="font-medium truncate text-sm">{name}</p>
+          <p className="font-medium line-clamp-2 min-h-[2.5rem] text-sm">{name}</p>
           <p className="text-sm font-semibold mt-2">{price(priceCents)}</p>
           {meta && <p className="text-xs text-ink-500 mt-1">{meta}</p>}
         </div>

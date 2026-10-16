@@ -153,8 +153,8 @@ export default function FaqPage() {
           <a className={linkClass} href="/contact">contact us</a> for hours and response times.
         </Note>
         <p>
-          Looking for a device instead? Browse the <a className={linkClass} href="/">shop</a> or ask the{" "}
-          <a className={linkClass} href="/assistant">AI assistant</a> what we have in stock right now.
+          Looking for a device instead? The <a className={linkClass} href="/">shop</a> lists every unit that is on the
+          shelf right now, with its grade, its price and how many are left.
         </p>
       </Section>
     </ContentPage>

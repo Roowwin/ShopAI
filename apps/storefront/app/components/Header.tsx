@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { API, aud } from "@/lib/api";
 import { cartGet } from "@/lib/cart";
-import NavDropdown, { type NavLink } from "./NavDropdown";
-import { childrenOf, parentOf, shortcutHref, shortcutsFor } from "./navMenu";
+import NavDropdown, { type NavColumn, type NavLink } from "./NavDropdown";
+import { NAV_CHILDREN, childrenOf, parentOf, shortcutHref, shortcutsFor } from "./navMenu";
 import { Button, cn, Input, navLinkClass } from "./ui";
 
 type SItem = { slug: string; title: string; units_available: number; price_from_cents: number | null };
@@ -21,12 +21,25 @@ type SItem = { slug: string; title: string; units_available: number; price_from_
    this one come after them, so the fly-out reads as "here is what is inside" before "here is a slice
    of it". */
 function catLink(c: { name: string }): NavLink {
-  const href = "/category/" + encodeURIComponent(c.name);
-  const children: { href: string; label: string }[] = [
-    ...childrenOf(c.name).map((name) => ({ href: "/category/" + encodeURIComponent(name), label: name })),
-    ...(shortcutsFor(c.name) ?? []).map((s) => ({ href: shortcutHref(c.name, s.term), label: s.label })),
+  return { href: "/category/" + encodeURIComponent(c.name), label: c.name };
+}
+
+/* THE MEGA MENU'S COLUMNS, in one place: the shop's own categories, grouped by what the things ARE.
+
+   "Devices" is every category that is not filed under another - the top level of `navMenu`'s table.
+   "Parts" and "Accessories" are that table's two lists, FILTERED TO WHAT THE CATALOGUE ACTUALLY
+   STOCKS: the table also names categories nobody sells (Processors, today), and a menu entry that
+   opens an empty grid is worse than a missing one. Nothing here invents a category name - if a
+   category is added to the catalogue it appears in "Devices" by itself, and if one is moved between
+   the two lists in navMenu it moves here with it. */
+function shopColumns(cats: { name: string }[]): NavColumn[] {
+  const known = new Set(cats.map((c) => c.name));
+  const link = (name: string): NavLink => ({ href: "/category/" + encodeURIComponent(name), label: name });
+  return [
+    { heading: "Devices", links: cats.filter((c) => !parentOf(c.name)).map((c) => link(c.name)) },
+    { heading: "Parts", links: NAV_CHILDREN.Parts.filter((n) => known.has(n)).map(link) },
+    { heading: "Accessories", links: NAV_CHILDREN.Accessories.filter((n) => known.has(n)).map(link) },
   ];
-  return children.length ? { href, label: c.name, children } : { href, label: c.name };
 }
 
 export default function Header() {
@@ -103,8 +116,13 @@ export default function Header() {
           <span className="h-2.5 w-2.5 rounded-full bg-brand-500"></span>
           RFO<span className="text-brand-300">Store</span>
         </a>
-        {/* The centre group: [Shop v | FAQ | Ask AI], per the owner's brief of 2026-10-12. This
-            REPLACES the sideways-scrolling category strip job 17 put here, whose whole point was
+        {/* The centre group: [Shop v | FAQ], per the owner's brief of 2026-10-12 - and "Ask AI" was
+            removed from it on 2026-10-16 at the owner's request, along with every other way into the
+            assistant (the homepage's link, the product page's invite band, the cart's empty state
+            and the /assistant page itself). This comment used to read "[Shop v | FAQ | Ask AI]" and
+            is kept as the record of what the row was.
+
+            This REPLACES the sideways-scrolling category strip job 17 put here, whose whole point was
             that no category could be hidden. The menu is a deliberate replacement rather than a fix
             - and what it keeps of that rule is reach: every live category is one click away, read
             from the API rather than hardcoded, so a category added to the catalog turns up here
@@ -117,13 +135,8 @@ export default function Header() {
               with its filter bar. The row stays because "show me everything" is a real thing to
               want next to a list of categories; only the label was wrong. */}
           <NavDropdown label="Shop" open={shop} onOpenChange={setShop}
-            links={[{ href: "/", label: "All products" },
-                    /* Only the TOP-LEVEL categories. A category filed under another is rendered
-                       inside it (see catLink), so without this filter the menu lists "RAM (Memory)"
-                       as a sibling of "Parts" and again underneath it. */
-                    ...cats.filter((c) => !parentOf(c.name)).map(catLink)]} />
+            columns={shopColumns(cats)} all={{ href: "/", label: "All products" }} />
           <a href="/faq" className={cn("inline-flex items-center min-h-[44px] px-3 text-sm", navLinkClass)}>FAQ</a>
-          <a href="/assistant" className={cn("inline-flex items-center min-h-[44px] px-3 text-sm", navLinkClass)}>Ask AI</a>
           {/* The way into the account, and the only one: it is where a shopper finds the orders they
               have placed, and the confirmation links themselves are unguessable so they are not a
               navigable destination. */}
@@ -229,8 +242,7 @@ export default function Header() {
             );
           })}
           <a href="/faq" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>FAQ</a>
-          <a href="/assistant" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>Ask AI</a>
-          <a href="/account" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>Account</a>
+                    <a href="/account" className={cn("py-3", navLinkClass)} onClick={() => setMenu(false)}>Account</a>
         </nav>
       )}
     </header>

@@ -166,7 +166,7 @@ export default function LoadMore({ initial, applied, categories, brands }: {
         {items.map((i) => (
           <ProductCard key={i.slug} variant="full" href={"/products/" + i.slug} title={i.title}
             brand={i.brand} category={i.category} slug={i.slug} imageUrl={i.image_url}
-            priceCents={i.price_from_cents} stock={{ n: i.units_available }} />
+            priceCents={i.price_from_cents} stock={{ n: i.units_available }} grades={i.grades} />
         ))}
         {items.length === 0 && (
           <div className="col-span-full">

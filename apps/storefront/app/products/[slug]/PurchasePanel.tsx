@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { aud } from "@/lib/api";
+import { conditionFor } from "@/lib/condition";
 import { cartAdd, cartGet } from "@/lib/cart";
 import { GRADES } from "@/lib/grades";
 import { Badge, Button, Card, Eyebrow, Heading, fieldClass, linkClass } from "../../components/ui";
@@ -56,16 +57,23 @@ function byPrice(a: Unit, b: Unit): number {
    wording is lifted from the FAQ and the returns page rather than invented: "12-month RFO
    warranty" and "30 days from delivery" are the published terms, and "certified refurbished" is
    what the site says about itself. There is deliberately no buy-now-pay-later line - this
-   platform has no such provider, and a payment promise is not something a page may invent. */
-const TRUST: { label: string; icon: ReactNode }[] = [
+   platform has no such provider, and a payment promise is not something a page may invent.
+
+   EACH ONE IS NOW A LINK to the page that explains it. They were three grey labels with a tick
+   beside them, which told a shopper that returns exist and left them to find the terms themselves -
+   on the one screen where they are deciding whether to spend several hundred dollars. `href` is
+   optional so a promise with nowhere to point stays a plain label rather than a dead link. */
+const TRUST: { label: string; icon: ReactNode; href?: string }[] = [
   {
     label: "30-day returns",
+    href: "/returns",
     icon: (
       <path d="M4 8h9a4 4 0 1 1 0 8H7M4 8l3-3M4 8l3 3" />
     ),
   },
   {
     label: "12-month warranty",
+    href: "/faq",
     icon: (
       <>
         <path d="M10 2.5 16.5 5v5c0 3.6-2.6 6.6-6.5 7.5C6.1 16.6 3.5 13.6 3.5 10V5L10 2.5Z" />
@@ -75,6 +83,7 @@ const TRUST: { label: string; icon: ReactNode }[] = [
   },
   {
     label: "Certified refurbished",
+    href: "/grades",
     icon: (
       <>
         <path d="M10 2.5 16.5 5v5c0 3.6-2.6 6.6-6.5 7.5C6.1 16.6 3.5 13.6 3.5 10V5L10 2.5Z" />
@@ -84,16 +93,22 @@ const TRUST: { label: string; icon: ReactNode }[] = [
   },
 ];
 
-export default function PurchasePanel({ units, title, brand, model, slug, specs, grade, onGradeChange }: {
+export default function PurchasePanel({ units, title, brand, model, slug, grade, onGradeChange, category }: {
   units: Unit[]; title: string; brand: string; model: string; slug: string;
-  specs: [string, string][];
   /* THE GRADE IS CONTROLLED NOW. It used to live here, and it was the only thing on the page that
      knew it. It moved up to `ProductStage` because the gallery beside this panel shows a different
      photograph per grade, so the two must read the same value - one owner, two controls. This panel
      still decides everything the panel shows; it simply no longer decides what the page is looking
      at. `onGradeChange` is the whole of the contract. */
   grade: string; onGradeChange: (grade: string) => void;
+  /* What kind of thing this is - see lib/condition.ts. Null means a graded refurbished device, which
+     is the only case that gets the grade selector below: a new cable and a tested system board have
+     one condition each, not four grades, and asking a shopper to pick one would be asking them to
+     choose between four prices that are all the same. The grade still exists underneath (the units
+     carry one, and the panel still buys the right ones) - it just stops being a question. */
+  category?: string | null;
 }) {
+  const condition = conditionFor(category);
   /* Every grade A-D, with the units behind it. A grade with nothing on the shelf is still
      listed (disabled, "out of stock") rather than dropped: the ladder is a fact about the shop,
      and a dropdown that silently loses a rung reads as though the grade stopped existing. */
@@ -159,8 +174,8 @@ export default function PurchasePanel({ units, title, brand, model, slug, specs,
         <div className="mt-5">
           <Badge colorClass="bg-surface-sunken text-ink-500">Out of stock</Badge>
           <p className="mt-3 text-sm text-ink-600">
-            Every unit of this model has sold. Certified stock arrives weekly - ask the assistant
-            and it will tell you what is closest.
+            Every unit of this model has sold. New stock is graded and added most weeks - the{" "}
+            <a className={linkClass} href="/">shop</a> shows what has arrived.
           </p>
         </div>
       ) : (
@@ -189,7 +204,9 @@ export default function PurchasePanel({ units, title, brand, model, slug, specs,
                 palette - rather than a new "available" colour invented beside it. */}
             <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-500">
               <span aria-hidden="true" className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-grade-a-solid" />
-              {stock} {stock === 1 ? "unit" : "units"} in stock at grade {grade}
+              {condition
+                ? stock + (stock === 1 ? " unit" : " units") + " in stock"
+                : stock + " " + (stock === 1 ? "unit" : "units") + " in stock at grade " + grade}
             </p>
 
             {qty > 1 && (
@@ -200,17 +217,26 @@ export default function PurchasePanel({ units, title, brand, model, slug, specs,
           </div>
 
           <div className="mt-6 space-y-4">
-            <div>
-              <label htmlFor="pdp-grade" className="block text-xs font-semibold text-ink-600 mb-1.5">Grade</label>
-              <select id="pdp-grade" className={FIELD + " px-3 py-2.5"}
-                value={grade} onChange={(e) => pickGrade(e.target.value)}>
-                {shelf.map((g) => (
-                  <option key={g.letter} value={g.letter} disabled={g.units.length === 0}>
-                    Grade {g.letter} - {g.label} ({g.units.length === 0 ? "out of stock" : g.units.length + " in stock"})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {condition ? (
+              /* One condition, not a ladder. The note says what the item IS, because the absence of a
+                 grade is itself a fact the shopper would otherwise have to guess at. */
+              <div className="rounded-control bg-surface-sunken px-3 py-2.5 ring-1 ring-line">
+                <p className="text-xs font-semibold text-ink-900">{condition.label}</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-ink-500">{condition.note}</p>
+              </div>
+            ) : (
+              <div>
+                <label htmlFor="pdp-grade" className="block text-xs font-semibold text-ink-600 mb-1.5">Grade</label>
+                <select id="pdp-grade" className={FIELD + " px-3 py-2.5"}
+                  value={grade} onChange={(e) => pickGrade(e.target.value)}>
+                  {shelf.map((g) => (
+                    <option key={g.letter} value={g.letter} disabled={g.units.length === 0}>
+                      Grade {g.letter} - {g.label} ({g.units.length === 0 ? "out of stock" : g.units.length + " in stock"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* A real group with a real label, so "Quantity, 2" is what a screen reader announces
                 rather than three loose controls. The value is a live region for the same reason:
@@ -240,59 +266,60 @@ export default function PurchasePanel({ units, title, brand, model, slug, specs,
                   and the two rows could otherwise disagree for a render after a grade change. */}
               <p className="mt-3 text-xs text-ink-500" role="status">
                 {already > 0 && !allInBag
-                  ? already + " of these " + (already === 1 ? "is" : "are") + " already in your bag."
+                  ? already + " of these " + (already === 1 ? "is" : "are") + " already in your cart."
                   : picked.length > 0
-                    ? "Serial" + (picked.length === 1 ? "" : "s") + " reserved at checkout: " + picked.map((u) => "***" + u.serial_tail).join(", ")
-                    : "Nothing in this grade yet."}
+                    ? "Serial" + (picked.length === 1 ? "" : "s") + " assigned at checkout: " + picked.map((u) => "***" + u.serial_tail).join(", ")
+                    : "None of this grade in stock right now - try another grade above."}
               </p>
             </div>
           </div>
 
           <Button variant="primary" className="mt-6 w-full"
             disabled={soldOut || stock === 0 || allInBag} onClick={addToBag}>
-            {allInBag ? "In your bag" : "Add to Bag"}
+            {allInBag ? "In your cart" : "Add to cart"}
           </Button>
+
+          {/* WHAT IT COSTS TO GET IT, said where the decision is made rather than three clicks away in
+              the FAQ. Both halves are the shop's own published terms (faq/page.tsx: free tracked
+              shipping on every order with no minimum, 30 days to return from delivery) - this line is
+              the only place above the fold that says either, and a shopper about to spend $600 wants
+              both before they press the button. The terms themselves are linked from the trust row
+              below, so this stays one short line instead of wrapping into two. */}
+          <p className="mt-3 text-center text-xs text-ink-500">
+            Free tracked shipping Australia-wide &middot; 30-day returns
+          </p>
         </>
       )}
 
       {/* The trust row. Three columns at the foot of the panel, where the decision is made -
           rather than a fourth row of chips under the fold. */}
       <ul className="mt-6 grid grid-cols-3 gap-2 border-t border-line pt-5">
-        {TRUST.map((t) => (
-          <li key={t.label} className="flex flex-col items-center gap-1.5 text-center">
-            <svg viewBox="0 0 20 20" className="h-5 w-5 text-brand-300" fill="none" stroke="currentColor"
-              strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              {t.icon}
-            </svg>
-            <span className="text-[11px] leading-tight text-ink-500">{t.label}</span>
-          </li>
-        ))}
+        {TRUST.map((t) => {
+          /* "Certified refurbished" is a promise about a graded machine, and it was being made on a
+             page selling a new cable. Where the product has a condition instead of a grade, the third
+             promise becomes that condition - and loses its link to the grades page, which explains a
+             ladder this product does not have. */
+          const replaced = condition && t.label === "Certified refurbished";
+          const label = replaced ? condition.label : t.label;
+          const href = replaced ? undefined : t.href;
+          return (
+            <li key={t.label} className="flex flex-col items-center gap-1.5 text-center">
+              <svg viewBox="0 0 20 20" className="h-5 w-5 text-brand-300" fill="none" stroke="currentColor"
+                strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                {t.icon}
+              </svg>
+              {href
+                ? <a href={href} className="text-[11px] leading-tight text-ink-500 underline decoration-line-strong underline-offset-2 hover:text-ink-900">{label}</a>
+                : <span className="text-[11px] leading-tight text-ink-500">{label}</span>}
+            </li>
+          );
+        })}
       </ul>
 
-      {/* Expandable, and native: <details> is keyboard-operable, screen-reader-announced and
-          works with scripting off, which three lines of state would only re-implement worse. */}
-      {specs.length > 0 && (
-        <details className="mt-5 border-t border-line pt-5 group">
-          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden text-sm font-semibold text-ink-900 flex items-center justify-between gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2">
-            Product details
-            <span aria-hidden="true" className="text-ink-500 transition-transform duration-fast ease-out group-open:rotate-180 motion-reduce:transition-none">
-              <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 8 5 5 5-5" /></svg>
-            </span>
-          </summary>
-          <dl className="mt-3 space-y-1.5">
-            {specs.map(([label, value]) => (
-              <div key={label} className="flex justify-between gap-4 border-b border-line py-1.5 text-sm">
-                <dt className="text-ink-500">{label}</dt>
-                <dd className="text-ink-900 font-medium text-right">{value}</dd>
-              </div>
-            ))}
-          </dl>
-          <p className="mt-3 text-xs text-ink-500">
-            Model <span className="text-ink-600">{slug}</span> - grading explained on the{" "}
-            <a href="/grades" className={linkClass}>grades page</a>.
-          </p>
-        </details>
-      )}
+      {/* THE SPEC SHEET USED TO BE A COLLAPSED <details> HERE, and it is now the left half of the
+          two-column block under the product area (see page.tsx). A collapsed panel in the column that
+          already holds the price and the grade selector hid the one thing a technical buyer scans
+          behind a click; and `specs` is no longer a prop of this component at all. */}
     </Card>
   );
 }

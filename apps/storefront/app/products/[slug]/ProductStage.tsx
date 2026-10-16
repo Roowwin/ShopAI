@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { conditionFor } from "@/lib/condition";
+import CategoryGlyph from "../../components/CategoryGlyph";
 import ProductArt from "../../components/ProductArt";
 import PurchasePanel from "./PurchasePanel";
 
@@ -26,7 +28,7 @@ import PurchasePanel from "./PurchasePanel";
      1. the selected grade's own photograph, when the group for that grade has one;
      2. otherwise the model's card photograph (`products.image_url`), which is a real photo once any
         grade has been published and a shipped `/icons/` glyph before that;
-     3. otherwise `ProductArt`'s own initials tile, unchanged.
+     3. otherwise the category glyph tile below, unchanged.
    Step 2 is what keeps a model with only a Grade A photo from showing a blank tile to a Grade C
    shopper: a photograph of the model beats no photograph, and neither is ever passed off as the
    unit being bought. */
@@ -50,11 +52,15 @@ export function firstStockedGrade(units: { grade: string }[]): string {
   return GRADE_ORDER[0];
 }
 
-export default function ProductStage({ slug, title, brand, model, specs, imageUrl, groups, units }: {
+export default function ProductStage({ slug, title, brand, model, imageUrl, groups, units, category }: {
   slug: string; title: string; brand: string; model: string;
-  specs: [string, string][]; imageUrl: string | null; groups: GradeShot[]; units: Unit[];
+  imageUrl: string | null; groups: GradeShot[]; units: Unit[];
+  /** The catalogue category, which is what says whether this product is a graded device or a new
+      accessory / a working part - see lib/condition.ts. */
+  category?: string | null;
 }) {
   const [grade, setGrade] = useState<string>(() => firstStockedGrade(units));
+  const condition = conditionFor(category);
   const inStock = units.length > 0;
 
   /* Which grades have a photograph of their own. Built once per payload rather than per render:
@@ -70,7 +76,7 @@ export default function ProductStage({ slug, title, brand, model, specs, imageUr
 
   /* THE RAIL. One rung per grade that HAS a photograph, in ladder order - or the model's own card
      shot when no grade has one, which is every product on the shop today. A grade with no
-     photograph is not drawn as an empty tile: `ProductArt` would fall through to the same initials
+     photograph is not drawn as an empty tile: `ProductArt` would fall through to the same placeholder
      for all four grades and the rail would read as four identical photographs, which is worse than
      a rail of one. */
   const rail = useMemo(() => {
@@ -83,12 +89,16 @@ export default function ProductStage({ slug, title, brand, model, specs, imageUr
   /* THE HERO follows the selected grade. See the fallback order in the header comment. */
   const heroUrl = shotsByGrade.get(grade) ?? imageUrl ?? null;
 
-  /* The initials tile, used when the model has neither a photo nor a shipped glyph. Unchanged from
-     the page this was lifted out of - including the wording, which is the shop's own. */
-  const initials = (
+  /* THE TILE for a product with no photograph, and NOT the initials block it used to be. Two letters
+     of the brand, drawn at display size in a 4:3 well, is what the catalogue tiles had - and on this
+     page it read even worse, because it is the hero: a shopper met a giant "GE" where the product
+     should be, under the words "Product photo coming soon". It is now the same category glyph the
+     cards use, at hero size, with the item named underneath - true, even, and the same visual
+     language as every other tile in the shop. The wording stays the shop's own. */
+  const noPhoto = (
     <div className="w-full aspect-[4/3] bg-surface-sunken flex flex-col items-center justify-center text-ink-500">
-      <p className="font-display text-display text-ink-400">{(brand || "?").slice(0, 2).toUpperCase()}</p>
-      <p className="text-xs mt-2">Product photo coming soon</p>
+      <CategoryGlyph category={category} className="h-20 w-20 text-brand-500" />
+      <p className="text-xs mt-3">Product photo coming soon</p>
       <p className="text-xs text-ink-400 mt-0.5">{brand} {model}</p>
     </div>
   );
@@ -114,7 +124,7 @@ export default function ProductStage({ slug, title, brand, model, specs, imageUr
                               : "ring-2 ring-ink-700")}
               >
                 <ProductArt slug={slug} imageUrl={shot.url} alt={shot.grade ? title + " (Grade " + shot.grade + ")" : title}
-                  className="w-full aspect-[4/3] object-cover" fallback={initials} />
+                  className="w-full aspect-[4/3] object-cover" fallback={noPhoto} />
               </button>
             ))}
           </div>
@@ -130,14 +140,14 @@ export default function ProductStage({ slug, title, brand, model, specs, imageUr
           <div className="order-1 sm:order-2">
             <div className="relative rounded-card overflow-hidden ring-1 ring-line bg-surface-sunken">
               <ProductArt slug={slug} imageUrl={heroUrl} alt={title} priority
-                className="w-full aspect-[4/3] object-cover" fallback={initials} />
+                className="w-full aspect-[4/3] object-cover" fallback={noPhoto} />
               {inStock && (
                 <p className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-surface-deep/85 px-3 py-1.5 text-xs font-medium text-ink-700 backdrop-blur-md ring-1 ring-line">
                   <svg viewBox="0 0 20 20" className="h-3.5 w-3.5 shrink-0 text-grade-a-ink" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <circle cx="10" cy="10" r="7.5" />
                     <path d="m6.8 10.2 2.2 2.2 4.2-4.6" />
                   </svg>
-                  Hand-Inspected Unit
+                  {condition ? condition.label : "Hand-Inspected Unit"}
                 </p>
               )}
             </div>
@@ -146,7 +156,9 @@ export default function ProductStage({ slug, title, brand, model, specs, imageUr
                 and a shopper who has not noticed the rail is a shopper who has not noticed the grade. */}
             {shotsByGrade.has(grade) && (
               <p className="mt-2 text-xs text-ink-500">
-                Shown: a Grade {grade} unit of this model. Other grades are shown on their own.
+                {condition
+                  ? "Shown: this product."
+                  : "Shown: a Grade " + grade + " unit of this model. Other grades are shown on their own."}
               </p>
             )}
             {!inStock && (
@@ -162,7 +174,7 @@ export default function ProductStage({ slug, title, brand, model, specs, imageUr
           page was handed - the column to its left never carries a price. */}
       <div className="order-2 lg:col-span-5 lg:sticky lg:top-24">
         <PurchasePanel units={units} title={title} brand={brand} model={model}
-          slug={slug} specs={specs} grade={grade} onGradeChange={setGrade} />
+          slug={slug} grade={grade} onGradeChange={setGrade} category={category} />
       </div>
     </>
   );

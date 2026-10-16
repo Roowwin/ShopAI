@@ -10,6 +10,7 @@ from app.core.db import get_db
 # keep true. Splicing it from one place is what makes the guard that admits a unit to `listed` and
 # the guard that publishes it here incapable of disagreeing.
 from app.services.margin import ON_SALE
+from app.services.media import public_address
 
 router = APIRouter(prefix="/store", tags=["store-catalog"])
 
@@ -48,7 +49,14 @@ router = APIRouter(prefix="/store", tags=["store-catalog"])
 CATALOG_SELECT = """SELECT p.id, p.public_id::text AS public_id, p.slug, p.title, p.model,
        b.name AS brand, c.name AS category, p.specs, p.image_url, p.featured,
        count(a.id) AS units_available,
-       min(a.sale_price_cents) AS price_from_cents
+       min(a.sale_price_cents) AS price_from_cents,
+       -- WHICH GRADES ARE ON THE SHELF, for the card's own grade row. The assets join above already
+       -- carries the shop's three conditions - listed, its lot active, at or above its cost basis - so
+       -- this aggregate is over BUYABLE units and cannot advertise a grade the shop would hide. A
+       -- product with nothing listed has no rows here at all, and `HAVING count(a.id) > 0` keeps it out
+       -- of the catalogue entirely.
+       coalesce(array_agg(DISTINCT a.grade ORDER BY a.grade) FILTER (WHERE a.grade IS NOT NULL),
+                ARRAY[]::text[]) AS grades
 FROM products p
 JOIN brands b ON b.id = p.brand_id
 JOIN categories c ON c.id = p.category_id
@@ -58,11 +66,19 @@ LEFT JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
 WHERE p.status = 'active' %CAT%
 GROUP BY p.id, p.public_id, p.slug, p.title, p.model, b.name, c.name, p.specs, p.image_url, p.featured
 HAVING count(a.id) > 0
-ORDER BY p.featured DESC, p.title
+ORDER BY p.featured DESC, (p.image_url IS NULL), p.title
 LIMIT :lim OFFSET :off"""
 
 CATALOG_SORTS = {
-    "featured": "ORDER BY p.featured DESC, p.title",
+    # A SHOP LED BY WHAT IT CAN SHOW. The default order puts the products that have a photograph
+    # above the ones that do not, after the operator's own featured flag and before the title - so
+    # the shop front, a category page and a search all open on tiles a shopper can recognise, and
+    # the products with no photograph (a third of this catalogue: every battery, cable, bag and
+    # memory stick) fall in behind them carrying their category glyph. `ASC` is not needed and would
+    # be wrong: `image_url IS NULL` is FALSE for a photographed product, and FALSE sorts first.
+    # The other four orders are left alone on purpose - "New" must mean newest, whatever it looks
+    # like, or the label is a lie.
+    "featured": "ORDER BY p.featured DESC, (p.image_url IS NULL), p.title",
     "new": "ORDER BY p.created_at DESC",
     "price_asc": "ORDER BY min(a.sale_price_cents), p.title",
     "price_desc": "ORDER BY min(a.sale_price_cents) DESC, p.title",
@@ -236,7 +252,8 @@ async def catalog(limit: int = Query(24, le=100), offset: int = 0,
     items = [{"id": r["id"], "public_id": r["public_id"], "slug": r["slug"], "title": r["title"],
               "model": r["model"], "brand": r["brand"], "category": r["category"], "specs": r["specs"],
               "image_url": r["image_url"], "featured": bool(r["featured"]),
-              "units_available": int(r["units_available"]), "price_from_cents": int(r["price_from_cents"])}
+              "units_available": int(r["units_available"]), "price_from_cents": int(r["price_from_cents"]),
+              "grades": list(r["grades"] or [])}
              for r in rows]
     if not with_filters:
         return items
@@ -277,9 +294,38 @@ async def catalog_item(slug: str, db=Depends(get_db)):
         WHERE g.brand_id = p.brand_id AND lower(g.model) = lower(p.model)
         ORDER BY g.grade
     """), {"p": row["id"]})).mappings().all()
+    # WHAT THE SUPPLIER'S SHEET SAYS - the one body of real detail this catalogue has.
+    #
+    # `products.specs` and `products.description` are EMPTY on every row of this catalogue (the sheet
+    # had no such columns), so a product page built from those alone would say nothing at all about
+    # the machine. The sheet's own three condition columns live on the UNITS, and they carry what
+    # those columns were meant to carry:
+    #
+    #   * `audit_desc` is IDENTICAL on every unit of a model - checked across the catalogue, one
+    #     variant per product - so it is the model's hardware line: "COA Windows 10, 13th Gen - Raptor
+    #     Lake, 1335U, Core i5, 1.3 GHz, LPDDR5, 16GB, Western Digital 256GB NVMe" for a laptop,
+    #     "53Wh Li-ion Battery Type WY9DX / 1V2F6" for a battery. One line per model, and it is a fact.
+    # THE COSMETIC AND FUNCTIONAL COLUMNS ARE NOT RETURNED. They differ between units of the same
+    # grade, and a first version did return them per grade as "notes on the units in stock" - the owner
+    # took that off the page on 2026-10-16, because a table of the sheet's own defect wording beside a
+    # grade legend promising "Like new" reads as the shop contradicting itself. The data is still
+    # there, unwired, if the wording ever changes.
+    #
+    # Only units the shop would actually sell are read: listed, in an active lot, and above the cost
+    # basis - the same three conditions the price and the count come from, so the notes cannot
+    # describe a unit the shop is hiding.
+    sheet = (await db.execute(text("""
+        SELECT max(a.audit_desc) AS audit,
+               array_agg(DISTINCT a.cosmetics_desc) FILTER (WHERE coalesce(a.cosmetics_desc, '') <> '') AS cosmetics,
+               array_agg(DISTINCT a.functional_desc) FILTER (WHERE coalesce(a.functional_desc, '') <> '') AS functional
+        FROM assets a JOIN lots l ON l.id = a.lot_id
+        WHERE a.product_id = :p AND a.status = 'listed' AND l.status = 'active'
+        """ + ON_SALE), {"p": row["id"]})).mappings().first()
+
     return {"id": row["id"], "public_id": row["public_id"], "slug": row["slug"], "title": row["title"],
             "model": row["model"], "description": row["description"], "specs": row["specs"],
             "image_url": row["image_url"], "brand": row["brand"], "category": row["category"],
+            "audit": (str(sheet["audit"]).strip() if sheet and sheet["audit"] else None),
             "groups": [{"grade": g["grade"], "image_url": g["image_url"],
                         "price_cents": g["price_override"]} for g in groups],
             "units": [{"id": u["id"], "grade": u["grade"],
@@ -289,20 +335,46 @@ async def catalog_item(slug: str, db=Depends(get_db)):
 
 @router.get("/search")
 async def search(q: str = Query(min_length=2), limit: int = Query(24, le=100), offset: int = 0, db=Depends(get_db)):
+    """Full-text search over the catalogue.
+
+    IT CARRIES `image_url` AND `category`, and did not until it cost something. The storefront draws a
+    result from those two fields - the photograph when there is one, the category's glyph when there
+    is not - so a search response without them renders EVERY result as the same grey placeholder: a
+    search for "latitude" came back as seven identical cubes with no product pictures anywhere on the
+    page, which reads as a broken search rather than a missing field. The catalogue list has always
+    returned both; this endpoint is the one that did not.
+
+    AND IT KNOWS THE WORDS A SHOPPER ACTUALLY TYPES. `products.search_vec` is a generated column over
+    TITLE and MODEL only, so "laptop" matched nothing at all on a shop holding fourteen of them, and
+    "dell" matched nothing on a shop with twenty Dell products - the two most obvious searches there
+    are. The category and brand NAMES are matched too, as a substring on the name, which is what makes
+    a product type and a maker work. It cannot be folded into `search_vec`: a generated column can
+    only read the row it belongs to, and both of those names live in other tables.
+
+    Ordered like the catalogue - photographed first, then by title - so a result page is not a wall of
+    placeholders either."""
+    like = "%" + q + "%"
     rows = (await db.execute(text("""
-        SELECT p.id, p.slug, p.title, p.model, b.name AS brand,
-               count(a.id) AS units_available, min(a.sale_price_cents) AS price_from_cents
+        SELECT p.id, p.slug, p.title, p.model, p.image_url, b.name AS brand, c.name AS category,
+               count(a.id) AS units_available, min(a.sale_price_cents) AS price_from_cents,
+               coalesce(array_agg(DISTINCT a.grade ORDER BY a.grade) FILTER (WHERE a.grade IS NOT NULL),
+                        ARRAY[]::text[]) AS grades
         FROM products p
         JOIN brands b ON b.id = p.brand_id
+        JOIN categories c ON c.id = p.category_id
         LEFT JOIN assets a ON a.product_id = p.id AND a.status = 'listed'
                           AND EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
                           """ + ON_SALE + """
-        WHERE p.status = 'active' AND p.search_vec @@ websearch_to_tsquery('english', :q)
-        GROUP BY p.id, p.slug, p.title, p.model, b.name
-        ORDER BY p.title LIMIT :lim OFFSET :off
-    """), {"q": q, "lim": limit, "off": offset})).mappings().all()
+        WHERE p.status = 'active'
+          AND (p.search_vec @@ websearch_to_tsquery('english', :q)
+               OR b.name ILIKE :like OR c.name ILIKE :like)
+        GROUP BY p.id, p.slug, p.title, p.model, p.image_url, b.name, c.name
+        ORDER BY (p.image_url IS NULL), p.title LIMIT :lim OFFSET :off
+    """), {"q": q, "like": like, "lim": limit, "off": offset})).mappings().all()
     return [{"id": r["id"], "slug": r["slug"], "title": r["title"], "model": r["model"],
-             "brand": r["brand"], "units_available": int(r["units_available"]),
+             "brand": r["brand"], "category": r["category"], "image_url": r["image_url"],
+             "grades": list(r["grades"] or []),
+             "units_available": int(r["units_available"]),
              "price_from_cents": (int(r["price_from_cents"]) if r["price_from_cents"] is not None else None)}
             for r in rows]
 
@@ -338,7 +410,33 @@ async def home_content(db=Depends(get_db)):
         if row is not None and row[0]:
             stored = dict(row[0])
             deal = stored.pop("deal_of_month", None)
+            # BANNERS LEAVE AS URLs, NOT AS MEDIA IDS. The setting stores `{media_id, href, alt}` -
+            # the ids the operator's upload produced - and the shop needs an address it can put in an
+            # <img>, which is the SHOP-RELATIVE one `public_address` mints (nginx serves it on the
+            # shop vhost, and the page's own CSP admits it). A row that has since been deleted is
+            # dropped rather than rendered as a broken image.
+            banners = stored.pop("banners", None)
             out.update(stored)
+            if isinstance(banners, list) and banners:
+                wanted = [int(b["media_id"]) for b in banners
+                          if isinstance(b, dict) and str(b.get("media_id", "")).isdigit()]
+                if wanted:
+                    # Placeholders generated from the list's OWN length, never from caller text, and
+                    # the values ride as bound scalars: this API binds scalars everywhere, and a list
+                    # parameter has no column for asyncpg to infer an element type from.
+                    named = ", ".join(f":m{n}" for n in range(len(wanted)))
+                    got = (await db.execute(text(
+                        "SELECT id, public_id::text AS public_id FROM media_objects "
+                        "WHERE id IN (" + named + ")"),
+                        {f"m{n}": v for n, v in enumerate(wanted)})).mappings().all()
+                    url_of = {int(r["id"]): public_address(r["public_id"]) for r in got}
+                    out["banners"] = [
+                        {"url": url_of[int(b["media_id"])],
+                         "href": str(b.get("href") or "/").strip() or "/",
+                         "alt": str(b.get("alt") or "Current offers at RFO Store")[:160]}
+                        for b in banners
+                        if isinstance(b, dict) and str(b.get("media_id", "")).isdigit()
+                        and int(b["media_id"]) in url_of]
             slug = str((deal or {}).get("product_slug") or "").strip() if isinstance(deal, dict) else ""
             if slug:
                 # INNER JOIN on purpose: the deal card may only publish when the product has at
@@ -370,23 +468,31 @@ async def home_content(db=Depends(get_db)):
 
 @router.get("/best-sellers")
 async def best_sellers(limit: int = Query(4, le=12), db=Depends(get_db)):
+    """The shelf the home page ranks by units actually sold.
+
+    IT CARRIES THE IMAGE AND THE CATEGORY, and used not to. The storefront draws a product tile from
+    those two fields - the photograph when there is one, and the category's glyph when there is not -
+    so a shelf that omits them renders every tile as the same generic cube no matter what the product
+    is. Nothing else on this endpoint changes: same rollup, same order, same ceiling."""
     rows = (await db.execute(text("""
-        SELECT p.id, p.slug, p.title, p.model, b.name AS brand,
+        SELECT p.id, p.slug, p.title, p.model, p.image_url, b.name AS brand, c.name AS category,
                sum(ol.qty) AS sold, min(a.sale_price_cents) AS price_from_cents
         FROM order_lines ol
         JOIN orders o ON o.id = ol.order_id AND o.status = 'paid'
         JOIN products p ON p.id = ol.product_id
         JOIN brands b ON b.id = p.brand_id
+        JOIN categories c ON c.id = p.category_id
         LEFT JOIN assets a ON a.product_id = p.id AND a.status = 'listed' AND
                EXISTS (SELECT 1 FROM lots l WHERE l.id = a.lot_id AND l.status = 'active')
                """ + ON_SALE + """
         WHERE ol.product_id IS NOT NULL
-        GROUP BY p.id, p.slug, p.title, p.model, b.name
+        GROUP BY p.id, p.slug, p.title, p.model, p.image_url, b.name, c.name
         ORDER BY sold DESC
         LIMIT :lim"""), {"lim": limit})).mappings().all()
 
 
     return [{"id": r["id"], "slug": r["slug"], "title": r["title"], "model": r["model"],
-             "brand": r["brand"], "sold": int(r["sold"]),
+             "brand": r["brand"], "category": r["category"], "image_url": r["image_url"],
+             "sold": int(r["sold"]),
              "price_from_cents": (int(r["price_from_cents"]) if r["price_from_cents"] is not None else None)}
             for r in rows]

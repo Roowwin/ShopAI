@@ -47,23 +47,22 @@ export default function ContactPage() {
         </p>
       </Section>
 
-      <Section title="Returns &amp; warehouse address">
+      <Section title="Returns &amp; warehouse">
+        {/* THE ADDRESS IS GONE, and deliberately not replaced with an invented one. It used to read
+            "Unit 4, 12 Example Street, Melbourne VIC 3000" under the warning "Placeholder address -
+            confirm with support before sending anything", which is a fake address printed on a
+            customer-facing page next to an instruction to trust it less. A shop with no public
+            counter does not need to publish a street address at all: what the customer needs is the
+            authorisation and the label, which is what this section now says and nothing more. If
+            there is a real returns address to publish, it belongs here and nowhere else. */}
         <p>
-          Placeholder address - confirm with support before sending anything, and never ship a device without a return authorisation
-          email from us first:
-        </p>
-        <p className="font-mono text-xs bg-surface-sunken ring-1 ring-line rounded-control px-4 py-3 text-ink-700">
-          RFO Store - Returns
-          <br />
-          Unit 4, 12 Example Street
-          <br />
-          Melbourne VIC 3000
-          <br />
-          Australia
+          We do not have a retail counter, and we cannot accept walk-in drop-offs or customer pickups.
+          Never ship a device without a return authorisation email from us first - it carries the
+          return address for that specific return.
         </p>
         <p>
-          We do not have a retail counter and cannot accept walk-in drop-offs or customer pickups. Warranty returns come with a
-          prepaid label; change-of-mind returns use the instructions we email you.
+          Warranty returns come with a prepaid label. Change-of-mind returns use the instructions we
+          email you when you raise the return.
         </p>
       </Section>
 
@@ -79,8 +78,8 @@ export default function ContactPage() {
       <Section title="Before you write">
         <Note>
           Many questions are already answered instantly in our <a className={linkClass} href="/faq">FAQ</a>, including dispatch
-          times, grade meanings and what is covered by the 12-month warranty. For stock questions, the{" "}
-          <a className={linkClass} href="/assistant">AI assistant</a> can check live availability and prices for you right away.
+          times, grade meanings and what is covered by the 12-month warranty. For anything about a specific
+          device, send us the model or the order number and we will check the shelf and answer by email.
         </Note>
       </Section>
     </ContentPage>

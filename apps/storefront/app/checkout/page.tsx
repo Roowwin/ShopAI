@@ -202,8 +202,8 @@ export default function CheckoutPage() {
             {busy ? "Taking payment..." : quote ? "Pay " + aud(quote.total_cents) : "Pricing your cart..."}
           </Button>
           <p className="mt-3 text-xs text-ink-400">
-            This build settles through the shop&apos;s development payment provider, so no card details
-            are collected here. Your order number and confirmation appear on the next screen either way.
+            No card details are collected on this page. Your order number and confirmation appear on
+            the next screen.
           </p>
         </Card>
       </div>

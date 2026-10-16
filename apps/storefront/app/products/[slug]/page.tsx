@@ -1,7 +1,8 @@
 import { apiInternal } from "@/lib/api";
 import ProductStage from "./ProductStage";
 import { GRADES } from "@/lib/grades";
-import { Badge, Button, Heading, linkClass, ProductCard } from "../../components/ui";
+import { auditIsDescriptive, INCLUDED_WITH_COMPUTERS, isComputer, isPhoneOrTablet, parseAudit } from "@/lib/specSheet";
+import { Badge, Button, cn, Heading, linkClass, ProductCard } from "../../components/ui";
 import { notFound } from "next/navigation";
 
 export const revalidate = 0;
@@ -69,12 +70,33 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   let p: any;
   try { p = await apiInternal("/store/catalog/" + slug, 0); }
   catch { notFound(); }
+  /* THE SHELF BESIDE THIS ONE, not the first four products in the catalogue. This section used to be
+     `/store/catalog?limit=9` minus the product you are looking at - so every product page in the shop
+     recommended the same four tiles, in catalogue order, whatever you were reading, and a shopper who
+     opened two pages saw the same shelf twice. It now asks for the product's OWN category first and
+     only tops up from the catalogue when that category cannot fill four tiles (a category with three
+     products in it is normal here - Batteries has three). */
   let others: any[] = [];
-  try { others = (await apiInternal("/store/catalog?limit=9", 0) as any[]).filter((x: any) => x.slug !== slug).slice(0, 4); } catch { void 0; }
+  let relatedTo: string | null = null;
+  try {
+    const inCategory = p.category
+      ? (await apiInternal("/store/catalog?limit=8&category=" + encodeURIComponent(p.category), 0) as any[])
+        .filter((x: any) => x.slug !== slug)
+      : [];
+    relatedTo = inCategory.length > 0 ? (p.category as string) : null;
+    others = inCategory.slice(0, 4);
+    if (others.length < 4) {
+      const more = (await apiInternal("/store/catalog?limit=12", 0) as any[])
+        .filter((x: any) => x.slug !== slug && !others.some((o) => o.slug === x.slug));
+      others = others.concat(more).slice(0, 4);
+    }
+  } catch { void 0; }
   let promo: string | null = null;
   try { const pr: any[] = await apiInternal("/store/promotions", 60); if (pr.length) { promo = pr[0].name; } } catch { void 0; }
   const inStock = p.units.length > 0;
   const specs = specEntries(p.specs);
+  /* The supplier sheet's line, sorted into named rows (lib/specSheet.ts). */
+  const sheet = parseAudit(p.audit, { keepOs: isPhoneOrTablet(p.category) });
   const chips = specChips(p.specs);
 
   /* THE GALLERY AND THE PANEL ARE ONE COMPONENT NOW - see ProductStage. They had to be: the panel
@@ -128,61 +150,126 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             exactly what it was - the stage was extracted for the shared grade state, not to change
             the layout. Everything below this line that used to be here now lives in that file. */}
         <div className="grid gap-8 lg:grid-cols-12 lg:items-start">
-          <ProductStage slug={slug} title={p.title} brand={p.brand} model={p.model} specs={specs}
-            imageUrl={p.image_url} groups={p.groups ?? []} units={p.units} />
+          <ProductStage slug={slug} title={p.title} brand={p.brand} model={p.model}
+            imageUrl={p.image_url} groups={p.groups ?? []} units={p.units} category={p.category} />
         </div>
 
 
-        {/* The model's own copy, full width under the fold. It is the same words for every unit,
-            so it belongs to the page rather than to the panel - and it is what a shopper reads
-            after the price has already told them whether they are interested. */}
-        <section className="mt-24 max-w-3xl">
-          <Heading level="h2">About this model</Heading>
-          <p className="text-body text-ink-600 mt-3 whitespace-pre-wrap">{p.description}</p>
-          <p className="text-xs text-ink-400 mt-4">
-            Model: <span className="text-ink-600">{p.brand} {p.model}</span> - Category:{" "}
-            <a href={"/search?q=" + encodeURIComponent(p.category)} className={linkClass}>{p.category}</a> - Brand:{" "}
-            <a href={"/search?q=" + encodeURIComponent(p.brand)} className={linkClass}>{p.brand}</a>
-          </p>
-        </section>
-
-        {/* The assistant invite. It was a gradient band (#122922 into #1A382F, left to right) so it
-            would read as a distinct object rather than as more of the copy above it; this pass
-            takes the gradient out and gets the same separation from a plain step up the surface
-            ladder - `surface-page-alt` against the `surface-page` canvas - plus a wider gap. A
-            two-stop gradient across a full-width band is the loudest surface on the page and the
-            brief asks for the quiet ones.
-
-            The spark tile is NEUTRAL now as well. It was a brass-tinted square (`brand-700/15` on a
-            30% brand hairline) which spent the brand colour on decoration; the brief allows the
-            brand hue on the primary action and nowhere else, so the tile is a surface step with
-            a hairline and the icon is the body ink. */}
-        <div className="mt-10 flex flex-wrap items-center justify-between gap-4 rounded-card bg-surface-page-alt p-8 ring-1 ring-line">
-          <div className="flex items-center gap-3">
-            <span aria-hidden="true" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-surface text-ink-600 ring-1 ring-line">
-              <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 2 4.5 11H9l-.9 7L15 9h-4.6L11 2Z" />
-              </svg>
-            </span>
-            <div>
-              <p className="text-sm font-medium text-ink-900">Not sure which unit fits?</p>
-              <p className="text-xs text-ink-500 mt-1">Ask the AI - it answers from live stock only.</p>
+        {/* WHAT ELSE IS ON THIS SHELF, directly under the product area: it was at the very foot of
+            the page, under the spec sheet and the whole grade legend, which is a long way down for the
+            one block on a product page that a shopper might actually click. Smaller, too - the tiles
+            are the compact card, and the section's own padding is tighter than the sections below it. */}
+        {others.length > 0 && (
+          <section className="mt-14">
+            <div className="flex items-end justify-between gap-4">
+              <Heading level="h2">{relatedTo ? "More in " + relatedTo : "You may also like"}</Heading>
+              <a href={"/category/" + encodeURIComponent(relatedTo ?? p.category)} className={cn("text-xs", linkClass)}>
+                See all
+              </a>
             </div>
-          </div>
-          <Button variant="primary" href={"/assistant?about=" + slug} size="sm" className="shrink-0">Ask AI Assistant</Button>
-        </div>
+            <div className="mt-5 grid grid-cols-2 gap-5 md:grid-cols-4">
+              {others.map((o) => (
+                <ProductCard key={o.slug} variant="compact" href={"/products/" + o.slug} title={o.title}
+                  brand={o.brand} category={o.category} slug={o.slug} imageUrl={o.image_url}
+                  priceCents={o.price_from_cents} />
+              ))}
+            </div>
+          </section>
+        )}
 
-        {/* What the grade dropdown is actually choosing between. Parent-level education: the scale
-            is a fact of the shop, not of this model, so it names the same four grades on every
-            product page and links to the page that explains them in full. */}
-        <section className="mt-24">
-          <Heading level="h2" className="border-b border-line pb-2">What the grades mean</Heading>
-          <p className="text-body text-ink-600 mt-4">
-            Every unit of this model is checked and graded by hand, one at a time - so the grade is a
-            fact about your device, not an average. Pick the condition (and the price) you want in the
-            panel above.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+        {/* FEATURES AND GRADING, SIDE BY SIDE, directly under the product area.
+
+            Both of these were elsewhere and both were wasting the full width. The spec sheet was a
+            collapsed <details> INSIDE the buy panel - so the one thing a technical buyer scans was
+            behind a click, in the column that already carries the price and the grade selector. The
+            grade legend was a four-card row two screens further down, under a paragraph, beside
+            nothing. Neither needs a full-width column: they are a table and four small cards.
+
+            So they sit together, left and right: what the machine IS on the one side, what the GRADE
+            means on the other, both readable without scrolling past the other. The area above keeps
+            the gallery, the price and the grade selector to itself.
+
+            THE DESCRIPTION LIVES IN THE LEFT COLUMN rather than in a section of its own. It is the
+            same words for every unit of the model - a paragraph at most, and often absent entirely on
+            an imported row - so it reads as the opening of "what this machine is" rather than as a
+            section that needs a heading. */}
+        <section className="mt-20 grid gap-10 lg:grid-cols-2 lg:gap-12">
+          <div>
+            <Heading level="h2" className="border-b border-line pb-2">Features &amp; specs</Heading>
+            {p.description ? (
+              <p className="mt-4 text-body text-ink-600 whitespace-pre-wrap">{p.description}</p>
+            ) : null}
+            {/* THE SHEET'S OWN SPEC LINE. `products.specs` is empty on every row of this catalogue, but
+                the supplier sheet's audit column is identical on every unit of a model - one line naming
+                the CPU, the memory and the drive, or the battery's type code - so it is the machine's spec
+                as the sheet recorded it. Quoted, not reformatted: it is somebody else's sentence and the
+                page has no business paraphrasing a spec. */}
+            {sheet.rows.length > 0 ? (
+              /* The sheet's own pieces, sorted into named rows - see lib/specSheet.ts. No heading above
+                 them: the labels ARE the heading, and "recorded on the audit sheet" was a line of
+                 chrome between the reader and the one thing they came for. */
+              <dl className="mt-5 border-t border-line">
+                {sheet.rows.map((r: { label: string; value: string }) => (
+                  <div key={r.label} className="flex items-baseline justify-between gap-6 border-b border-line py-2.5">
+                    <dt className="shrink-0 text-xs uppercase tracking-wide text-ink-500">{r.label}</dt>
+                    <dd className="text-right text-sm font-medium text-ink-900">{r.value}</dd>
+                  </div>
+                ))}
+                {/* The shop's own statement, not the sheet's - see lib/specSheet.ts. Shown for a machine
+                    that runs an operating system; a monitor, a switch or a phone has no Windows to
+                    include and gets no such row. */}
+                {isComputer(p.category) && (
+                  <div className="flex items-baseline justify-between gap-6 border-b border-line py-2.5">
+                    <dt className="shrink-0 text-xs uppercase tracking-wide text-ink-500">Included</dt>
+                    <dd className="text-right text-sm font-medium text-ink-900">{INCLUDED_WITH_COMPUTERS}</dd>
+                  </div>
+                )}
+                {sheet.rest.length > 0 && (
+                  <div className="flex items-baseline justify-between gap-6 border-b border-line py-2.5">
+                    <dt className="shrink-0 text-xs uppercase tracking-wide text-ink-500">Also recorded</dt>
+                    <dd className="text-right text-sm text-ink-700">{sheet.rest.join(" · ")}</dd>
+                  </div>
+                )}
+              </dl>
+            ) : p.audit && !auditIsDescriptive(p.audit) ? (
+              <p className="mt-5 text-sm text-ink-900">{p.audit}</p>
+            ) : p.audit ? (
+              /* A part, not a machine: the sheet's line is a description ("High Speed 4K DisplayPort to
+                 HDMI 2 Meter Cable"), so it is printed as one. */
+              <p className="mt-5 text-body text-ink-700">{p.audit.replace(/^N\/A\s*Non-Data Bearing Asset,\s*/i, "")}</p>
+            ) : null}
+            {specs.length > 0 ? (
+              <dl className="mt-5 border-t border-line">
+                {specs.map(([label, value]) => (
+                  <div key={label} className="flex items-baseline justify-between gap-6 border-b border-line py-2.5">
+                    <dt className="text-xs uppercase tracking-wide text-ink-500">{label}</dt>
+                    <dd className="text-right text-sm font-medium text-ink-900">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : p.audit ? null : (
+              <p className="mt-5 text-sm text-ink-500">
+                No spec sheet was supplied with this model. Ask us and we will check the unit.
+              </p>
+            )}
+            <p className="mt-5 text-xs text-ink-400">
+              {/* "Code:" USED TO SIT HERE AND SAID THE MODEL A SECOND TIME - "Model: HP EliteBook 840 G9
+                  - Code: EliteBook 840 G9" - because on this catalogue the slug is built from the
+                  model, so the two are the same words. One fact, said once. */}
+              Model: <span className="text-ink-600">{p.brand} {p.model}</span> - Category:{" "}
+              <a href={"/search?q=" + encodeURIComponent(p.category)} className={linkClass}>{p.category}</a> - Brand:{" "}
+              <a href={"/search?q=" + encodeURIComponent(p.brand)} className={linkClass}>{p.brand}</a>
+            </p>
+          </div>
+
+          <div>
+            <Heading level="h2" className="border-b border-line pb-2">What the grades mean</Heading>
+            <p className="mt-4 text-body text-ink-600">
+              Every unit of this model is checked and graded by hand, one at a time - so the grade is a
+              fact about your device, not an average. Pick the condition (and the price) you want in the
+              panel above.
+            </p>
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
             {GRADES.map((g) => (
               <div key={g.letter} className="flex flex-col rounded-card bg-surface/80 backdrop-blur-md ring-1 ring-line p-4">
                 <Badge colorClass={g.pill}>Grade {g.letter}</Badge>
@@ -215,19 +302,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <p className="text-xs text-ink-400 mt-4">
             <a href="/grades" className={linkClass}>Read the full grading scale</a>
           </p>
+          </div>
         </section>
-
-        {others.length > 0 && (
-          <section className="mt-24">
-            <Heading level="h2">You may also like</Heading>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-6">
-              {others.map((o) => (
-                <ProductCard key={o.slug} variant="text" href={"/products/" + o.slug} title={o.title}
-                  brand={o.brand} priceCents={o.price_from_cents} />
-              ))}
-            </div>
-          </section>
-        )}
 
         <section className="mt-24 grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
           {["Serialised units", "Graded quality", "Fast AU-NZ delivery", "Secure checkout", "GST-compliant invoices"].map((t) => (

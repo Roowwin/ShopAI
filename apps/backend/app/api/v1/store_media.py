@@ -9,9 +9,13 @@ precisely because a bare `<img>` cannot.
 
 Being public, it is kept to the smallest set of rows that have a reason to be seen:
 
-  * ONLY rows a `product_group` points at. `media_objects` also holds unit photographs and RMA
-    defect photographs, which are nobody's business outside the building - and an id space that
-    answered for those would make every upload guessable-in-principle rather than unguessable.
+  * ONLY rows a `product_group` points at, OR a row the home page's banner setting names.
+    `media_objects` also holds unit photographs and RMA defect photographs, which are nobody's
+    business outside the building - and an id space that answered for those would make every upload
+    guessable-in-principle rather than unguessable. The banner arm is the same test, one step out:
+    a banner is content the operator has deliberately put on the shop front, so it belongs to the
+    same set of rows that have a reason to be seen, and it is named by id in `site_settings.home`
+    rather than merely existing in the media table.
   * ONLY by `public_id`, never by the row id. A sequential id is not a secret and must never be
     treated as one; the UUID is the address because it is not enumerable.
   * MUTATING METHODS ARE NOT ROUTED HERE at all, so there is no write for a mis-scoped request to
@@ -55,7 +59,13 @@ async def store_media(public_id: str, db=Depends(get_db)):
         SELECT mo.bytes, mo.content_type, mo.byte_size
         FROM media_objects mo
         WHERE mo.public_id = CAST(:p AS uuid)
-          AND EXISTS (SELECT 1 FROM product_groups g WHERE g.media_id = mo.id)
+          AND (EXISTS (SELECT 1 FROM product_groups g WHERE g.media_id = mo.id)
+               OR EXISTS (SELECT 1
+                            FROM site_settings s, jsonb_array_elements(s.value -> 'banners') b
+                           WHERE s.key = 'home'
+                             AND b ? 'media_id'
+                             AND (b ->> 'media_id') ~ '^[0-9]+$'
+                             AND (b ->> 'media_id')::bigint = mo.id))
     """), {"p": key})).mappings().first()
     if row is None:
         raise HTTPException(status_code=404, detail="no such image")

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { API } from "@/lib/api";
 import { Button, Input } from "./ui";
 
-export default function FooterNewsletter() {
+export default function FooterNewsletter({ compact = false }: { compact?: boolean }) {
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -44,17 +44,24 @@ export default function FooterNewsletter() {
      row rather than a child, so it appears under both halves and cannot change their alignment. */
   return (
     <>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs">
-          <span className="font-semibold text-ink-900">Get the drop list</span>
-          {" - "}fresh stock alerts and deals, no spam.
-        </p>
-        <form className="flex flex-col gap-2 sm:flex-row" onSubmit={submit}>
+      <div className={compact ? "flex items-center gap-2" : "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"}>
+        {!compact && (
+          <p className="text-xs">
+            <span className="font-semibold text-ink-900">Get the drop list</span>
+            {" - "}fresh stock alerts and deals, no spam.
+          </p>
+        )}
+        <form className={compact ? "flex items-center gap-2" : "flex flex-col gap-2 sm:flex-row"} onSubmit={submit}>
           {/* The width is on a WRAPPER: Input's base carries `w-full` and this app has no
-              tailwind-merge, so a width class passed to it would lose to that by stylesheet order. */}
-          <div className="sm:w-56">
+              tailwind-merge, so a width class passed to it would lose to that by stylesheet order.
+              Compact is narrower still: it sits beside the footer's link row rather than owning a
+              row of its own, so it is a field and a button and nothing else - no label, no sentence.
+              The label is what a screen reader still needs, hence the sr-only copy below. */}
+          {compact && <label htmlFor="footer-signup" className="sr-only">Email address for stock alerts</label>}
+          <div className={compact ? "w-40" : "sm:w-56"}>
             <Input tone="light" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com" aria-label="Email address"
+              id={compact ? "footer-signup" : undefined}
+              placeholder={compact ? "Email" : "you@example.com"} aria-label="Email address"
               className="text-sm" />
           </div>
           <Button type="submit" size="sm" disabled={busy}>

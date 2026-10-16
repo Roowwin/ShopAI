@@ -1,7 +1,7 @@
 import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "./cn";
 
-/* light = the glass field, for an input sitting on a card (cart, assistant, checkout). sunken =
+/* light = the glass field, for an input sitting on a card (cart, checkout, footer signup). sunken =
    the recessed fill, for the header search, which sits on the transparent header bar and needs to
    read as a well rather than as another panel. deep = the deepest step, for a field on a
    deliberately deep band (the footer's newsletter).
